@@ -609,6 +609,10 @@ function plain_(rows) {
 
 var MANUAL_BY = ['Miguel', 'Camille', 'Am'];
 
+var LIST_FIELDS = ['Applicant ID', 'Source', 'Applied At (PT)', 'First Name', 'Last Name', 'Email', 'Position (as typed)',
+  'Position', 'Stage', 'Stage Updated At', 'Stage Updated By', 'Interview Date', 'Invite Count', 'Confirmed At',
+  'Reminder Sent At', 'Zoom Minutes', 'Historical'];
+
 /** Backup path for the Zoom routine when it has no Sheets connector: {rows: [...], finalize: 'YYYY-MM-DD'}. */
 function zoomRowsApi_(req) {
   var lock = LockService.getScriptLock();
@@ -632,14 +636,27 @@ function zoomRowsApi_(req) {
 function api_(req) {
   if (req.action === 'data') {
     var st = settings_();
+    var apps = plain_(table_(SH.APPLICANTS).rows);
+    if (req.slim) {
+      // List pages and dashboards only: small columns, so the response stays fast.
+      apps = apps.map(function (a) {
+        var o = {};
+        LIST_FIELDS.forEach(function (k) { if (a[k] !== '' && a[k] !== undefined) o[k] = a[k]; });
+        return o;
+      });
+    }
     return {
-      applicants: plain_(table_(SH.APPLICANTS).rows),
+      applicants: apps,
       history: plain_(table_(SH.HISTORY).rows),
       flags: plain_(table_(SH.FLAGS).rows),
       zoom: plain_(table_(SH.ZOOM).rows),
       outbox: plain_(table_(SH.OUTBOX).rows).map(function (e) { delete e.Body; return e; }),
       mode: st.get('MODE')
     };
+  }
+  if (req.action === 'applicant') {
+    var one = plain_(table_(SH.APPLICANTS).rows).filter(function (a) { return a['Applicant ID'] === req.id; })[0];
+    return { applicant: one || null };
   }
   if (req.action === 'zoomRows') return zoomRowsApi_(req);
   if (MANUAL_BY.indexOf(req.by) === -1) throw new Error('unknown user');

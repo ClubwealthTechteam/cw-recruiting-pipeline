@@ -1,7 +1,7 @@
 import { Fragment } from 'react';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { getData } from '@/lib/sheet';
+import { getData, getApplicant } from '@/lib/sheet';
 import { s, fullName, ymd, formatDate } from '@/lib/pipeline';
 import StageBadge from '@/components/StageBadge';
 import StageForm from '@/components/StageForm';
@@ -20,10 +20,9 @@ function safeUrl(v: unknown): string | null {
 
 export default async function Candidate({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  let d;
-  try { d = await getData(); } catch (e) { return <DataError error={e} />; }
   const appId = decodeURIComponent(id);
-  const a = d.applicants.find((x) => s(x['Applicant ID']) === appId);
+  let d, a;
+  try { [d, a] = await Promise.all([getData(), getApplicant(appId)]); } catch (e) { return <DataError error={e} />; }
   if (!a) notFound();
 
   type Ev = { at: string; text: string; who?: string };

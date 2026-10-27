@@ -1,4 +1,4 @@
-import Link from 'next/link';
+import NavLinks from '@/components/NavLinks';
 import { requireUser } from '@/lib/auth';
 import { getData } from '@/lib/sheet';
 import { s } from '@/lib/pipeline';
@@ -21,12 +21,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       <aside className="sidebar">
         <div className="brand">Club Wealth</div>
         <div className="product">Recruiting Pipeline</div>
-        <nav>
-          <Link href="/">Dashboard</Link>
-          <Link href="/candidates">Candidates</Link>
-          <Link href="/session">This Week&apos;s Session</Link>
-          <Link href="/attention">Needs Attention {open > 0 && <span className="count">{open}</span>}</Link>
-        </nav>
+        <NavLinks open={open} />
         <div className="sidebar-foot">
           {mode !== 'LIVE' && <div className="test-mode">TEST MODE</div>}
           <div>Signed in as {user === 'Am' ? 'Am Marbella' : user}</div>

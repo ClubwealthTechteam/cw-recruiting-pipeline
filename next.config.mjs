@@ -1,6 +1,8 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   poweredByHeader: false,
+  // Keep visited pages in the browser for 60s so going back and forth is instant.
+  experimental: { staleTimes: { dynamic: 60, static: 300 } },
   async headers() {
     return [{
       source: '/:path*',

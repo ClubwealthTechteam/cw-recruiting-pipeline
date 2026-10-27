@@ -132,3 +132,13 @@ input:focus, select:focus, textarea:focus { outline: 2px solid #b9cff3; border-c
 .chart-tip { position: absolute; pointer-events: none; background: #fff; border: 1px solid #cfd5df; border-radius: 4px; padding: 6px 9px; font-size: 12px; box-shadow: 0 2px 6px rgba(16,24,40,.08); white-space: nowrap; z-index: 2; }
 .chart-tip .tip-head { font-weight: 600; margin-bottom: 2px; }
 .legend > span { display: inline-flex; align-items: center; gap: 4px; }
+
+.loading { display: flex; flex-direction: column; gap: 16px; }
+.sk { background: linear-gradient(90deg, #eceff4 25%, #f5f7fa 50%, #eceff4 75%); background-size: 200% 100%; animation: sk 1.2s linear infinite; border-radius: 6px; }
+.sk-title { height: 28px; width: 240px; }
+.sk-row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; }
+.sk-tile { height: 86px; }
+.sk-panel { height: 260px; }
+.sk-panel.short { height: 140px; }
+@keyframes sk { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+.sidebar nav a.active { background: var(--navy-2); color: #fff; box-shadow: inset 3px 0 0 #6ea0e8; }

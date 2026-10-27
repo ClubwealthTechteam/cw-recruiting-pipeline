@@ -1,4 +1,5 @@
 import 'server-only';
+import { unstable_cache, revalidateTag } from 'next/cache';
 
 export type Row = Record<string, string | number>;
 export type PipelineData = {
@@ -27,17 +28,32 @@ async function call<T>(body: Record<string, unknown>): Promise<T> {
   return json.data as T;
 }
 
-// Short in-memory cache so moving between pages stays fast; writes clear it.
-let cached: { at: number; data: PipelineData } | null = null;
+export const PIPELINE_TAG = 'pipeline';
 
-export async function getData(): Promise<PipelineData> {
-  if (cached && Date.now() - cached.at < 20_000) return cached.data;
-  const data = await call<PipelineData>({ action: 'data' });
-  cached = { at: Date.now(), data };
-  return data;
+/**
+ * Slim pipeline data for list pages and dashboards, from Vercel's shared data cache.
+ * Served instantly when cached; refreshed in the background at most every 60 seconds, and right after any change.
+ */
+export const getData = unstable_cache(
+  async () => call<PipelineData>({ action: 'data', slim: true }),
+  ['pipeline-data-v2'],
+  { revalidate: 60, tags: [PIPELINE_TAG] }
+);
+
+/** One applicant with every column (application answers, links, notes). */
+export async function getApplicant(id: string): Promise<Row | null> {
+  try {
+    const r = await call<{ applicant: Row | null }>({ action: 'applicant', id });
+    return r.applicant;
+  } catch {
+    // Older Apps Script without the "applicant" action: fall back to the full data set.
+    const full = await call<PipelineData>({ action: 'data' });
+    return full.applicants.find((a) => String(a['Applicant ID']) === id) || null;
+  }
 }
 
 export async function act(action: string, by: string, payload: Record<string, unknown>) {
-  cached = null;
-  return call<Record<string, unknown>>({ action, by, ...payload });
+  const res = await call<Record<string, unknown>>({ action, by, ...payload });
+  revalidateTag(PIPELINE_TAG);
+  return res;
 }
