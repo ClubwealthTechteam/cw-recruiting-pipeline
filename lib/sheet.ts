@@ -40,16 +40,25 @@ export const getData = unstable_cache(
   { revalidate: 60, tags: [PIPELINE_TAG] }
 );
 
-/** One applicant with every column (application answers, links, notes). */
-export async function getApplicant(id: string): Promise<Row | null> {
-  try {
-    const r = await call<{ applicant: Row | null }>({ action: 'applicant', id });
-    return r.applicant;
-  } catch {
-    // Older Apps Script without the "applicant" action: fall back to the full data set.
-    const full = await call<PipelineData>({ action: 'data' });
-    return full.applicants.find((a) => String(a['Applicant ID']) === id) || null;
-  }
+/** One applicant with every column (application answers, links, notes), cached like the lists. */
+export const getApplicant = unstable_cache(
+  async (id: string): Promise<Row | null> => {
+    try {
+      const r = await call<{ applicant: Row | null }>({ action: 'applicant', id });
+      return r.applicant;
+    } catch {
+      // Older Apps Script without the "applicant" action: fall back to the full data set.
+      const full = await call<PipelineData>({ action: 'data' });
+      return full.applicants.find((a) => String(a['Applicant ID']) === id) || null;
+    }
+  },
+  ['pipeline-applicant-v1'],
+  { revalidate: 60, tags: [PIPELINE_TAG] }
+);
+
+/** A read-only call that must not clear the shared cache (e.g. chat polling). */
+export async function read<T = Record<string, unknown>>(action: string, payload: Record<string, unknown>) {
+  return call<T>({ action, ...payload });
 }
 
 export async function act(action: string, by: string, payload: Record<string, unknown>) {

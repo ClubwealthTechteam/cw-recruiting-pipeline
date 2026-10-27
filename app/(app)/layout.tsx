@@ -1,4 +1,5 @@
 import NavLinks from '@/components/NavLinks';
+import ChatBubble from '@/components/ChatBubble';
 import { requireUser } from '@/lib/auth';
 import { getData } from '@/lib/sheet';
 import { s } from '@/lib/pipeline';
@@ -29,6 +30,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         </div>
       </aside>
       <main className="content">{children}</main>
+      <ChatBubble />
     </div>
   );
 }
