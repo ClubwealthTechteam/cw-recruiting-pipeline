@@ -2,7 +2,7 @@
  * Recruiting Pipeline engine for the "RECRUITMENT PIPELINE BASE" spreadsheet (standalone project;
  * Script Property PIPELINE_SHEET_ID points at the sheet).
  *
- * Every 5 minutes tick():
+ * Every 5 minutes, and the moment a form response arrives, tick():
  *   1. copies new form responses into Applicants and queues their invites (Outbox),
  *   2. applies emails Zapier has sent (stage -> Invited, reminder stamps),
  *   3. sorts and applies applicant replies Zapier has copied in (Replies tab, rules only, no Claude),
@@ -537,6 +537,36 @@ function queueReminders_(st) {
   return n;
 }
 
+// ---------- live updates to the site ----------
+
+/**
+ * Tells the site its cached copy is out of date, so the next page load reads the sheet.
+ * Script Property SITE_URL (e.g. https://cwrecruitmentpipeline.vercel.app); uses the same API_SECRET.
+ */
+function notifySite_() {
+  var props = PropertiesService.getScriptProperties();
+  var url = props.getProperty('SITE_URL');
+  if (!url) return;
+  try {
+    UrlFetchApp.fetch(url.replace(/\/$/, '') + '/api/revalidate', {
+      method: 'post', contentType: 'application/json', muteHttpExceptions: true,
+      payload: JSON.stringify({ secret: props.getProperty('API_SECRET') })
+    });
+  } catch (err) {
+    // the site still refreshes within a minute on its own
+  }
+}
+
+/** Runs the moment a form response is submitted (installable trigger on the form sheet; it only reads it). */
+function onFormSubmitIntake() {
+  tick();
+}
+
+/** Runs when anyone edits the pipeline sheet by hand. */
+function onPipelineChange() {
+  notifySite_();
+}
+
 // ---------- the 5-minute job ----------
 
 function tick() {
@@ -553,7 +583,10 @@ function tick() {
       zoom: processZoom_(st),
       reminders: queueReminders_(st)
     };
-    if (Object.keys(c).some(function (k) { return c[k]; })) log_('tick', 'ok', c);
+    if (Object.keys(c).some(function (k) { return c[k]; })) {
+      log_('tick', 'ok', c);
+      notifySite_();
+    }
   } catch (err) {
     log_('tick', 'error', '', String(err && err.message || err));
     throw err;
@@ -562,7 +595,7 @@ function tick() {
   }
 }
 
-/** Run once from the editor: adds the Applied column to Outbox, the Test Form tab, and the 5-minute trigger. */
+/** Run once from the editor: adds missing tabs/columns and the triggers (every 5 minutes, on form submit, on sheet edit). */
 function setup() {
   var ss = ss_();
   var out = sheet_(SH.OUTBOX);
@@ -582,9 +615,11 @@ function setup() {
   }
   startTestIntake();
   ScriptApp.getProjectTriggers().forEach(function (t) {
-    if (t.getHandlerFunction() === 'tick') ScriptApp.deleteTrigger(t);
+    if (['tick', 'onFormSubmitIntake', 'onPipelineChange'].indexOf(t.getHandlerFunction()) !== -1) ScriptApp.deleteTrigger(t);
   });
-  ScriptApp.newTrigger('tick').timeBased().everyMinutes(5).create();
+  ScriptApp.newTrigger('tick').timeBased().everyMinutes(5).create(); // 5 min keeps well inside Google's daily trigger-time quota
+  ScriptApp.newTrigger('onFormSubmitIntake').forSpreadsheet(settings_().get('SOURCE_SHEET_ID')).onFormSubmit().create();
+  ScriptApp.newTrigger('onPipelineChange').forSpreadsheet(ss.getId()).onChange().create();
 }
 
 // ---------- site API ----------
@@ -596,6 +631,7 @@ function doPost(e) {
     var secret = PropertiesService.getScriptProperties().getProperty('API_SECRET');
     if (!secret || req.secret !== secret) throw new Error('unauthorized');
     res = { ok: true, data: api_(req) };
+    if (['zoomRows', 'chatAsk', 'chatAnswer'].indexOf(req.action) !== -1) notifySite_();
   } catch (err) {
     res = { ok: false, error: String(err && err.message || err) };
   }

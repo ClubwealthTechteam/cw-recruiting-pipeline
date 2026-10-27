@@ -265,3 +265,17 @@ test('chat: ask stores a pending question, answer once, then read it back', () =
   assert.equal(got.status, 'Answered');
   assert.equal(got.answer, 'None yet.');
 });
+
+test('live updates: a tick that changes something notifies the site; a quiet tick does not', () => {
+  const { ctxCalls } = require('./harness');
+  const env = load({ now: pdt('2026-10-27T12:00:00') });
+  env.ctx.startTestIntake();
+  ctxCalls.fetches = [];
+  env.ctx.tick();
+  assert.equal(ctxCalls.fetches.length, 0);
+  env.sheets['Test Form'].appendRow(formRow(pdt('2026-10-27T11:59:00'), 'Ana', 'Reyes', 'ana@example.com', 'ISA'));
+  env.ctx.tick();
+  assert.equal(ctxCalls.fetches.length, 1);
+  assert.match(ctxCalls.fetches[0], /\/api\/revalidate$/);
+  env.ctx.setup(); // creates the three triggers without error
+});
