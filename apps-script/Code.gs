@@ -438,11 +438,12 @@ function processOLJ_(st) {
       });
       update_(olj, o, { 'Applicant ID': a['Applicant ID'] });
       n++;
-    } else {
-      update_(apps, a, { 'OLJ Summary': o.Summary, 'OLJ Email Requested At': o['Email Requested At'] || a['OLJ Email Requested At'] });
+    } else if (String(a['OLJ Summary']) !== String(o.Summary)) {
+      update_(apps, a, { 'OLJ Summary': o.Summary });
     }
     if (email && !a.Email) update_(apps, a, { Email: email });
-    if (a.Email && a.Stage === 'Applied' && !(Number(a['Invite Count']) > 0) && !pendingInvite_(a['Applicant ID'])) {
+    if (a.Email && a.Stage === 'Applied' && !(Number(a['Invite Count']) > 0) &&
+        !(st.get('MODE') === 'LIVE' && st.get('AUTO_INVITES') === 'OFF') && !pendingInvite_(a['Applicant ID'])) {
       var iv = interviewDateFor(new Date());
       update_(apps, a, { 'Interview Date': iv });
       queueInvite_(st, a, iv, 'Invite');
