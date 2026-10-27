@@ -17,7 +17,7 @@
 var SH = {
   APPLICANTS: 'Applicants', HISTORY: 'History', OUTBOX: 'Outbox', REPLIES: 'Replies',
   FLAGS: 'Needs Attention', ZOOM: 'Zoom Attendance', OLJ: 'OLJ', POSITIONS: 'Positions',
-  SETTINGS: 'Settings', LOG: 'Run Log', TEST_FORM: 'Test Form'
+  SETTINGS: 'Settings', LOG: 'Run Log', TEST_FORM: 'Test Form', CHAT: 'Chat'
 };
 
 // Form Responses 1 columns (0-based), read only.
@@ -574,6 +574,11 @@ function setup() {
     tf.getRange(1, 1, 1, 20).setValues(hdr).setFontWeight('bold');
     tf.setFrozenRows(1);
   }
+  if (!ss.getSheetByName(SH.CHAT)) {
+    var ch = ss.insertSheet(SH.CHAT);
+    ch.getRange(1, 1, 1, 7).setValues([['Chat ID', 'Asked At', 'Asked By', 'Question', 'Status', 'Answer', 'Answered At']]).setFontWeight('bold');
+    ch.setFrozenRows(1);
+  }
   startTestIntake();
   ScriptApp.getProjectTriggers().forEach(function (t) {
     if (t.getHandlerFunction() === 'tick') ScriptApp.deleteTrigger(t);
@@ -612,6 +617,27 @@ var MANUAL_BY = ['Miguel', 'Camille', 'Am'];
 var LIST_FIELDS = ['Applicant ID', 'Source', 'Applied At (PT)', 'First Name', 'Last Name', 'Email', 'Position (as typed)',
   'Position', 'Stage', 'Stage Updated At', 'Stage Updated By', 'Interview Date', 'Invite Count', 'Confirmed At',
   'Reminder Sent At', 'Zoom Minutes', 'Historical'];
+
+// ---------- chat bubble (answers come from a Claude routine, read-only) ----------
+
+function chatRow_(t, id) {
+  return t.rows.filter(function (r) { return r['Chat ID'] === id; })[0];
+}
+
+function chatGet_(id) {
+  var r = chatRow_(table_(SH.CHAT), id);
+  if (!r) return { found: false };
+  return { found: true, status: r.Status, question: r.Question, answer: r.Answer || '', askedBy: r['Asked By'] };
+}
+
+function chatAnswer_(id, answer) {
+  var t = table_(SH.CHAT);
+  var r = chatRow_(t, id);
+  if (!r) throw new Error('not found');
+  if (r.Status !== 'Pending') throw new Error('already answered');
+  update_(t, r, { Status: 'Answered', Answer: String(answer || '').slice(0, 5000), 'Answered At': nowStr_() });
+  return { ok: true };
+}
 
 /** Backup path for the Zoom routine when it has no Sheets connector: {rows: [...], finalize: 'YYYY-MM-DD'}. */
 function zoomRowsApi_(req) {
@@ -667,6 +693,8 @@ function api_(req) {
     return { applicant: plain_([o])[0] };
   }
   if (req.action === 'zoomRows') return zoomRowsApi_(req);
+  if (req.action === 'chatGet') return chatGet_(req.id);
+  if (req.action === 'chatAnswer') return chatAnswer_(req.id, req.answer);
   if (MANUAL_BY.indexOf(req.by) === -1) throw new Error('unknown user');
   var lock = LockService.getScriptLock();
   lock.waitLock(30000);
@@ -713,6 +741,11 @@ function api_(req) {
         queueInvite_(st2, a2, iv, 'Invite');
       }
       return { ok: true };
+    }
+    if (req.action === 'chatAsk') {
+      var cid = id_('C');
+      appendTo_(SH.CHAT, { 'Chat ID': cid, 'Asked At': nowStr_(), 'Asked By': req.by, Question: String(req.question || '').slice(0, 1000), Status: 'Pending' });
+      return { id: cid };
     }
     if (req.action === 'resolveFlag') {
       var fl = table_(SH.FLAGS);

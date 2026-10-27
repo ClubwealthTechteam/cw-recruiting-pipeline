@@ -56,6 +56,11 @@ export const getApplicant = unstable_cache(
   { revalidate: 60, tags: [PIPELINE_TAG] }
 );
 
+/** A read-only call that must not clear the shared cache (e.g. chat polling). */
+export async function read<T = Record<string, unknown>>(action: string, payload: Record<string, unknown>) {
+  return call<T>({ action, ...payload });
+}
+
 export async function act(action: string, by: string, payload: Record<string, unknown>) {
   const res = await call<Record<string, unknown>>({ action, by, ...payload });
   revalidateTag(PIPELINE_TAG);

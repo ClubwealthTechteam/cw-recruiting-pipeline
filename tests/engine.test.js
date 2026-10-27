@@ -251,3 +251,17 @@ test('site API: applicant action returns one full record by ID', () => {
   assert.equal(slim.Country, undefined);
   assert.equal(slim['First Name'], 'Maria Clara');
 });
+
+test('chat: ask stores a pending question, answer once, then read it back', () => {
+  const env = invitedEnv();
+  env.ctx.setup();
+  const asked = env.api({ action: 'chatAsk', by: 'Am', question: 'How many confirmed for Wednesday?' });
+  assert.equal(asked.ok, true);
+  const id = asked.data.id;
+  assert.equal(env.api({ action: 'chatGet', id }).data.status, 'Pending');
+  assert.equal(env.api({ action: 'chatAnswer', id, answer: 'None yet.' }).ok, true);
+  assert.equal(env.api({ action: 'chatAnswer', id, answer: 'again' }).ok, false);
+  const got = env.api({ action: 'chatGet', id }).data;
+  assert.equal(got.status, 'Answered');
+  assert.equal(got.answer, 'None yet.');
+});
