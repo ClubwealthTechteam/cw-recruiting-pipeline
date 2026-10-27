@@ -9,6 +9,7 @@ export type PipelineData = {
   zoom: Row[];
   outbox: Row[];
   mode: string;
+  fetchedAt?: number;
 };
 
 async function call<T>(body: Record<string, unknown>): Promise<T> {
@@ -35,7 +36,7 @@ export const PIPELINE_TAG = 'pipeline';
  * Served instantly when cached; refreshed in the background at most every 60 seconds, and right after any change.
  */
 export const getData = unstable_cache(
-  async () => call<PipelineData>({ action: 'data', slim: true }),
+  async () => ({ ...(await call<PipelineData>({ action: 'data', slim: true })), fetchedAt: Date.now() }),
   ['pipeline-data-v2'],
   { revalidate: 60, tags: [PIPELINE_TAG] }
 );
