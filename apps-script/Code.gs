@@ -1,5 +1,6 @@
 /**
- * Recruiting Pipeline engine. Bound to the "RECRUITMENT PIPELINE BASE" spreadsheet.
+ * Recruiting Pipeline engine for the "RECRUITMENT PIPELINE BASE" spreadsheet (standalone project;
+ * Script Property PIPELINE_SHEET_ID points at the sheet).
  *
  * Every 5 minutes tick():
  *   1. copies new form responses into Applicants and queues their invites (Outbox),
@@ -30,8 +31,20 @@ var PRE_INTERVIEW = ['Invited', 'Confirmed'];
 
 // ---------- sheet helpers ----------
 
+/**
+ * The pipeline spreadsheet. Works in a standalone script project: set Script Property
+ * PIPELINE_SHEET_ID to the spreadsheet's ID. (If the script is ever attached to the sheet, that is used.)
+ */
+function ss_() {
+  var active = SpreadsheetApp.getActiveSpreadsheet();
+  if (active) return active;
+  var id = PropertiesService.getScriptProperties().getProperty('PIPELINE_SHEET_ID');
+  if (!id) throw new Error('Set Script Property PIPELINE_SHEET_ID to the pipeline spreadsheet ID');
+  return SpreadsheetApp.openById(id);
+}
+
 function sheet_(name) {
-  var s = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(name);
+  var s = ss_().getSheetByName(name);
   if (!s) throw new Error('Missing tab: ' + name);
   return s;
 }
@@ -522,7 +535,7 @@ function tick() {
 
 /** Run once from the editor: adds the Applied column to Outbox, the Test Form tab, and the 5-minute trigger. */
 function setup() {
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var ss = ss_();
   var out = sheet_(SH.OUTBOX);
   var oh = out.getRange(1, 1, 1, out.getLastColumn()).getValues()[0];
   if (oh.indexOf('Applied') === -1) out.getRange(1, oh.length + 1).setValue('Applied').setFontWeight('bold');

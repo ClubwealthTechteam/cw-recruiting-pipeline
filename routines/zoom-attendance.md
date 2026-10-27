@@ -15,7 +15,7 @@ Recruiting pipeline: Wednesday Zoom attendance. Read-only on Zoom; write only to
    It polls the Club Wealth Help Desk meeting until 3:30 PM PT. Wait for it with Monitor; do not poll it yourself.
    Never print the Zoom token. The script adds the Authorization header itself (approved by Miguel for Zoom only).
 2. When it finishes, read the JSON. Append each item in "rows" to the "Zoom Attendance" tab of spreadsheet
-   11CpfMQhC97DCqFQhZuBL73XCUw8H3zrb_FAKW7vcv8o (columns A–I: Interview Date, Zoom Display Name, Parsed Name,
+   <PIPELINE_SHEET_ID> (the RECRUITMENT PIPELINE BASE sheet; the real ID goes only in the routine, not in this repo) (columns A–I: Interview Date, Zoom Display Name, Parsed Name,
    Parsed Position, Matched Applicant ID (leave blank), Total Minutes, First Join, Last Leave, Segments).
    Leave Result and Matched Applicant ID blank: the sheet's script matches people and sets results.
 3. Then, in the Settings tab, set the value of key ZOOM_FINALIZE to today's date (YYYY-MM-DD). Update the existing

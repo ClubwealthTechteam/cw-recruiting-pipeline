@@ -4,14 +4,17 @@ Everything below is done once. Nothing emails a real applicant until Settings `M
 
 ## 1. Apps Script (the pipeline engine)
 
-1. Open the **RECRUITMENT PIPELINE BASE** sheet → **Extensions → Apps Script**.
-2. Replace `Code.gs` with `apps-script/Code.gs`. Add a file named `Logic` (**+ → Script**) and paste `apps-script/Logic.gs`.
-3. **Project Settings** (gear) → tick **Show "appsscript.json"**, then paste `apps-script/appsscript.json` into it.
-4. **Project Settings → Script Properties → Add**: `API_SECRET` = a long random string (30+ characters). Keep it for step 2.
-5. Back in the editor, choose the function **setup** and click **Run**. Approve the Google permissions (marketing account).
+Use the standalone Apps Script project (script.google.com), signed in as the marketing account.
+
+1. Replace `Code.gs` with `apps-script/Code.gs`. Add a file named `Logic` (**+ → Script**) and paste `apps-script/Logic.gs`.
+2. **Project Settings** (gear) → tick **Show "appsscript.json" manifest file in editor**, then replace its content with `apps-script/appsscript.json`.
+3. **Project Settings → Script Properties → Add script property**, two of them:
+   - `PIPELINE_SHEET_ID` = the ID of the RECRUITMENT PIPELINE BASE sheet (the long part of its link between `/d/` and `/edit`).
+   - `API_SECRET` = a long random string (30+ characters). Keep it for step 2.
+4. In the editor choose the function **setup** and click **Run**. Approve the Google permissions (marketing account).
    This adds the **Test Form** tab, the **Applied** column in Outbox, and the every-5-minutes trigger.
-6. **Deploy → New deployment → Web app**: Execute as **Me**, Who has access **Anyone**. Copy the **Web app URL**.
-   ("Anyone" is needed so Vercel can reach it; every request must carry `API_SECRET`.)
+5. **Deploy → New deployment → gear → Web app**: Execute as **Me**, Who has access **Anyone**. Click **Deploy**, copy the **Web app URL**.
+   ("Anyone" is needed so Vercel can reach it; every request must carry `API_SECRET`, or it is refused.)
 
 ## 2. Vercel environment variables
 
