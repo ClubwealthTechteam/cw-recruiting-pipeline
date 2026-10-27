@@ -240,3 +240,14 @@ test('Zoom backup path: zoomRows API appends rows and finalizes the day', () => 
   assert.equal(a['Maria Clara'].Stage, 'Interview Completed');
   assert.equal(a.Jose.Stage, 'No Show');
 });
+
+test('site API: applicant action returns one full record by ID', () => {
+  const env = invitedEnv();
+  const r = env.api({ action: 'applicant', id: 'F-3' });
+  assert.equal(r.data.applicant['First Name'], 'Jose');
+  assert.equal(r.data.applicant.Country, 'Philippines');
+  assert.equal(env.api({ action: 'applicant', id: 'F-99' }).data.applicant, null);
+  const slim = env.api({ action: 'data', slim: true }).data.applicants[0];
+  assert.equal(slim.Country, undefined);
+  assert.equal(slim['First Name'], 'Maria Clara');
+});

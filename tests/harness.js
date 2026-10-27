@@ -29,6 +29,13 @@ function makeSheet(name, rows) {
     appendRow: (r) => data.push(r.slice()),
     setFrozenRows: () => {},
     getRange: (r, c, nr = 1, nc = 1) => {
+      if (typeof r === 'string') {
+        // 'A:A' text finder: exact match in column A
+        return { createTextFinder: (text) => ({ matchEntireCell: () => ({ findNext: () => {
+          const i = data.findIndex((row, k) => k > 0 && String(row[0]) === text);
+          return i === -1 ? null : { getRow: () => i + 1 };
+        } }) }) };
+      }
       const range = {
         getValues: () => Array.from({ length: nr }, (_, i) => Array.from({ length: nc }, (_, j) => cell(r + i, c + j))),
         setValue: (v) => { put(r, c, v); return range; },

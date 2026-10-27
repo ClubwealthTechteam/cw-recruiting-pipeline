@@ -655,8 +655,16 @@ function api_(req) {
     };
   }
   if (req.action === 'applicant') {
-    var one = plain_(table_(SH.APPLICANTS).rows).filter(function (a) { return a['Applicant ID'] === req.id; })[0];
-    return { applicant: one || null };
+    // Jump straight to the one row (column A holds the Applicant ID) instead of reading every applicant.
+    var sh = sheet_(SH.APPLICANTS);
+    var hit = sh.getRange('A:A').createTextFinder(String(req.id || '')).matchEntireCell(true).findNext();
+    if (!hit) return { applicant: null };
+    var lastCol = sh.getLastColumn();
+    var hdr = sh.getRange(1, 1, 1, lastCol).getValues()[0];
+    var vals = sh.getRange(hit.getRow(), 1, 1, lastCol).getValues()[0];
+    var o = { _row: hit.getRow() };
+    hdr.forEach(function (h, j) { if (h) o[h] = vals[j]; });
+    return { applicant: plain_([o])[0] };
   }
   if (req.action === 'zoomRows') return zoomRowsApi_(req);
   if (MANUAL_BY.indexOf(req.by) === -1) throw new Error('unknown user');
