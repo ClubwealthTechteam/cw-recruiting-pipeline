@@ -33,12 +33,13 @@ export const PIPELINE_TAG = 'pipeline';
 
 /**
  * Slim pipeline data for list pages and dashboards, from Vercel's shared data cache.
- * Served instantly when cached; refreshed in the background at most every 60 seconds, and right after any change.
+ * Served instantly when cached. Dropped the moment the sheet changes (the Apps Script calls /api/revalidate)
+ * or anything is changed on the site; otherwise refreshed in the background every 30 seconds.
  */
 export const getData = unstable_cache(
   async () => ({ ...(await call<PipelineData>({ action: 'data', slim: true })), fetchedAt: Date.now() }),
   ['pipeline-data-v2'],
-  { revalidate: 60, tags: [PIPELINE_TAG] }
+  { revalidate: 30, tags: [PIPELINE_TAG] }
 );
 
 /** One applicant with every column (application answers, links, notes), cached like the lists. */
