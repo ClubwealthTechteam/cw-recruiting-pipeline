@@ -50,7 +50,7 @@ h3 { font-size: 13px; font-weight: 600; margin: 16px 0 6px; text-transform: uppe
 .error-panel { border-color: #f1c4c1; }
 .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; align-items: start; }
 
-.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(165px, 1fr)); gap: 12px; margin-bottom: 18px; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px; margin-bottom: 18px; }
 .tile { background: var(--card); border: 1px solid var(--line); border-radius: 6px; padding: 14px 16px; color: var(--ink); }
 .link-tile:hover { border-color: var(--accent); text-decoration: none; }
 .tile-label { font-size: 12px; color: var(--muted); }
@@ -122,3 +122,13 @@ input:focus, select:focus, textarea:focus { outline: 2px solid #b9cff3; border-c
 .login-card .brand { font-size: 12px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
 .login-card h1 { margin-bottom: 6px; }
 .login-card label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
+
+.chart { position: relative; }
+.chart svg { width: 100%; height: auto; display: block; overflow: visible; }
+.chart .axis { font-size: 15px; fill: #667085; }
+.chart .axis-strong { font-size: 16px; fill: #1d2430; }
+.chart .val { font-size: 15px; font-weight: 600; fill: #1d2430; }
+.chart .direct { font-size: 15px; fill: #1d2430; }
+.chart-tip { position: absolute; pointer-events: none; background: #fff; border: 1px solid #cfd5df; border-radius: 4px; padding: 6px 9px; font-size: 12px; box-shadow: 0 2px 6px rgba(16,24,40,.08); white-space: nowrap; z-index: 2; }
+.chart-tip .tip-head { font-weight: 600; margin-bottom: 2px; }
+.legend > span { display: inline-flex; align-items: center; gap: 4px; }

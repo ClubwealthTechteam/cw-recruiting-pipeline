@@ -1,13 +1,14 @@
 import Link from 'next/link';
 import { getData } from '@/lib/sheet';
-import { metrics, pct, formatDate } from '@/lib/pipeline';
+import { metrics, pct, formatDate, STAGES, s as str } from '@/lib/pipeline';
+import { WeeklyBars, RateTrend, HBars } from '@/components/Charts';
 import DataError from '@/components/DataError';
 
 export default async function Dashboard() {
   let d;
   try { d = await getData(); } catch (e) { return <DataError error={e} />; }
   const m = metrics(d.applicants, d.history, d.flags);
-  const maxWeek = Math.max(1, ...m.perWeek.map((w) => w.form + w.olj));
+  const active = d.applicants.filter((a) => str(a.Historical) !== 'Y');
   const maxSession = Math.max(1, ...m.sessions.map((x) => x.invited));
 
   return (
@@ -27,26 +28,40 @@ export default async function Dashboard() {
         <Tile label="Needs attention" value={String(m.openFlags)} note="Open items" href="/attention" />
       </section>
 
-      <section className="panel">
-        <h2>Applicants per week</h2>
-        <p className="sub">Week starting Monday. Form and OnlineJobs.ph.</p>
-        <div className="bars">
-          {m.perWeek.map((w) => (
-            <div key={w.week} className="bar-col" title={`${w.form} form, ${w.olj} OLJ`}>
-              <div className="bar-stack" style={{ height: `${((w.form + w.olj) / maxWeek) * 140}px` }}>
-                <div className="seg olj" style={{ flex: w.olj }} />
-                <div className="seg form" style={{ flex: w.form }} />
-              </div>
-              <div className="bar-val">{w.form + w.olj}</div>
-              <div className="bar-label">{formatDate(w.week).replace(/, \d{4}$/, '')}</div>
-            </div>
-          ))}
-        </div>
-        <div className="legend"><span className="key form" /> Form <span className="key olj" /> OnlineJobs.ph</div>
-      </section>
+      <div className="two-col">
+        <section className="panel">
+          <h2>Applicants per week</h2>
+          <p className="sub">Week starting Monday.</p>
+          <WeeklyBars data={m.perWeek.map((w) => ({ label: short(w.week), form: w.form, olj: w.olj }))} />
+        </section>
+        <section className="panel">
+          <h2>Session rates</h2>
+          <p className="sub">Per Wednesday session. Confirmed ÷ invited, joined ÷ confirmed, 30+ minutes ÷ joined.</p>
+          <RateTrend data={m.sessions.map((x) => ({
+            label: short(x.date),
+            confirmation: x.invited ? x.confirmed / x.invited : null,
+            showUp: x.confirmed ? x.attended / x.confirmed : null,
+            completion: x.attended ? x.completed / x.attended : null
+          }))} />
+        </section>
+      </div>
+
+      <div className="two-col">
+        <section className="panel">
+          <h2>Current pipeline</h2>
+          <p className="sub">Applicants in each stage now, excluding those invited by hand before the system.</p>
+          <HBars format="count" ariaLabel="Applicants by stage" data={STAGES.map((st) => ({ label: st, value: active.filter((a) => str(a.Stage) === st).length }))} />
+        </section>
+        <section className="panel">
+          <h2>Pass rate by position</h2>
+          <p className="sub">Of applicants who completed an interview and have a decision, the share Passed or Hired.</p>
+          <HBars format="pct" ariaLabel="Pass rate by position" data={m.byPosition.map((p) => ({ label: p.position, value: p.rate ?? 0, note: `of ${p.decided}` }))} />
+        </section>
+      </div>
 
       <section className="panel">
         <h2>Interview sessions</h2>
+        <p className="sub">The numbers behind the session chart.</p>
         {m.sessions.length === 0 ? <p className="empty">No sessions tracked yet. Numbers appear after the first Wednesday run by the system.</p> : (
           <table className="table">
             <thead><tr><th>Wednesday</th><th>Invited</th><th>Confirmed</th><th>Joined</th><th>Completed</th><th>No Show</th><th style={{ width: '30%' }}>Invited vs completed</th></tr></thead>
@@ -62,16 +77,6 @@ export default async function Dashboard() {
         )}
       </section>
 
-      <section className="panel">
-        <h2>Results by position</h2>
-        <p className="sub">Of applicants who completed an interview and have a decision, the share Passed or Hired.</p>
-        {m.byPosition.length === 0 ? <p className="empty">No decisions recorded yet.</p> : (
-          <table className="table">
-            <thead><tr><th>Position</th><th>Decided</th><th>Passed or Hired</th><th>Pass rate</th></tr></thead>
-            <tbody>{m.byPosition.map((p) => <tr key={p.position}><td>{p.position}</td><td>{p.decided}</td><td>{p.passed}</td><td>{pct(p.rate)}</td></tr>)}</tbody>
-          </table>
-        )}
-      </section>
     </>
   );
 }
@@ -79,4 +84,8 @@ export default async function Dashboard() {
 function Tile({ label, value, note, href }: { label: string; value: string; note: string; href?: string }) {
   const body = (<><div className="tile-label">{label}</div><div className="tile-value">{value}</div><div className="tile-note">{note}</div></>);
   return href ? <Link href={href} className="tile link-tile">{body}</Link> : <div className="tile">{body}</div>;
+}
+
+function short(d: string) {
+  return formatDate(d).replace(/, \d{4}$/, '');
 }
