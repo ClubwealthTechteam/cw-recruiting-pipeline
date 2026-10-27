@@ -119,7 +119,7 @@ export function metrics(applicants: Row[], history: Row[], flags: Row[], now = n
 
   return {
     perWeek,
-    sessions,
+    sessions: finished,
     confirmationRate: rate(sum('confirmed'), sum('invited')),
     showUpRate: rate(sum('attended'), sum('confirmed')),
     completionRate: rate(sum('completed'), sum('attended')),

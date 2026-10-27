@@ -25,16 +25,17 @@ function safeEqual(a: string, b: string): boolean {
   return x.length === y.length && timingSafeEqual(x, y);
 }
 
-/** Returns the person whose access code this is, or null. */
-export function userForCode(code: string): User | null {
-  const entries = (process.env.ACCESS_CODES || '').split(',').map((e) => e.trim()).filter(Boolean);
-  for (const e of entries) {
-    const i = e.indexOf('=');
-    const name = e.slice(0, i).trim() as User;
-    const value = e.slice(i + 1).trim();
-    if (USERS.includes(name) && value && safeEqual(value, code.trim())) return name;
+/** Returns the person whose access code this is, or null. ACCESS_CODES is a JSON map of name to code. */
+export function userForCode(name: string, code: string): User | null {
+  let map: Record<string, string> = {};
+  try {
+    map = JSON.parse(process.env.ACCESS_CODES || '{}');
+  } catch {
+    return null;
   }
-  return null;
+  const expected = map[name];
+  if (!USERS.includes(name as User) || !expected) return null;
+  return safeEqual(expected.trim().toUpperCase(), code.trim().toUpperCase()) ? (name as User) : null;
 }
 
 export async function startSession(user: User) {
@@ -62,4 +63,26 @@ export async function requireUser(): Promise<User> {
   const u = await currentUser();
   if (!u) redirect('/login');
   return u;
+}
+
+// Five wrong codes lock that name for 15 minutes (per server instance; codes are long enough that this is a backstop).
+const attempts = new Map<string, { count: number; until: number }>();
+
+export function isLocked(name: string): boolean {
+  const a = attempts.get(name);
+  return !!a && a.until > Date.now();
+}
+
+export function recordFailure(name: string) {
+  const a = attempts.get(name) || { count: 0, until: 0 };
+  a.count += 1;
+  if (a.count >= 5) {
+    a.until = Date.now() + 15 * 60_000;
+    a.count = 0;
+  }
+  attempts.set(name, a);
+}
+
+export function clearFailures(name: string) {
+  attempts.delete(name);
 }
