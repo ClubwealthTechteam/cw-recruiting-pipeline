@@ -165,6 +165,8 @@ function queueEmail_(st, applicant, type, mail, interviewYmd) {
 }
 
 function queueInvite_(st, a, interviewYmd, type) {
+  // Before Zapier is connected Am invites by hand; AUTO_INVITES = OFF keeps the system from queuing duplicates.
+  if (st.get('MODE') === 'LIVE' && st.get('AUTO_INVITES') === 'OFF') return null;
   return queueEmail_(st, a, type || 'Invite', inviteEmail(interviewYmd, new Date()), interviewYmd);
 }
 
@@ -222,9 +224,9 @@ function importNewFormRows_(st) {
 }
 
 /**
- * One-time, at go-live: copies every past applicant Am already invited ("Invite Sent Out?" = Yes)
- * as Invited, with no emails. Past interview dates are marked Historical. Then starts live intake
- * after the last form row.
+ * One-time, at go-live: copies every applicant Am already invited ("Invite Sent Out?" = Yes) as Invited,
+ * plus not-yet-invited applicants whose Wednesday is still ahead as Applied. No emails. Past interview
+ * dates are marked Historical. Then starts live intake after the last form row.
  */
 function importHistory() {
   var lock = LockService.getScriptLock();
@@ -240,14 +242,17 @@ function importHistory() {
     var hdr = sheet_(SH.APPLICANTS).getRange(1, 1, 1, sheet_(SH.APPLICANTS).getLastColumn()).getValues()[0];
     for (var i = 1; i < values.length; i++) {
       var r = values[i];
-      if (!r[FORM.TS] || String(r[FORM.INVITE_SENT]).trim().toLowerCase() !== 'yes') continue;
-      var f = applicantFromForm_('F', i + 1, r, overrides);
+      if (!r[FORM.TS]) continue;
+      var invited = String(r[FORM.INVITE_SENT]).trim().toLowerCase() === 'yes';
       var iv = interviewDateFor(r[FORM.TS] instanceof Date ? r[FORM.TS] : new Date(r[FORM.TS]));
-      f.Stage = 'Invited';
+      // Not invited yet and their Wednesday is still ahead: bring in as Applied (Am may still invite them by hand).
+      if (!invited && iv < today) continue;
+      var f = applicantFromForm_('F', i + 1, r, overrides);
+      f.Stage = invited ? 'Invited' : 'Applied';
       f['Stage Updated At'] = nowStr_();
       f['Stage Updated By'] = 'Import';
       f['Interview Date'] = iv;
-      f['Invite Count'] = 1;
+      f['Invite Count'] = invited ? 1 : 0;
       f.Historical = iv < today ? 'Y' : '';
       out.push(hdr.map(function (h) { return f[h] !== undefined ? f[h] : ''; }));
     }
@@ -264,6 +269,28 @@ function importHistory() {
 function startTestIntake() {
   var st = settings_();
   st.set('LAST_TEST_ROW_IMPORTED', Math.max(1, sheet_(SH.TEST_FORM).getLastRow()));
+}
+
+/**
+ * While invites are still sent by hand (before Zapier), Am marks "Invite Sent Out?" = Yes on the form sheet.
+ * Form applicants still at Applied whose form row says Yes move to Invited. LIVE only; reads the form, never writes it.
+ */
+function syncManualInvites_(st) {
+  if (st.get('MODE') !== 'LIVE' || !st.get('LAST_FORM_ROW_IMPORTED')) return 0;
+  var apps = table_(SH.APPLICANTS);
+  var waiting = apps.rows.filter(function (a) { return a.Stage === 'Applied' && /^F-\d+$/.test(a['Applicant ID']); });
+  if (!waiting.length) return 0;
+  var values = SpreadsheetApp.openById(st.get('SOURCE_SHEET_ID')).getSheetByName('Form Responses 1').getDataRange().getValues();
+  var n = 0;
+  waiting.forEach(function (a) {
+    var r = values[Number(a['Applicant ID'].slice(2)) - 1];
+    if (r && String(r[FORM.INVITE_SENT]).trim().toLowerCase() === 'yes') {
+      update_(apps, a, { 'Invite Count': (Number(a['Invite Count']) || 0) + 1, 'Last Invite At': nowStr_() });
+      setStage_(apps, a, 'Invited', 'Am (by hand)', 'Invite Sent Out? = Yes on the form sheet');
+      n++;
+    }
+  });
+  return n;
 }
 
 // ---------- 2. sent emails ----------
@@ -518,6 +545,7 @@ function tick() {
     var st = settings_();
     var c = {
       intake: importNewFormRows_(st),
+      manualInvites: syncManualInvites_(st),
       sent: applySentEmails_(st),
       replies: processReplies_(st),
       olj: processOLJ_(st),

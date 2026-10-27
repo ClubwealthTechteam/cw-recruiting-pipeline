@@ -45,7 +45,7 @@ test('TEST mode: new form row -> Applied -> invite to test address -> Invited', 
   assert.equal(env.rows('Outbox').length, 1);
 });
 
-test('LIVE import of history: only invited rows, no emails; then new rows invite the applicant', () => {
+test('LIVE import of history: invited rows plus upcoming not-yet-invited, no emails; then new rows invite the applicant', () => {
   const env = load({
     mode: 'LIVE', now: pdt('2026-10-27T12:00:00'),
     formRows: [
@@ -56,7 +56,7 @@ test('LIVE import of history: only invited rows, no emails; then new rows invite
   });
   env.ctx.importHistory();
   let apps = env.rows('Applicants');
-  assert.deepEqual(apps.map((a) => a['Applicant ID']), ['F-2', 'F-3']);
+  assert.deepEqual(apps.map((a) => [a['Applicant ID'], a.Stage]), [['F-2', 'Invited'], ['F-3', 'Invited'], ['F-4', 'Applied']]);
   assert.equal(apps[0].Historical, 'Y');
   assert.equal(apps[1].Historical, '');
   assert.equal(apps[1]['Interview Date'], '2026-10-28');
@@ -206,4 +206,26 @@ test('replies copied in by Zapier with no category are sorted by the rules', () 
   assert.deepEqual(reps.map((r) => r.Category), ['Confirmed', 'Ignored', 'Other']);
   assert.equal(env.rows('Applicants').find((a) => a['First Name'] === 'Maria Clara').Stage, 'Confirmed');
   assert.deepEqual(env.rows('Needs Attention').map((f) => f.Type), ['Reply needs reading']);
+});
+
+test('go-live before Zapier: AUTO_INVITES OFF queues nothing; Am marking Yes moves Applied to Invited', () => {
+  const env = load({ mode: 'LIVE', now: pdt('2026-10-27T12:00:00'), settings: { AUTO_INVITES: 'OFF' }, formRows: [
+    formRow(pdt('2026-09-01T10:00:00'), 'Old', 'Skip', 'old@example.com', 'ISA', ''),
+    formRow(pdt('2026-10-23T10:00:00'), 'Was', 'Invited', 'was@example.com', 'ISA', 'Yes'),
+    formRow(pdt('2026-10-27T09:00:00'), 'Not', 'Yet', 'notyet@example.com', 'ISA', '')
+  ] });
+  env.ctx.importHistory();
+  let apps = env.rows('Applicants');
+  assert.deepEqual(apps.map((a) => [a['Applicant ID'], a.Stage]), [['F-3', 'Invited'], ['F-4', 'Applied']]);
+  const src = env.ctx.SpreadsheetApp.openById().getSheetByName();
+  src.appendRow(formRow(pdt('2026-10-27T12:00:00'), 'Brand', 'New', 'new@example.com', 'ISA', ''));
+  env.ctx.tick();
+  assert.equal(env.rows('Outbox').length, 0, 'no invites queued while AUTO_INVITES is OFF');
+  assert.equal(env.rows('Applicants').length, 3);
+  src.data[3][19] = 'Yes'; // Am invites "Not Yet" by hand
+  env.ctx.tick();
+  apps = env.rows('Applicants');
+  assert.equal(apps.find((a) => a['Applicant ID'] === 'F-4').Stage, 'Invited');
+  assert.equal(apps.find((a) => a['Applicant ID'] === 'F-5').Stage, 'Applied');
+  assert.equal(env.rows('History').find((h) => h['Applicant ID'] === 'F-4')['Changed By'], 'Am (by hand)');
 });
