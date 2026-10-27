@@ -1,0 +1,26 @@
+# Routine: Recruiting – Zoom attendance (Wednesdays)
+
+**Schedule:** `CRON_TZ=America/Los_Angeles 40 13 * * 3` (Wednesday 1:40 PM PT)
+**Environment:** Default (has `ZOOM_ACCOUNT_ID` and the zoom.us network secret)
+**Repository:** ClubwealthTechteam/cw-recruiting-pipeline (main)
+**Connectors:** Google Sheets only
+
+## Prompt
+
+```
+Recruiting pipeline: Wednesday Zoom attendance. Read-only on Zoom; write only to the pipeline sheet.
+
+1. Run in the background:
+   python3 -I routines/zoom_attendance.py --out "$TMPDIR/zoom.json" --start 13:45 --end 15:30 --interval 180
+   It polls the Club Wealth Help Desk meeting until 3:30 PM PT. Wait for it with Monitor; do not poll it yourself.
+   Never print the Zoom token. The script adds the Authorization header itself (approved by Miguel for Zoom only).
+2. When it finishes, read the JSON. Append each item in "rows" to the "Zoom Attendance" tab of spreadsheet
+   11CpfMQhC97DCqFQhZuBL73XCUw8H3zrb_FAKW7vcv8o (columns A–I: Interview Date, Zoom Display Name, Parsed Name,
+   Parsed Position, Matched Applicant ID (leave blank), Total Minutes, First Join, Last Leave, Segments).
+   Leave Result and Matched Applicant ID blank: the sheet's script matches people and sets results.
+3. Then, in the Settings tab, set the value of key ZOOM_FINALIZE to today's date (YYYY-MM-DD). Update the existing
+   row if the key exists; otherwise append [ZOOM_FINALIZE, date].
+4. If the script reports polls = 0 or errors > 0, still do steps 2–3 with what it found, and say so in your reply.
+5. Reply with counts only: polls, errors, participants recorded. No names, emails or phone numbers.
+Do not change anything else in the sheet, and do not contact anyone.
+```
