@@ -154,7 +154,7 @@ function reminderEmail(interviewYmd) {
   return { subject: 'ClubWealth | Pre-reminder invite', body: body };
 }
 
-/** DRAFT, pending Miguel's approval: short reply after someone confirms. Only queued when Settings SEND_CONFIRMATION_REPLY = YES. */
+/** Bot reply after someone confirms (signed "- Club Wealth", no person). Only queued when Settings SEND_CONFIRMATION_REPLY = YES. */
 function confirmationEmail(firstName, interviewYmd) {
   var zone = isDaylight(interviewYmd) ? 'Pacific Daylight Time (PDT)' : 'Pacific Standard Time (PST)';
   var body =
@@ -163,7 +163,7 @@ function confirmationEmail(firstName, interviewYmd) {
     longDate(interviewYmd) + ', at 2:00 PM ' + zone + '.</p>' +
     '<p>Here is the link to join the interview: ' + link() + '</p>' +
     '<p>Kindly join 10 minutes early and rename yourself with your full name and position (e.g., John Smith_Position).</p>' +
-    SIGNATURE_HTML;
+    '<p>- Club Wealth</p>';
   return { subject: 'ClubWealth | Pre-Interview confirmed', body: body };
 }
 

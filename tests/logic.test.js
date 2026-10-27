@@ -109,3 +109,10 @@ test('reply sorting rules (free, no Claude)', () => {
   assert.equal(L.classifyReply('Re: invite', 'Yes'), 'Other');
   assert.equal(L.classifyReply('Re: invite', 'ok'), 'Other');
 });
+
+test('bot confirmation reply is signed by Club Wealth, not a person', () => {
+  const c = L.confirmationEmail('Maria', '2026-11-04');
+  assert.match(c.body, /- Club Wealth<\/p>$/);
+  assert.doesNotMatch(c.body, /Am Marbella/);
+  assert.match(c.body, /Wednesday, November 4, 2026, at 2:00 PM Pacific Standard Time \(PST\)/);
+});
