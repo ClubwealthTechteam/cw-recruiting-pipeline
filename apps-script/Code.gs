@@ -609,6 +609,26 @@ function plain_(rows) {
 
 var MANUAL_BY = ['Miguel', 'Camille', 'Am'];
 
+/** Backup path for the Zoom routine when it has no Sheets connector: {rows: [...], finalize: 'YYYY-MM-DD'}. */
+function zoomRowsApi_(req) {
+  var lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    var z = table_(SH.ZOOM);
+    var cols = ['Interview Date', 'Zoom Display Name', 'Parsed Name', 'Parsed Position', 'Total Minutes', 'First Join', 'Last Leave', 'Segments'];
+    (req.rows || []).slice(0, 500).forEach(function (r) {
+      var o = {};
+      cols.forEach(function (c) { o[c] = r[c] !== undefined ? r[c] : ''; });
+      o['Recorded At'] = nowStr_();
+      append_(z, o);
+    });
+    if (/^\d{4}-\d{2}-\d{2}$/.test(String(req.finalize || ''))) settings_().set('ZOOM_FINALIZE', req.finalize);
+    return { added: (req.rows || []).length };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
 function api_(req) {
   if (req.action === 'data') {
     var st = settings_();
@@ -621,6 +641,7 @@ function api_(req) {
       mode: st.get('MODE')
     };
   }
+  if (req.action === 'zoomRows') return zoomRowsApi_(req);
   if (MANUAL_BY.indexOf(req.by) === -1) throw new Error('unknown user');
   var lock = LockService.getScriptLock();
   lock.waitLock(30000);

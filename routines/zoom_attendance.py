@@ -78,6 +78,7 @@ def main():
     ap.add_argument('--end', default='15:30')
     ap.add_argument('--interval', type=int, default=180)
     ap.add_argument('--once', action='store_true', help='single poll (for a read-only test)')
+    ap.add_argument('--post', action='store_true', help='also send rows to the Apps Script API (backup path)')
     a = ap.parse_args()
 
     today = dt.datetime.now(PT).date()
@@ -132,6 +133,16 @@ def main():
         })
     json.dump({'date': today.isoformat(), 'polls': polls, 'errors': errors, 'records_seen': len(seen), 'rows': rows},
               open(a.out, 'w'), indent=1)
+    if a.post:
+        # Backup when the routine has no Sheets connector: send rows to the pipeline's Apps Script API.
+        url, secret = os.environ.get('APPS_SCRIPT_URL'), os.environ.get('APPS_SCRIPT_SECRET')
+        if not url or not secret:
+            print('post skipped: APPS_SCRIPT_URL / APPS_SCRIPT_SECRET not set')
+        else:
+            body = json.dumps({'secret': secret, 'action': 'zoomRows', 'rows': rows, 'finalize': today.isoformat()}).encode()
+            with urllib.request.urlopen(urllib.request.Request(url, data=body, headers={'Content-Type': 'text/plain'}), timeout=60) as r:
+                res = json.load(r)
+            print('posted to pipeline:', 'ok' if res.get('ok') else 'error ' + str(res.get('error')))
     print(f'done: {polls} polls, {errors} errors, {len(seen)} records, {len(rows)} Name_Position participants -> {a.out}')
 
 

@@ -229,3 +229,14 @@ test('go-live before Zapier: AUTO_INVITES OFF queues nothing; Am marking Yes mov
   assert.equal(apps.find((a) => a['Applicant ID'] === 'F-5').Stage, 'Applied');
   assert.equal(env.rows('History').find((h) => h['Applicant ID'] === 'F-4')['Changed By'], 'Am (by hand)');
 });
+
+test('Zoom backup path: zoomRows API appends rows and finalizes the day', () => {
+  const env = invitedEnv();
+  env.setNow(pdt('2026-10-28T15:35:00'));
+  const r = env.api({ action: 'zoomRows', finalize: '2026-10-28', rows: [{ 'Interview Date': '2026-10-28', 'Zoom Display Name': 'Maria Santos_Collections', 'Parsed Name': 'Maria Santos', 'Parsed Position': 'Collections', 'Total Minutes': 40 }] });
+  assert.equal(r.ok, true);
+  env.ctx.tick();
+  const a = Object.fromEntries(env.rows('Applicants').map((x) => [x['First Name'], x]));
+  assert.equal(a['Maria Clara'].Stage, 'Interview Completed');
+  assert.equal(a.Jose.Stage, 'No Show');
+});
