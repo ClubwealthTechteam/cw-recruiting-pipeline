@@ -25,15 +25,32 @@ function safeEqual(a: string, b: string): boolean {
   return x.length === y.length && timingSafeEqual(x, y);
 }
 
+/** Why sign-in can't work at all (a setup problem, not a wrong code), or '' when setup looks fine. */
+export function setupProblem(): string {
+  const raw = (process.env.ACCESS_CODES || '').trim();
+  if (!raw) return 'ACCESS_CODES is not set in Vercel.';
+  let map: unknown;
+  try {
+    map = JSON.parse(raw);
+  } catch {
+    return 'ACCESS_CODES is not valid JSON. Use straight quotes: {"Miguel":"CW-…","Camille":"CW-…","Am":"CW-…"}';
+  }
+  if (!map || typeof map !== 'object') return 'ACCESS_CODES must be a JSON object.';
+  const missing = USERS.filter((u) => !(map as Record<string, unknown>)[u]);
+  if (missing.length) return `ACCESS_CODES has no code for: ${missing.join(', ')} (names are case-sensitive).`;
+  if (!process.env.SESSION_SECRET || process.env.SESSION_SECRET.length < 16) return 'SESSION_SECRET is missing or shorter than 16 characters.';
+  return '';
+}
+
 /** Returns the person whose access code this is, or null. ACCESS_CODES is a JSON map of name to code. */
 export function userForCode(name: string, code: string): User | null {
   let map: Record<string, string> = {};
   try {
-    map = JSON.parse(process.env.ACCESS_CODES || '{}');
+    map = JSON.parse((process.env.ACCESS_CODES || '{}').trim());
   } catch {
     return null;
   }
-  const expected = map[name];
+  const expected = String(map[name] || '');
   if (!USERS.includes(name as User) || !expected) return null;
   return safeEqual(expected.trim().toUpperCase(), code.trim().toUpperCase()) ? (name as User) : null;
 }

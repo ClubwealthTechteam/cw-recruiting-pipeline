@@ -1,10 +1,11 @@
 import { redirect } from 'next/navigation';
-import { USERS, userForCode, startSession, currentUser, isLocked, recordFailure, clearFailures } from '@/lib/auth';
+import { USERS, setupProblem, userForCode, startSession, currentUser, isLocked, recordFailure, clearFailures } from '@/lib/auth';
 
 async function login(formData: FormData) {
   'use server';
   const name = String(formData.get('name') || '');
   const code = String(formData.get('code') || '');
+  if (setupProblem()) redirect('/login?e=setup');
   if (isLocked(name)) redirect('/login?e=locked');
   const user = userForCode(name, code);
   if (!user) {
@@ -19,6 +20,7 @@ async function login(formData: FormData) {
 export default async function LoginPage({ searchParams }: { searchParams: Promise<{ e?: string }> }) {
   if (await currentUser()) redirect('/');
   const { e } = await searchParams;
+  const problem = setupProblem();
   return (
     <main className="login">
       <form action={login} className="login-card">
@@ -36,6 +38,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
           <input name="code" type="password" autoComplete="off" placeholder="CW-XXXX-XXXX" required />
         </label>
         {e === 'wrong' && <p className="error">That code is not correct.</p>}
+        {problem && <p className="error">Setup problem: {problem}</p>}
         {e === 'locked' && <p className="error">Too many attempts. Try again in 15 minutes.</p>}
         <button type="submit" className="btn primary">Sign in</button>
       </form>
