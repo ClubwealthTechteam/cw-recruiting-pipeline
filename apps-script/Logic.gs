@@ -229,6 +229,49 @@ function standardPosition(raw, overrides) {
   return key ? 'Other' : '';
 }
 
+/** Drops the quoted original email that replies carry underneath. */
+function stripQuoted(text) {
+  var lines = String(text || '').replace(/\r/g, '').split('\n');
+  var out = [];
+  for (var i = 0; i < lines.length; i++) {
+    var l = lines[i];
+    if (/^\s*>/.test(l)) break;
+    if (/^\s*On .+wrote:\s*$/i.test(l)) break;
+    if (/^\s*-{2,}\s*Original Message/i.test(l)) break;
+    if (/^\s*(From|Sent|De|Enviado):\s/i.test(l)) break;
+    if (/^\s*Sent from my /i.test(l)) break;
+    out.push(l);
+  }
+  return out.join('\n').trim();
+}
+
+var CANNOT_ATTEND = /\b(can ?not|can'?t|cant|unable|won'?t be able|will not be able|not (be )?available|unavailable|resched|another (date|day|time|schedule)|different (date|day|time)|next week instead|conflict|emergency|not attend|can'?t make it|couldn'?t)\b/i;
+var AUTO_REPLY = /(automatic reply|auto(matic)?[- ]?reply|out of office|undeliverable|delivery status|mail delivery|returned mail|failure notice)/i;
+var NAME_FILLER = /\b(confirm(ed|ing)?|yes|yup|noted|thank you|thanks|ty|po|sir|ma'?am|available|i am|i'?m|attend(ing)?|will|be there|my full name is|full name|name|here|hello|hi|good (day|morning|afternoon|evening))\b/gi;
+
+/** A full name typed in a reply: the first line with filler words removed, 2 to 6 letter-only words. */
+function typedFullName(text) {
+  var first = stripQuoted(text).split('\n').filter(function (l) { return l.trim(); })[0] || '';
+  var cleaned = first.replace(NAME_FILLER, ' ').replace(/[^A-Za-zÀ-ÿñÑ.' -]/g, ' ').replace(/\s+/g, ' ').trim();
+  var words = cleaned.split(' ').filter(function (w) { return w.replace(/[.'-]/g, '').length > 0; });
+  if (words.length < 2 || words.length > 6) return '';
+  return words.join(' ');
+}
+
+/**
+ * Free, rules-based sorting of an applicant reply (no Claude usage).
+ * Ignored: auto-replies and bounces. Cannot Attend: wording about not making it.
+ * Question: contains a question mark. Confirmed: a typed full name. Anything else: Other (flagged).
+ */
+function classifyReply(subject, text) {
+  var body = stripQuoted(text);
+  if (AUTO_REPLY.test(String(subject || '')) || AUTO_REPLY.test(body.slice(0, 200))) return 'Ignored';
+  if (CANNOT_ATTEND.test(body)) return 'Cannot Attend';
+  if (body.indexOf('?') !== -1) return 'Question';
+  if (typedFullName(body)) return 'Confirmed';
+  return 'Other';
+}
+
 /** Zoom result from total minutes in the meeting. */
 function zoomResult(minutes, minMinutes) {
   return minutes >= (minMinutes || 30) ? 'Interview Completed' : 'Did Not Complete';
@@ -240,6 +283,7 @@ if (typeof module !== 'undefined') {
     reinviteDateFor: reinviteDateFor, isDaylight: isDaylight, longDate: longDate,
     inviteEmail: inviteEmail, reminderEmail: reminderEmail, confirmationEmail: confirmationEmail,
     normName: normName, nameMatches: nameMatches, parseZoomName: parseZoomName,
-    standardPosition: standardPosition, zoomResult: zoomResult, STAGES: STAGES
+    standardPosition: standardPosition, zoomResult: zoomResult, STAGES: STAGES,
+    stripQuoted: stripQuoted, typedFullName: typedFullName, classifyReply: classifyReply
   };
 }

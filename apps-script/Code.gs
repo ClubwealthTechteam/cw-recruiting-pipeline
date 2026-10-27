@@ -4,7 +4,7 @@
  * Every 5 minutes tick():
  *   1. copies new form responses into Applicants and queues their invites (Outbox),
  *   2. applies emails Zapier has sent (stage -> Invited, reminder stamps),
- *   3. applies applicant replies the Claude routine has sorted (Replies tab),
+ *   3. sorts and applies applicant replies Zapier has copied in (Replies tab, rules only, no Claude),
  *   4. adds OLJ applicants the Claude routine has summarized (OLJ tab),
  *   5. applies Zoom attendance the Claude routine has recorded (Zoom Attendance tab),
  *   6. on Wednesdays from 6:00 AM, queues reminders for confirmed applicants.
@@ -296,8 +296,9 @@ function indexBy_(rows, key) {
 // ---------- 3. replies (sorted by the Claude routine) ----------
 
 /**
- * Replies rows arrive with From Email, Reply Text and Category
- * (Confirmed | Cannot Attend | Question | Other). Matching is done here:
+ * Zapier copies each CareersCW email into Replies (From Email, Subject, Reply Text).
+ * Category is set here by classifyReply() unless already filled in by hand
+ * (Confirmed | Cannot Attend | Question | Other | Ignored). Matching is done here:
  * sender email first, then the typed full name against upcoming invitees. Never guesses.
  */
 function processReplies_(st) {
@@ -306,11 +307,16 @@ function processReplies_(st) {
   var today = todayPT();
   var n = 0;
   reps.rows.forEach(function (rep) {
-    if (rep['Processed At'] || !rep.Category) return;
+    if (rep['Processed At']) return;
+    if (!rep.Category) update_(reps, rep, { Category: classifyReply(rep.Subject, rep['Reply Text']) });
+    if (rep.Category === 'Ignored') {
+      update_(reps, rep, { 'Action Taken': 'Ignored (auto-reply or bounce)', 'Processed At': nowStr_() });
+      return;
+    }
     var m = matchReply_(apps.rows, rep, today);
     var action;
     if (!m.applicant) {
-      flag_('', 'Unmatched reply', m.why + ' | From: ' + rep['From Email'] + ' | ' + String(rep['Reply Text']).slice(0, 300));
+      flag_('', 'Unmatched reply', m.why + ' | From: ' + rep['From Email'] + ' | ' + stripQuoted(rep['Reply Text']).slice(0, 300));
       action = 'Flagged: ' + m.why;
     } else {
       action = applyReply_(st, apps, m.applicant, rep);
@@ -334,7 +340,7 @@ function matchReply_(rows, rep, today) {
     byEmail.sort(function (x, y) { return String(y['Applied At (PT)']).localeCompare(String(x['Applied At (PT)'])); });
     return { applicant: byEmail[0], method: 'Email' };
   }
-  var typed = String(rep['Reply Text'] || '').split('\n')[0];
+  var typed = typedFullName(rep['Reply Text']);
   var byName = open.filter(function (a) {
     return ymdOf_(a['Interview Date']) >= today && nameMatches(typed, a['First Name'], a['Last Name']);
   });
@@ -355,12 +361,12 @@ function applyReply_(st, apps, a, rep) {
   }
   if (cat === 'Cannot Attend') {
     var next = reinviteDateFor(ymdOf_(a['Interview Date']));
-    setStage_(apps, a, 'Open for re-invite', 'System', String(rep['Reply Text']).slice(0, 300));
-    update_(apps, a, { 'Re-invite Reason': String(rep['Reply Text']).slice(0, 500) });
+    setStage_(apps, a, 'Open for re-invite', 'System', stripQuoted(rep['Reply Text']).slice(0, 300));
+    update_(apps, a, { 'Re-invite Reason': stripQuoted(rep['Reply Text']).slice(0, 500) });
     queueInvite_(st, a, next, 'Re-invite');
     return 'Open for re-invite; re-invite queued for ' + next;
   }
-  flag_(a['Applicant ID'], 'Applicant question', String(rep['Reply Text']).slice(0, 500));
+  flag_(a['Applicant ID'], cat === 'Question' ? 'Applicant question' : 'Reply needs reading', stripQuoted(rep['Reply Text']).slice(0, 500));
   return 'Flagged for Recruitment';
 }
 

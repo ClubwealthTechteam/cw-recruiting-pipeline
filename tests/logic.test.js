@@ -1,4 +1,4 @@
-// Run: node --test tests/
+// Run: npm test
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -93,4 +93,19 @@ test('positions map free text to standard names', () => {
 test('zoom result threshold', () => {
   assert.equal(L.zoomResult(30, 30), 'Interview Completed');
   assert.equal(L.zoomResult(29.9, 30), 'Did Not Complete');
+});
+
+test('reply sorting rules (free, no Claude)', () => {
+  const quoted = 'Maria Clara Santos\n\nOn Tue, Oct 27, 2026 at 9:00 AM Club Wealth <careerscw@clubwealth.com> wrote:\n> Please join our virtual pre-interview tomorrow?';
+  assert.equal(L.classifyReply('Re: ClubWealth | Pre-Interview invite', quoted), 'Confirmed');
+  assert.equal(L.typedFullName(quoted), 'Maria Clara Santos');
+  assert.equal(L.classifyReply('Re: invite', 'Confirmed - Juan Dela Cruz'), 'Confirmed');
+  assert.equal(L.typedFullName('Confirmed - Juan Dela Cruz'), 'Juan Dela Cruz');
+  assert.equal(L.classifyReply('Re: invite', 'Hi, I cannot attend on Wednesday because of my shift. Can I join next week?'), 'Cannot Attend');
+  assert.equal(L.classifyReply('Re: invite', "Sorry I can't make it, I have an emergency"), 'Cannot Attend');
+  assert.equal(L.classifyReply('Re: invite', 'Is this a full time position?'), 'Question');
+  assert.equal(L.classifyReply('Automatic reply: Re: invite', 'I am out of the office'), 'Ignored');
+  assert.equal(L.classifyReply('Undeliverable: ClubWealth', 'Delivery has failed'), 'Ignored');
+  assert.equal(L.classifyReply('Re: invite', 'Yes'), 'Other');
+  assert.equal(L.classifyReply('Re: invite', 'ok'), 'Other');
 });

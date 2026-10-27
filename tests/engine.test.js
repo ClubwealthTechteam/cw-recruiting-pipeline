@@ -1,4 +1,4 @@
-// End-to-end run of apps-script/Code.gs against an in-memory spreadsheet. Run: node --test tests/
+// End-to-end run of apps-script/Code.gs against an in-memory spreadsheet. Run: npm test
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -279,4 +279,16 @@ test('site API: secret required, bulk stage change logs history, reason required
   assert.equal(env.api({ action: 'setStage', by: 'Hacker', ids: ['F-2'], stage: 'Hired' }).ok, false);
   env.api({ action: 'addNote', by: 'Camille', id: 'F-4', note: 'Strong English' });
   assert.match(env.rows('Applicants')[2].Notes, /Camille: Strong English/);
+});
+
+test('replies copied in by Zapier with no category are sorted by the rules', () => {
+  const env = invitedEnv();
+  addRow(env, 'Replies', { 'Message ID': 'z1', 'From Email': 'maria@example.com', Subject: 'Re: ClubWealth | Pre-Interview invite', 'Reply Text': 'Maria Clara Santos\n\nOn Tue wrote:\n> invite' });
+  addRow(env, 'Replies', { 'Message ID': 'z2', 'From Email': 'noreply@x.com', Subject: 'Automatic reply: hello', 'Reply Text': 'Out of office' });
+  addRow(env, 'Replies', { 'Message ID': 'z3', 'From Email': 'ana@example.com', Subject: 'Re: invite', 'Reply Text': 'ok' });
+  env.ctx.tick();
+  const reps = env.rows('Replies');
+  assert.deepEqual(reps.map((r) => r.Category), ['Confirmed', 'Ignored', 'Other']);
+  assert.equal(env.rows('Applicants').find((a) => a['First Name'] === 'Maria Clara').Stage, 'Confirmed');
+  assert.deepEqual(env.rows('Needs Attention').map((f) => f.Type), ['Reply needs reading']);
 });
