@@ -1,6 +1,7 @@
 import NavLinks from '@/components/NavLinks';
 import ChatBubble from '@/components/ChatBubble';
 import Freshness from '@/components/Freshness';
+import AutoRefresh from '@/components/AutoRefresh';
 import { requireUser } from '@/lib/auth';
 import { getData } from '@/lib/sheet';
 import { s } from '@/lib/pipeline';
@@ -34,6 +35,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       </aside>
       <main className="content"><Freshness at={fetchedAt} />{children}</main>
       <ChatBubble />
+      <AutoRefresh />
     </div>
   );
 }

@@ -57,6 +57,7 @@ function fmt(date, tz, pattern) {
     .replace('HH', p.hour).replace('mm', p.minute).replace('ss', p.second);
 }
 
+const ctxCalls = {};
 function load({ now, formRows = [], mode = 'TEST', settings = {} }) {
   const sheets = {};
   for (const [k, h] of Object.entries(HEADERS)) sheets[k] = makeSheet(k, [h]);
@@ -73,14 +74,15 @@ function load({ now, formRows = [], mode = 'TEST', settings = {} }) {
   const ctx = {
     Date: FakeDate, Intl, Math, JSON, String, Number, Object, Array, Error, parseInt, isNaN,
     SpreadsheetApp: {
-      getActiveSpreadsheet: () => ({ getSheetByName: (n) => sheets[n] || null, insertSheet: (n) => (sheets[n] = makeSheet(n, [])) }),
+      getActiveSpreadsheet: () => ({ getId: () => 'PIPE', getSheetByName: (n) => sheets[n] || null, insertSheet: (n) => (sheets[n] = makeSheet(n, [])) }),
       openById: () => ({ getSheetByName: () => source })
     },
     Utilities: { formatDate: fmt },
     LockService: { getScriptLock: () => ({ tryLock: () => true, waitLock: () => {}, releaseLock: () => {} }) },
     PropertiesService: { getScriptProperties: () => ({ getProperty: () => 's3cret' }) },
     ContentService: { createTextOutput: (s) => ({ s, setMimeType() { return this; } }), MimeType: { JSON: 'json' } },
-    ScriptApp: { getProjectTriggers: () => [], deleteTrigger() {}, newTrigger: () => ({ timeBased: () => ({ everyMinutes: () => ({ create() {} }) }) }) }
+    ScriptApp: { getProjectTriggers: () => [], deleteTrigger() {}, newTrigger: () => ({ timeBased: () => ({ everyMinutes: () => ({ create() {} }) }), forSpreadsheet: () => ({ onFormSubmit: () => ({ create() {} }), onChange: () => ({ create() {} }) }) }) },
+    UrlFetchApp: { fetch: (url, opts) => { (ctxCalls.fetches = ctxCalls.fetches || []).push(url); return {}; } }
   };
   vm.createContext(ctx);
   for (const f of ['Logic.gs', 'Code.gs']) vm.runInContext(fs.readFileSync(path.join(__dirname, '../apps-script', f), 'utf8'), ctx, { filename: f });
@@ -93,4 +95,4 @@ function load({ now, formRows = [], mode = 'TEST', settings = {} }) {
   return { ctx, sheets, rows, setNow, api };
 }
 
-module.exports = { load, HEADERS };
+module.exports = { load, HEADERS, ctxCalls };
