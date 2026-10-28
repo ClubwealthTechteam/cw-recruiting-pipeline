@@ -286,3 +286,9 @@ html[data-sidebar="mini"] .sidebar-foot .link { font-size: 10px; }
 .table.candidates { border-collapse: separate; border-spacing: 0; }
 /* horizontal bar charts keep their normal text size on wide panels instead of stretching */
 .chart.hbars svg { max-width: 760px; }
+.toast { pointer-events: auto; display: flex; align-items: center; gap: 14px; }
+.toast-action { border: 1px solid rgba(255,255,255,.5); background: transparent; color: #fff; border-radius: 4px; padding: 2px 10px; font: inherit; font-weight: 600; cursor: pointer; }
+.toast-action:hover { background: rgba(255,255,255,.15); }
+.bulk-right { display: flex; align-items: center; gap: 10px; }
+.undo-btn { white-space: nowrap; }
+.filters .spacer { flex: 1; }

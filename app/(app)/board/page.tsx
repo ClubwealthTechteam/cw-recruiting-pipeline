@@ -3,6 +3,7 @@ import { getData } from '@/lib/sheet';
 import { BOARD_STAGES, s, fullName, ymd, formatDate, scoreSummary, upcomingWednesday, isTest } from '@/lib/pipeline';
 import DataError from '@/components/DataError';
 import Board, { type BoardCard } from '@/components/Board';
+import UndoButton from '@/components/UndoButton';
 
 type Q = { position?: string; session?: string; source?: string };
 
@@ -41,6 +42,8 @@ export default async function BoardPage({ searchParams }: { searchParams: Promis
         <select name="session" defaultValue={p.session || ''}><option value="">All sessions</option>{sessions.map((x) => <option key={x} value={x}>{formatDate(x)}{x === upcomingWednesday() ? ' (this week)' : ''}</option>)}</select>
         <button className="btn">Filter</button>
         <Link href="/board" className="btn ghost">Clear</Link>
+        <span className="spacer" />
+        <UndoButton />
       </form>
       <Board stages={BOARD_STAGES} cards={list} />
     </>
