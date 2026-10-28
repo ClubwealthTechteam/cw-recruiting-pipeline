@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { getData } from '@/lib/sheet';
-import { STAGES, s, fullName, ymd, formatDate } from '@/lib/pipeline';
+import { STAGES, s, fullName, ymd, formatDate, positionCounts } from '@/lib/pipeline';
 import CandidatesTable, { type CandidateRow } from '@/components/CandidatesTable';
 import DataError from '@/components/DataError';
 
@@ -20,14 +20,16 @@ export default async function Candidates({ searchParams }: { searchParams: Promi
   for (const st of STAGES) counts[st] = base.filter((a) => s(a.Stage) === st).length;
 
   const q = (p.q || '').trim().toLowerCase();
-  let rows = base.filter((a) =>
+  // Every filter except position, so the per-position counts show the split of what the other filters match.
+  const matchOthers = base.filter((a) =>
     (stage === 'All' || (stage === 'Active' ? !CLOSED.includes(s(a.Stage)) : s(a.Stage) === stage)) &&
     (!p.source || s(a.Source) === p.source) &&
     (!p.fit || (p.fit === 'Not screened' ? !s(a['Screen Tag']) : s(a['Screen Tag']) === p.fit)) &&
-    (!p.position || s(a.Position) === p.position) &&
     (!p.session || ymd(a['Interview Date']) === p.session) &&
     (!q || `${fullName(a)} ${s(a.Email)} ${s(a['Position (as typed)'])}`.toLowerCase().includes(q))
   );
+  const byPosition = positionCounts(matchOthers);
+  let rows = matchOthers.filter((a) => !p.position || s(a.Position) === p.position);
   rows = rows.sort((x, y) => s(y['Applied At (PT)']).localeCompare(s(x['Applied At (PT)'])));
   const page = Math.max(1, Number(p.page) || 1);
   const shown = rows.slice((page - 1) * PAGE, page * PAGE);
@@ -68,6 +70,17 @@ export default async function Candidates({ searchParams }: { searchParams: Promi
         <button className="btn">Filter</button>
         <Link href="/candidates" className="btn ghost">Clear</Link>
       </form>
+      <div className="result-count">
+        <p><strong>{rows.length}</strong> applicant{rows.length === 1 ? '' : 's'}{p.position ? <> for <strong>{p.position}</strong></> : ''} match these filters</p>
+        <div className="position-chips" aria-label="Applicants by position">
+          <Link href={link({ position: undefined })} className={!p.position ? 'chip active' : 'chip'}>All positions <span className="count">{matchOthers.length}</span></Link>
+          {byPosition.map((x) => (
+            <Link key={x.position} href={link({ position: x.position })} className={p.position === x.position ? 'chip active' : 'chip'}>
+              {x.position} <span className="count">{x.count}</span>
+            </Link>
+          ))}
+        </div>
+      </div>
       <CandidatesTable rows={tableRows} />
       {rows.length > PAGE && (
         <div className="pager">

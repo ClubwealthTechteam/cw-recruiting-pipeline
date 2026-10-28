@@ -166,3 +166,11 @@ input:focus, select:focus, textarea:focus { outline: 2px solid #b9cff3; border-c
 .invite-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 
 .version-bar { position: fixed; top: 0; left: 0; right: 0; z-index: 60; background: var(--navy); color: #fff; display: flex; justify-content: center; align-items: center; gap: 14px; padding: 8px 16px; font-size: 14px; box-shadow: 0 2px 6px rgba(0,0,0,.2); }
+
+.result-count { display: flex; flex-direction: column; gap: 8px; margin: 4px 0 12px; }
+.result-count p { margin: 0; color: var(--ink); }
+.position-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { border: 1px solid var(--line); background: var(--card); color: var(--ink); border-radius: 14px; padding: 3px 10px; font-size: 13px; }
+.chip:hover { border-color: var(--accent); text-decoration: none; }
+.chip.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+.chip .count { font-size: 11px; background: var(--grey-bg); color: var(--ink); border-radius: 8px; padding: 0 6px; margin-left: 3px; }

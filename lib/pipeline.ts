@@ -136,3 +136,16 @@ export function metrics(applicants: Row[], history: Row[], flags: Row[], now = n
 }
 
 export const pct = (r: number | null) => (r === null ? '—' : `${Math.round(r * 100)}%`);
+
+/** How many applicants applied for each position, most first. */
+export function positionCounts(rows: Row[]): { position: string; count: number }[] {
+  const m = new Map<string, number>();
+  for (const a of rows) {
+    const k = s(a.Position) || 'Other';
+    m.set(k, (m.get(k) || 0) + 1);
+  }
+  return [...m.entries()].map(([position, count]) => ({ position, count })).sort((x, y) => y.count - x.count || x.position.localeCompare(y.position));
+}
+
+/** Pacific date `days` before today, for "last N days" windows. */
+export const daysAgoPT = (days: number, now = new Date()) => addDays(todayPT(now), -days);
