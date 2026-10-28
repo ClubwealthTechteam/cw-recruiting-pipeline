@@ -4,7 +4,8 @@
  * One sign-in per run, normal pace, stops on any captcha or verification. Sends only the approved invite text
  * (no signature), once per conversation and session date. Never labels, archives, pins or hires.
  * Sends ONLY when the applicant said they are interested AND sent a summary, resume or cover message, and is
- * not on the do-not-invite list (queue item "blocked" is set by the caller after checking the sheets).
+ * not on the do-not-invite list: Apps Script refuses to queue anyone whose email is on the form sheet's Rejected tab,
+ * and a queue item with "blocked" set is skipped as well.
  *
  * Usage: node olj_send.js --queue queue.json --out result.json
  *   queue.json: [{ "emailId": "E-…", "key": "<conversation key>", "session": "YYYY-MM-DD" }]
