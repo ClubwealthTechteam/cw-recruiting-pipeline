@@ -279,3 +279,36 @@ test('live updates: a tick that changes something notifies the site; a quiet tic
   assert.match(ctxCalls.fetches[0], /\/api\/revalidate$/);
   env.ctx.setup(); // creates the three triggers without error
 });
+
+test('settings stored as dates by Sheets still work: reminders queue once, Zoom finalizes', () => {
+  const env = invitedEnv();
+  addRow(env, 'Replies', { 'Message ID': 'm1', 'From Email': 'maria@example.com', 'Reply Text': 'Maria Santos', Category: 'Confirmed' });
+  env.ctx.tick();
+  env.setNow(pdt('2026-10-28T06:00:00'));
+  env.ctx.tick();
+  // Sheets converts the stored text into a Date value
+  const st = env.sheets.Settings.data;
+  const row = st.find((r) => r[0] === 'REMINDERS_QUEUED_FOR');
+  row[1] = new Date('2026-10-28T00:00:00-07:00');
+  env.setNow(pdt('2026-10-28T06:05:00'));
+  env.ctx.tick();
+  assert.equal(env.rows('Outbox').filter((e) => e.Type === 'Reminder').length, 1);
+  env.setNow(pdt('2026-10-28T15:35:00'));
+  env.sheets.Settings.appendRow(['ZOOM_FINALIZE', new Date('2026-10-28T00:00:00-07:00'), '']);
+  env.ctx.tick();
+  assert.equal(env.rows('Applicants').find((a) => a['First Name'] === 'Ana').Stage, 'No Show');
+});
+
+test('OLJ applicants never get the reminder by email', () => {
+  const env = invitedEnv();
+  addRow(env, 'OLJ', { 'Conversation Key': 'k1', 'Job Post': 'ISA', 'Applicant Name': 'Lito Lapid', 'Email Found': 'lito@example.com', Summary: 's' });
+  env.ctx.tick();
+  const apps = env.sheets.Applicants;
+  const h = apps.data[0];
+  const r = apps.data.find((x) => x[0] === 'O-k1');
+  r[h.indexOf('Stage')] = 'Confirmed';
+  r[h.indexOf('Interview Date')] = '2026-10-28';
+  env.setNow(pdt('2026-10-28T06:00:00'));
+  env.ctx.tick();
+  assert.equal(env.rows('Outbox').filter((e) => e.Type === 'Reminder' && e['Applicant ID'] === 'O-k1').length, 0);
+});
