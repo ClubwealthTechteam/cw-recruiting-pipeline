@@ -11,7 +11,7 @@
 Recruiting pipeline: Wednesday Zoom attendance. Read-only on Zoom; write only to the pipeline sheet.
 
 1. Run in the background:
-   python3 -I routines/zoom_attendance.py --out "$TMPDIR/zoom.json" --start 13:45 --end 15:30 --interval 180
+   python3 -I routines/zoom_attendance.py --out "$TMPDIR/zoom.json" --start 13:40 --end 15:30 --interval 180
    It polls the Club Wealth Help Desk meeting until 3:30 PM PT. Wait for it with Monitor; do not poll it yourself.
    Never print the Zoom token. The script adds the Authorization header itself (approved by Miguel for Zoom only).
 2. When it finishes, read the JSON. Append each item in "rows" to the "Zoom Attendance" tab of spreadsheet
