@@ -8,7 +8,7 @@ import FitBadge from './FitBadge';
 export type CandidateRow = {
   id: string; name: string; email: string; stage: string; source: string; position: string;
   applied: string; interview: string; confirmed: string; minutes: string; invites: string; historical: boolean;
-  fit: string; fitTrack: string; fitSummary: string;
+  fit: string; fitTrack: string; fitSummary: string; hold?: string;
 };
 
 export default function CandidatesTable({ rows }: { rows: CandidateRow[] }) {
@@ -36,7 +36,7 @@ export default function CandidatesTable({ rows }: { rows: CandidateRow[] }) {
               onMouseLeave={() => setTip(null)}>
               <td className="check"><input type="checkbox" checked={sel.includes(r.id)} onChange={() => toggle(r.id)} aria-label={`Select ${r.name}`} /></td>
               <td><Link href={`/candidates/${encodeURIComponent(r.id)}`}>{r.name || '(no name)'}</Link><div className="muted small">{r.email}</div></td>
-              <td><FitBadge tag={r.fit} track={r.fitTrack} /></td>
+              <td><FitBadge tag={r.fit} track={r.fitTrack} hold={r.hold} /></td>
               <td><StageBadge stage={r.stage} />{r.historical && <span className="tag">Before system</span>}</td>
               <td>{r.position}</td><td>{r.source}</td><td>{r.applied}</td><td>{r.interview}</td><td>{r.confirmed}</td><td>{r.minutes}</td><td>{r.invites}</td>
             </tr>
