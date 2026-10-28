@@ -1,6 +1,6 @@
 # Routine: Recruiting – candidate screening
 
-**Schedule (proposed):** every 2 hours, 6 AM–8 PM PT · **Connectors:** Google Sheets, Google Drive · No scripts (connectors only).
+**Schedule:** `CRON_TZ=America/Los_Angeles 23 6-20/2 * * *` (every 2 hours, 6:23 AM–8:23 PM PT) · **Routine:** trig_011oftMuKspALRFGKg3zkzV7 · **Connectors:** Google Sheets · No scripts (connectors only). Writes only Applicants AP:AR (Screen Tag, Screen Summary, Screened At) for unrated rows; skips pre-system rows, test applicants and positions with no rule.
 
 Screening rules (approved by Miguel, 2026-10-28):
 | Track | Rule |
