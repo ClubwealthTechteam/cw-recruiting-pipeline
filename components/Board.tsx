@@ -1,8 +1,9 @@
 'use client';
 import Link from 'next/link';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { REASON_REQUIRED } from '@/lib/pipeline';
 import { useAction } from './useAction';
+import { InlineStage } from './InlineActions';
 
 export type BoardCard = { id: string; name: string; stage: string; position: string; source: string; fit: string; session: string; score: string; arrival: string; test?: boolean };
 const PER_COLUMN = 60;
@@ -14,6 +15,29 @@ export default function Board({ stages, cards }: { stages: string[]; cards: Boar
   const [over, setOver] = useState('');
   const [moved, setMoved] = useState<Record<string, string>>({}); // shows the move at once, before the sheet confirms
   const stageOf = (c: BoardCard) => moved[c.id] || c.stage;
+
+  // While a card is dragged near the left or right edge, scroll the board sideways (browsers don't do it for us).
+  const boardRef = useRef<HTMLDivElement>(null);
+  const speed = useRef(0);
+  useEffect(() => {
+    if (!dragging) { speed.current = 0; return; }
+    let frame = 0;
+    const tick = () => {
+      if (speed.current && boardRef.current) boardRef.current.scrollLeft += speed.current;
+      frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, [dragging]);
+  function edgeScroll(e: React.DragEvent) {
+    const el = boardRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    const EDGE = 120;
+    if (e.clientX > r.right - EDGE) speed.current = Math.ceil(((e.clientX - (r.right - EDGE)) / EDGE) * 22);
+    else if (e.clientX < r.left + EDGE) speed.current = -Math.ceil((((r.left + EDGE) - e.clientX) / EDGE) * 22);
+    else speed.current = 0;
+  }
 
   async function drop(stage: string) {
     const c = dragging;
@@ -30,7 +54,10 @@ export default function Board({ stages, cards }: { stages: string[]; cards: Boar
   }
 
   return (
-    <div className="board">
+    <div className="board-wrap">
+      {dragging && <div className="board-edge left" aria-hidden="true">‹</div>}
+      {dragging && <div className="board-edge right" aria-hidden="true">›</div>}
+    <div className="board" ref={boardRef} onDragOver={edgeScroll} onDrop={() => { speed.current = 0; }}>
       {stages.map((st) => {
         const col = cards.filter((c) => stageOf(c) === st);
         return (
@@ -42,6 +69,7 @@ export default function Board({ stages, cards }: { stages: string[]; cards: Boar
                 onDragStart={() => setDragging(c)} onDragEnd={() => { setDragging(null); setOver(''); }}>
                 <Link href={`/candidates/${encodeURIComponent(c.id)}`} className="card-name" draggable={false}>{c.name}</Link>
                 <div className="muted small">{c.position} · {c.source}{c.session ? ` · ${c.session}` : ''}</div>
+                <div className="card-move" onMouseDown={(e) => e.stopPropagation()}><InlineStage id={c.id} stage={stageOf(c)} /></div>
                 <div className="card-badges">
                   {c.test && <span className="badge grey">Test</span>}
                   {c.fit && <span className={`badge ${FIT_TONE[c.fit] || 'grey'}`}>{c.fit}</span>}
@@ -55,6 +83,7 @@ export default function Board({ stages, cards }: { stages: string[]; cards: Boar
           </section>
         );
       })}
+    </div>
     </div>
   );
 }

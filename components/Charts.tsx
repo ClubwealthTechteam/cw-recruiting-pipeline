@@ -123,7 +123,7 @@ export function HBars({ data, format, ariaLabel }: { data: { label: string; valu
   const show = (v: number) => (format === 'pct' ? `${Math.round(v * 100)}%` : String(v));
   if (!data.length) return <p className="empty">No data yet.</p>;
   return (
-    <div className="chart" onMouseLeave={() => setTip(null)}>
+    <div className="chart hbars" onMouseLeave={() => setTip(null)}>
       <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={ariaLabel}>
         {data.map((d, i) => {
           const w = Math.max(d.value > 0 ? 3 : 0, ((W - L - R) * d.value) / max);
@@ -135,7 +135,7 @@ export function HBars({ data, format, ariaLabel }: { data: { label: string; valu
               <text x={L - 12} y={yy + 16} textAnchor="end" className="axis-strong">{d.label}</text>
               <rect x={L} y={yy + 2} width={W - L - R} height={18} fill="#f0f3f8" rx={4} />
               <rect x={L} y={yy + 2} width={w} height={18} fill={SERIES[0]} rx={4} />
-              <text x={L + w + 8} y={yy + 16} className="val">{show(d.value)}{d.note ? <tspan className="axis"> {d.note}</tspan> : null}</text>
+              <text x={L + w + 8} y={yy + 16} className="val">{show(d.value)}{d.note ? <tspan className="axis"> · {d.note}</tspan> : null}</text>
             </g>
           );
         })}
