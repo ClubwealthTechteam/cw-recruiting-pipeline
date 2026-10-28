@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { getData, getDataWithHistory } from '@/lib/sheet';
-import { STAGES, s, fullName, ymd, formatDate, positionCounts } from '@/lib/pipeline';
+import { STAGES, s, fullName, ymd, formatDate, formatDateTime, positionCounts } from '@/lib/pipeline';
 import CandidatesTable, { type CandidateRow } from '@/components/CandidatesTable';
 import DataError from '@/components/DataError';
 
@@ -38,7 +38,7 @@ export default async function Candidates({ searchParams }: { searchParams: Promi
 
   const tableRows: CandidateRow[] = shown.map((a) => ({
     id: s(a['Applicant ID']), name: fullName(a), email: s(a.Email), stage: s(a.Stage), source: s(a.Source),
-    position: s(a.Position), applied: formatDate(ymd(a['Applied At (PT)'])), interview: formatDate(ymd(a['Interview Date'])),
+    position: s(a.Position), applied: formatDateTime(s(a['Applied At (PT)'])), interview: formatDate(ymd(a['Interview Date'])),
     confirmed: a['Confirmed At'] ? formatDate(ymd(a['Confirmed At'])) : '', minutes: s(a['Zoom Minutes']),
     invites: s(a['Invite Count']), historical: s(a.Historical) === 'Y',
     fit: s(a['Screen Tag']), fitTrack: s(a['Screen Track']), fitSummary: s(a['Screen Summary']), hold: s(a['Invite Hold'])

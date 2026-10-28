@@ -26,7 +26,7 @@ export default function CandidatesTable({ rows }: { rows: CandidateRow[] }) {
         <thead>
           <tr>
             <th className="check"><input type="checkbox" checked={all} onChange={() => setSel(all ? [] : rows.map((r) => r.id))} aria-label="Select all" /></th>
-            <th>Name</th><th>Fit</th><th>Stage</th><th>Position</th><th>Source</th><th>Applied</th><th>Session</th><th>Confirmed</th><th>Zoom min</th><th>Invites</th>
+            <th>Name</th><th>Fit</th><th>Stage</th><th>Position</th><th>Source</th><th title="Newest first">Applied (PT) ↓</th><th>Session</th><th>Confirmed</th><th>Zoom min</th><th>Invites</th>
           </tr>
         </thead>
         <tbody>
