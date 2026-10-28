@@ -247,7 +247,7 @@ tr:hover .stage-cell .row-actions, .stage-cell:focus-within .row-actions { displ
 .msg-head { font-size: 12px; font-weight: 600; margin-bottom: 2px; }
 
 /* board */
-.board { display: grid; grid-auto-flow: column; grid-auto-columns: 210px; gap: 12px; overflow-x: auto; padding-bottom: 12px; align-items: start; }
+.board { display: grid; grid-auto-flow: column; grid-auto-columns: 200px; gap: 12px; overflow-x: auto; padding-bottom: 12px; align-items: start; }
 .board-col { background: #eaeef4; border-radius: 6px; padding: 10px; min-height: 160px; max-height: calc(100vh - 220px); overflow-y: auto; }
 .board-col.over { outline: 2px dashed var(--accent); background: var(--blue-bg); }
 .board-col h2 { font-size: 13px; display: flex; justify-content: space-between; }

@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { REASON_REQUIRED } from '@/lib/pipeline';
 import { useAction } from './useAction';
 
-export type BoardCard = { id: string; name: string; stage: string; position: string; source: string; fit: string; session: string; score: string; arrival: string };
+export type BoardCard = { id: string; name: string; stage: string; position: string; source: string; fit: string; session: string; score: string; arrival: string; test?: boolean };
 const PER_COLUMN = 60;
 const FIT_TONE: Record<string, string> = { Great: 'green', Good: 'blue', 'Not Fit': 'grey' };
 
@@ -36,13 +36,14 @@ export default function Board({ stages, cards }: { stages: string[]; cards: Boar
         return (
           <section key={st} className={`board-col ${over === st ? 'over' : ''}`}
             onDragOver={(e) => { e.preventDefault(); setOver(st); }} onDragLeave={() => setOver('')} onDrop={(e) => { e.preventDefault(); drop(st); }}>
-            <h2>{st} <span className="count">{col.length}</span></h2>
+            <h2>{st} <span className="count">{col.filter((c) => !c.test).length}</span></h2>
             {col.slice(0, PER_COLUMN).map((c) => (
               <article key={c.id} className={`card ${busy && dragging?.id === c.id ? 'busy' : ''}`} draggable
                 onDragStart={() => setDragging(c)} onDragEnd={() => { setDragging(null); setOver(''); }}>
                 <Link href={`/candidates/${encodeURIComponent(c.id)}`} className="card-name" draggable={false}>{c.name}</Link>
                 <div className="muted small">{c.position} · {c.source}{c.session ? ` · ${c.session}` : ''}</div>
                 <div className="card-badges">
+                  {c.test && <span className="badge grey">Test</span>}
                   {c.fit && <span className={`badge ${FIT_TONE[c.fit] || 'grey'}`}>{c.fit}</span>}
                   {c.score && <span className="badge blue" title="Scorecard average">{c.score}/5</span>}
                   {c.arrival && <span className="muted small">{c.arrival.replace(/ \(on time\)/, '')}</span>}

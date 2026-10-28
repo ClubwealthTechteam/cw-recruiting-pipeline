@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { getData } from '@/lib/sheet';
-import { metrics, pct, formatDate, STAGES, s as str, ymd, positionCounts, daysAgoPT, upcomingWednesday } from '@/lib/pipeline';
+import { metrics, pct, formatDate, STAGES, s as str, ymd, positionCounts, daysAgoPT, upcomingWednesday, isTest } from '@/lib/pipeline';
 import { WeeklyBars, RateTrend, HBars } from '@/components/Charts';
 import DataError from '@/components/DataError';
 
@@ -8,7 +8,7 @@ export default async function Dashboard() {
   let d;
   try { d = await getData(); } catch (e) { return <DataError error={e} />; }
   const m = metrics(d.applicants, d.history, d.flags);
-  const active = d.applicants.filter((a) => str(a.Historical) !== 'Y');
+  const active = d.applicants.filter((a) => str(a.Historical) !== 'Y' && !isTest(a));
   const maxSession = Math.max(1, ...m.sessions.map((x) => x.invited));
   const since = daysAgoPT(30);
   const recent = active.filter((a) => ymd(a['Applied At (PT)']) >= since);

@@ -17,6 +17,7 @@ var STAGES = [
   'No Show',
   'Passed',
   'Hired',
+  'Onboarded',
   'Not Fit'
 ];
 

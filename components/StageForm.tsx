@@ -10,7 +10,8 @@ const PRESETS: Record<string, string[]> = {
   'Open for re-invite': ['Schedule conflict', 'Asked to reschedule', 'Emergency', 'Technical problem on the day'],
   'No Show': ['Did not join Zoom'],
   Passed: ['Passed pre-interview'],
-  Hired: ['Offer accepted']
+  Hired: ['Offer accepted'],
+  Onboarded: ['Started onboarding']
 };
 
 /** Moves one or more applicants to a stage. A reason is required for Not Fit, Did Not Complete and re-invites. */

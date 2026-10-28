@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { getData } from '@/lib/sheet';
-import { s, fullName, ymd, formatDate, upcomingWednesday } from '@/lib/pipeline';
+import { s, fullName, ymd, formatDate, upcomingWednesday, isTest } from '@/lib/pipeline';
 import StageBadge from '@/components/StageBadge';
 import DataError from '@/components/DataError';
 
@@ -12,8 +12,9 @@ export default async function Session({ searchParams }: { searchParams: Promise<
   const roster = d.applicants
     .filter((a) => ymd(a['Interview Date']) === date && s(a.Stage) !== 'Applied')
     .sort((x, y) => fullName(x).localeCompare(fullName(y)));
-  const confirmed = roster.filter((a) => a['Confirmed At'] || s(a.Stage) === 'Confirmed').length;
-  const reminded = roster.filter((a) => a['Reminder Sent At']).length;
+  const counted = roster.filter((a) => !isTest(a)); // test applicants show in the list but not in the numbers
+  const confirmed = counted.filter((a) => a['Confirmed At'] || s(a.Stage) === 'Confirmed').length;
+  const reminded = counted.filter((a) => a['Reminder Sent At']).length;
   const prev = new Date(`${date}T12:00:00Z`); prev.setUTCDate(prev.getUTCDate() - 7);
   const next = new Date(`${date}T12:00:00Z`); next.setUTCDate(next.getUTCDate() + 7);
   const unmatchedZoom = d.zoom.filter((z) => ymd(z['Interview Date']) === date && !z['Matched Applicant ID']);
@@ -27,7 +28,7 @@ export default async function Session({ searchParams }: { searchParams: Promise<
         </p>
       </header>
       <section className="tiles">
-        <div className="tile"><div className="tile-label">Invited</div><div className="tile-value">{roster.length}</div></div>
+        <div className="tile"><div className="tile-label">Invited</div><div className="tile-value">{counted.length}</div></div>
         <div className="tile"><div className="tile-label">Confirmed</div><div className="tile-value">{confirmed}</div></div>
         <div className="tile"><div className="tile-label">Reminder sent</div><div className="tile-value">{reminded}</div><div className="tile-note">Wednesday 6:00 AM PT</div></div>
       </section>
@@ -38,7 +39,7 @@ export default async function Session({ searchParams }: { searchParams: Promise<
             {roster.map((a) => (
               <tr key={s(a['Applicant ID'])}>
                 <td><Link href={`/candidates/${encodeURIComponent(s(a['Applicant ID']))}`}>{fullName(a)}</Link></td>
-                <td>{s(a.Position)}</td><td><StageBadge stage={s(a.Stage)} /></td>
+                <td>{s(a.Position)}</td><td><StageBadge stage={s(a.Stage)} />{isTest(a) && <span className="tag">Test · not counted</span>}</td>
                 <td>{a['Confirmed At'] ? 'Yes' : 'No'}</td><td>{a['Reminder Sent At'] ? 'Sent' : '—'}</td><td><Arrival a={a} /></td><td>{s(a['Zoom Minutes']) || '—'}</td>
               </tr>
             ))}

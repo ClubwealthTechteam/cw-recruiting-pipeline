@@ -2,15 +2,24 @@ import type { Row } from './sheet';
 
 export const STAGES = [
   'Applied', 'Invited', 'Confirmed', 'Open for re-invite', 'Interview Completed',
-  'Did Not Complete', 'No Show', 'Passed', 'Hired', 'Not Fit'
+  'Did Not Complete', 'No Show', 'Passed', 'Hired', 'Onboarded', 'Not Fit'
 ] as const;
+
+/** Board column order: the main flow first, then the side outcomes. */
+export const BOARD_STAGES = [
+  'Applied', 'Invited', 'Confirmed', 'Interview Completed', 'Passed', 'Hired', 'Onboarded',
+  'Open for re-invite', 'Did Not Complete', 'No Show', 'Not Fit'
+];
+
+/** Hired or further along (Onboarded counts as hired everywhere). */
+export const HIRED = ['Hired', 'Onboarded'];
 export type Stage = (typeof STAGES)[number];
 
 /** Grey = not engaged yet, blue = in progress, amber = needs action, red = missed, green = success. */
 export const STAGE_TONE: Record<string, string> = {
   Applied: 'grey', Invited: 'blue', Confirmed: 'blue', 'Open for re-invite': 'amber',
   'Interview Completed': 'amber', 'Did Not Complete': 'red', 'No Show': 'red',
-  Passed: 'green', Hired: 'green', 'Not Fit': 'grey'
+  Passed: 'green', Hired: 'green', Onboarded: 'green', 'Not Fit': 'grey'
 };
 
 /** Screening tags (Claude): Great = clearly meets the rule (1+ year or highly relevant), Good = meets 6 months, Not Fit = does not or not enough info. */
@@ -19,6 +28,8 @@ export const FIT_TONE: Record<string, string> = { Great: 'green', Good: 'blue', 
 export const REASON_REQUIRED = ['Not Fit', 'Did Not Complete', 'Open for re-invite'];
 
 export const s = (v: unknown) => (v === undefined || v === null ? '' : String(v));
+/** Test applicants (Source "Test", e.g. T-MIGUEL) show in the CRM but are left out of every count, rate and report. */
+export const isTest = (a: Row) => s(a.Source) === 'Test';
 export const fullName = (a: Row) => `${s(a['First Name'])} ${s(a['Last Name'])}`.trim();
 export const ymd = (v: unknown) => s(v).slice(0, 10);
 
@@ -95,7 +106,8 @@ export type SessionStats = { date: string; invited: number; confirmed: number; a
  * Funnel numbers. Historical applicants (invited by hand before the system, no Zoom data) are left out of
  * every rate; they still count in "applicants per week".
  */
-export function metrics(applicants: Row[], history: Row[], flags: Row[], now = new Date()) {
+export function metrics(allApplicants: Row[], history: Row[], flags: Row[], now = new Date()) {
+  const applicants = allApplicants.filter((a) => !isTest(a));
   const reached = new Map<string, Set<string>>();
   for (const h of history) {
     const id = s(h['Applicant ID']);
@@ -133,11 +145,11 @@ export function metrics(applicants: Row[], history: Row[], flags: Row[], now = n
   const sum = (k: keyof SessionStats) => finished.reduce((t, x) => t + (x[k] as number), 0);
 
   // Pass rate by position, among those who completed an interview and have a decision
-  const decided = tracked.filter((a) => did(a, 'Interview Completed') && ['Passed', 'Hired', 'Not Fit'].includes(s(a.Stage)));
+  const decided = tracked.filter((a) => did(a, 'Interview Completed') && ['Passed', 'Hired', 'Onboarded', 'Not Fit'].includes(s(a.Stage)));
   const positions = [...new Set(decided.map((a) => s(a.Position) || 'Other'))].sort();
   const byPosition = positions.map((p) => {
     const rows = decided.filter((a) => (s(a.Position) || 'Other') === p);
-    const passed = rows.filter((a) => ['Passed', 'Hired'].includes(s(a.Stage))).length;
+    const passed = rows.filter((a) => ['Passed', 'Hired', 'Onboarded'].includes(s(a.Stage))).length;
     return { position: p, decided: rows.length, passed, rate: rate(passed, rows.length) };
   });
 

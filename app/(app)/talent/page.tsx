@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { getData } from '@/lib/sheet';
-import { s, fullName, ymd, formatDate, positionCounts, splitTags } from '@/lib/pipeline';
+import { s, fullName, ymd, formatDate, positionCounts, splitTags, isTest } from '@/lib/pipeline';
 import DataError from '@/components/DataError';
 import FitBadge from '@/components/FitBadge';
 import StageBadge from '@/components/StageBadge';
@@ -8,7 +8,7 @@ import InviteButtons from '@/components/InviteButtons';
 
 type Q = { position?: string; q?: string };
 // Not in the pool while their process is still running or decided.
-const IN_PROGRESS = ['Invited', 'Confirmed', 'Interview Completed', 'Passed', 'Hired'];
+const IN_PROGRESS = ['Invited', 'Confirmed', 'Interview Completed', 'Passed', 'Hired', 'Onboarded'];
 const POOL_TAG = 'talent pool';
 
 /**
@@ -20,7 +20,7 @@ export default async function Talent({ searchParams }: { searchParams: Promise<Q
   let d;
   try { d = await getData(); } catch (e) { return <DataError error={e} />; }
   const tagged = (a: Record<string, unknown>) => splitTags(a.Tags).some((t) => t.toLowerCase() === POOL_TAG);
-  const pool = d.applicants.filter((a) => s(a.Historical) !== 'Y' && (tagged(a) ||
+  const pool = d.applicants.filter((a) => s(a.Historical) !== 'Y' && !isTest(a) && (tagged(a) ||
     (['Great', 'Good'].includes(s(a['Screen Tag'])) && !IN_PROGRESS.includes(s(a.Stage)) && s(a.Stage) !== 'Not Fit')));
   const q = (p.q || '').trim().toLowerCase();
   const matchQ = pool.filter((a) => !q || `${fullName(a)} ${s(a.Email)} ${s(a['Position (as typed)'])}`.toLowerCase().includes(q));

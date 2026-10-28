@@ -561,3 +561,31 @@ test('OLJ inbox: saved OLJ messages show as a thread; an answer from the CRM is 
   // never emailed: the email sender ignores OLJ messages
   assert.equal(env.ctx.EMAIL_TYPES.includes('OLJ Message'), false);
 });
+
+test('test applicants are never counted: no Slack alert, not in session results', () => {
+  const { ctxCalls } = require('./harness');
+  const env = invitedEnv();
+  env.ctx.setup();
+  env.ctx.tick(); // starts the Slack clock
+  const A = env.sheets.Applicants.data, h = A[0];
+  A[1][h.indexOf('Source')] = 'Test';
+  A[1][h.indexOf('Screen Tag')] = 'Great';
+  A[1][h.indexOf('Screened At')] = '2026-10-27 12:09:00';
+  env.setNow(pdt('2026-10-27T12:10:00'));
+  ctxCalls.posts = [];
+  env.ctx.tick();
+  assert.equal(ctxCalls.posts.filter((p) => /good applicant/.test(p.body || '')).length, 0);
+  // session results: the test applicant is not in the counts
+  env.setNow(pdt('2026-10-28T15:35:00'));
+  env.sheets.Settings.appendRow(['ZOOM_FINALIZE', '2026-10-28', '']);
+  ctxCalls.posts = [];
+  env.ctx.tick();
+  const msg = ctxCalls.posts.map((p) => p.body || '').find((b) => /Session results/.test(b));
+  assert.match(JSON.parse(msg).text, /No show: 2/); // 3 invitees, one of them a test applicant
+});
+
+test('Onboarded is a stage the site can move people to', () => {
+  const env = invitedEnv();
+  assert.equal(env.api({ action: 'setStage', by: 'Am', ids: ['F-2'], stage: 'Onboarded' }).ok, true);
+  assert.equal(env.rows('Applicants')[0].Stage, 'Onboarded');
+});

@@ -10,7 +10,7 @@ export type CandidateRow = {
   id: string; name: string; email: string; stage: string; source: string; position: string;
   applied: string; interview: string; confirmed: string; minutes: string; invites: string; historical: boolean;
   fit: string; fitTrack: string; fitSummary: string; hold?: string;
-  score?: string; scoreSuggestion?: string; tags?: string[];
+  score?: string; scoreSuggestion?: string; tags?: string[]; test?: boolean;
 };
 
 export default function CandidatesTable({ rows }: { rows: CandidateRow[] }) {
@@ -44,7 +44,7 @@ export default function CandidatesTable({ rows }: { rows: CandidateRow[] }) {
               <td><FitBadge tag={r.fit} track={r.fitTrack} hold={r.hold} /></td>
               <td>{r.score ? <span className={`badge ${r.scoreSuggestion === 'Passed' ? 'green' : 'red'}`} title={`Suggested: ${r.scoreSuggestion}`}>{r.score}</span> : <span className="muted">0</span>}</td>
               <td className="stage-cell" onMouseMove={(e) => e.stopPropagation()}>
-                <StageBadge stage={r.stage} />{r.historical && <span className="tag">Before system</span>}
+                <StageBadge stage={r.stage} />{r.historical && <span className="tag">Before system</span>}{r.test && <span className="tag">Test · not counted</span>}
                 <div className="row-actions"><InlineStage id={r.id} stage={r.stage} /> <QuickNote id={r.id} /></div>
               </td>
               <td>{r.position}</td><td>{r.source}</td><td>{r.applied}</td><td>{r.interview}</td><td>{r.confirmed}</td><td>{r.minutes}</td><td>{r.invites}</td>
