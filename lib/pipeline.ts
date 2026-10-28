@@ -217,3 +217,24 @@ export function scoreSummary(cards: Row[]): { average: number; count: number; su
 
 /** Comma-separated tags as a list. */
 export const splitTags = (v: unknown) => s(v).split(',').map((t) => t.trim()).filter(Boolean);
+
+/**
+ * Live Zoom status during today's session, from the Zoom Attendance rows the live sync rewrites every few minutes.
+ * Someone is "in Zoom now" when their Last Leave equals the latest Last Leave of any row today (the snapshot time);
+ * otherwise they left at their Last Leave. Rows get a Result at the 3:30 wrap-up, and then the status disappears.
+ */
+export type ZoomLive = { inNow: boolean; lastLeave: string; minutes: string };
+export function zoomLive(zoom: Row[], now = new Date()): Map<string, ZoomLive> {
+  const today = todayPT(now);
+  const hm = (v: unknown) => s(v).replace(/^(\d):/, '0$1:');
+  const rows = zoom.filter((z) => ymd(z['Interview Date']) === today && s(z['Matched Applicant ID']) && !s(z.Result));
+  const latest = rows.reduce((m, z) => (hm(z['Last Leave']) > m ? hm(z['Last Leave']) : m), '');
+  const out = new Map<string, ZoomLive>();
+  for (const z of rows) {
+    const id = s(z['Matched Applicant ID']);
+    const cur = { inNow: hm(z['Last Leave']) === latest, lastLeave: hm(z['Last Leave']), minutes: s(z['Total Minutes']) };
+    const prev = out.get(id);
+    if (!prev || cur.inNow || (!prev.inNow && cur.lastLeave > prev.lastLeave)) out.set(id, cur);
+  }
+  return out;
+}

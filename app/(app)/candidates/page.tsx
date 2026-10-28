@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { Suspense } from 'react';
 import { getData, getDataWithHistory } from '@/lib/sheet';
-import { STAGES, s, fullName, ymd, formatDate, formatDateTime, positionCounts, weekOf, scoreSummary, splitTags, isTest, SOURCES, SOURCE_LABEL } from '@/lib/pipeline';
+import { STAGES, s, fullName, ymd, formatDate, formatDateTime, positionCounts, weekOf, scoreSummary, splitTags, isTest, SOURCES, SOURCE_LABEL, zoomLive } from '@/lib/pipeline';
 import SavedViews from '@/components/SavedViews';
 import CandidatesTable, { type CandidateRow } from '@/components/CandidatesTable';
 import DataError from '@/components/DataError';
@@ -50,13 +50,15 @@ export default async function Candidates({ searchParams }: { searchParams: Promi
   const positions = [...new Set(d.applicants.map((a) => s(a.Position)).filter(Boolean))].sort();
   const sessions = [...new Set(base.map((a) => ymd(a['Interview Date'])).filter(Boolean))].sort().reverse().slice(0, 12);
 
+  const live = zoomLive(d.zoom);
   const tableRows: CandidateRow[] = shown.map((a) => ({
     id: s(a['Applicant ID']), name: fullName(a), email: s(a.Email), stage: s(a.Stage), source: s(a.Source),
     position: s(a.Position), applied: formatDateTime(s(a['Applied At (PT)'])), interview: formatDate(ymd(a['Interview Date'])),
     confirmed: a['Confirmed At'] ? formatDate(ymd(a['Confirmed At'])) : '', minutes: s(a['Zoom Minutes']),
     invites: s(a['Invite Count']), historical: s(a.Historical) === 'Y', test: isTest(a),
     fit: s(a['Screen Tag']), fitTrack: s(a['Screen Track']), fitSummary: s(a['Screen Summary']), hold: s(a['Invite Hold']),
-    score: score(a).count ? score(a).average.toFixed(1) : '', scoreSuggestion: score(a).suggestion, tags: splitTags(a.Tags)
+    score: score(a).count ? score(a).average.toFixed(1) : '', scoreSuggestion: score(a).suggestion, tags: splitTags(a.Tags),
+    zoom: live.get(s(a['Applicant ID']))
   }));
 
   const link = (over: Partial<Q>) => {

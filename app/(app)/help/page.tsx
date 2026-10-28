@@ -7,7 +7,8 @@ const SECTIONS: Section[] = [
   {
     title: 'New applicants and screening',
     items: [
-      'New Google Form and OnlineJobs.ph applicants appear in the CRM by themselves.',
+      'New Google Form and OnlineJobs.ph applicants appear in the CRM by themselves. Applications emailed to CareersCW are read, summarized and added as Source Email once email intake is on (Settings EMAIL_INTAKE = ON).',
+      'Referrals (someone a team member referred, with no form, OLJ or email application) are added by hand as Source Referral with a Referral tag.',
       'Positions are standardized ("Appointment Setter" counts as ISA).',
       'Before any invite, each applicant is checked for an open position (Collections, ISA, TC/LC), the Rejected tab, and duplicates (same email or same name). Anyone held back shows why under Invite on their profile.',
       'Fit rating (Great, Good or Not Fit, with a one-line reason) is given every 2 hours from 6 AM to 8 PM PT. "Not rated yet" means the next run has not reached them, or the position has no screening rule.',
@@ -36,6 +37,7 @@ const SECTIONS: Section[] = [
     href: '/session',
     items: [
       'From 1:40 PM, arrival (minutes early or late) and Zoom minutes update live on This Week\'s Session, about every 5 minutes.',
+      'While the session runs, a green "In Zoom now" or grey "Left Zoom 2:13 PM" badge shows next to the stage on Candidates, the Board and the Session page. It disappears after the 3:30 wrap-up.',
       'The invite asks applicants to join 10 minutes early; green = on time, amber = under 10 minutes early, red = late.',
       'If someone renames themselves in Zoom, their time stops counting at the rename.',
       'At 3:30 PM the stages are set: Interview Completed (stayed 1h+ in Zoom), Did Not Complete (under 1 hour), No Show (confirmed but did not join) or No Confirmation (invited, never confirmed, did not join).'
@@ -44,7 +46,7 @@ const SECTIONS: Section[] = [
   {
     title: 'Dashboard',
     href: '/',
-    items: ['Confirmation, show-up and completion rates, applicants per week, the pipeline by stage and by position. Click any bar to see the people.']
+    items: ['Confirmation, show-up and completion rates, applicants per week (Form, OLJ, Email, Referral), the pipeline by stage and by position. Click any bar to see the people.', 'Filter by session to see one Wednesday on its own (rates, pipeline and positions for that session\'s invitees), or change the applied period: last 30, 60 or 90 days, or all time.']
   },
   {
     title: 'Candidates',

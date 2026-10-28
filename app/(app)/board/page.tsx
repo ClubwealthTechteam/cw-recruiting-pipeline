@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { getData } from '@/lib/sheet';
-import { BOARD_STAGES, s, fullName, ymd, formatDate, scoreSummary, upcomingWednesday, isTest, SOURCES, SOURCE_LABEL } from '@/lib/pipeline';
+import { BOARD_STAGES, s, fullName, ymd, formatDate, scoreSummary, upcomingWednesday, isTest, SOURCES, SOURCE_LABEL, zoomLive } from '@/lib/pipeline';
 import DataError from '@/components/DataError';
 import Board, { type BoardCard } from '@/components/Board';
 import UndoButton from '@/components/UndoButton';
@@ -18,6 +18,7 @@ export default async function BoardPage({ searchParams }: { searchParams: Promis
   const rows = current.filter((a) =>
     (!p.position || s(a.Position) === p.position) && (!p.source || s(a.Source) === p.source) &&
     (!p.session || ymd(a['Interview Date']) === p.session));
+  const live = zoomLive(d.zoom);
   const list: BoardCard[] = rows
     .sort((x, y) => s(y['Stage Updated At']).localeCompare(s(x['Stage Updated At'])))
     .map((a) => {
@@ -25,7 +26,7 @@ export default async function BoardPage({ searchParams }: { searchParams: Promis
       return {
         id: s(a['Applicant ID']), name: fullName(a) || '(no name)', stage: s(a.Stage), position: s(a.Position), source: s(a.Source),
         fit: s(a['Screen Tag']), session: a['Interview Date'] ? formatDate(ymd(a['Interview Date'])).replace(/, \d{4}$/, '') : '',
-        score: sc.count ? sc.average.toFixed(1) : '', arrival: s(a.Arrival), test: isTest(a)
+        score: sc.count ? sc.average.toFixed(1) : '', arrival: s(a.Arrival), test: isTest(a), zoom: live.get(s(a['Applicant ID']))
       };
     });
   const positions = [...new Set(current.map((a) => s(a.Position)).filter(Boolean))].sort();
