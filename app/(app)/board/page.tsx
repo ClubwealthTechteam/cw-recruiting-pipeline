@@ -38,7 +38,7 @@ export default async function BoardPage({ searchParams }: { searchParams: Promis
       </header>
       <form className="filters" action="/board">
         <select name="position" defaultValue={p.position || ''}><option value="">All positions</option>{positions.map((x) => <option key={x}>{x}</option>)}</select>
-        <select name="source" defaultValue={p.source || ''}><option value="">All sources</option><option>Form</option><option>OLJ</option></select>
+        <select name="source" defaultValue={p.source || ''}><option value="">All sources</option><option>Form</option><option>OLJ</option><option>Email</option></select>
         <select name="session" defaultValue={p.session || ''}><option value="">All sessions</option>{sessions.map((x) => <option key={x} value={x}>{formatDate(x)}{x === upcomingWednesday() ? ' (this week)' : ''}</option>)}</select>
         <button className="btn">Filter</button>
         <Link href="/board" className="btn ghost">Clear</Link>

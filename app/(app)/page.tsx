@@ -37,7 +37,7 @@ export default async function Dashboard() {
         <section className="panel">
           <h2>Applicants per week</h2>
           <p className="sub">Week starting Monday.</p>
-          <WeeklyBars data={m.perWeek.map((w) => ({ label: short(w.week), form: w.form, olj: w.olj, href: `/candidates?stage=All&week=${w.week}` }))} />
+          <WeeklyBars data={m.perWeek.map((w) => ({ label: short(w.week), form: w.form, olj: w.olj, email: w.email, href: `/candidates?stage=All&week=${w.week}` }))} />
         </section>
         <section className="panel">
           <h2>Session rates</h2>

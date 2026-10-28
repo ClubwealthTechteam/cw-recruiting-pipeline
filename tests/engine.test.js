@@ -612,3 +612,33 @@ test('undo: a stage move goes back, its queued re-invite is cancelled; a note is
   assert.equal(env.api({ action: 'undoNote', by: 'Am', id: 'F-2', line: n.line }).data.removed, true);
   assert.match(env.rows('Applicants')[0].Notes, /first$/);
 });
+
+test('email applications: held until EMAIL_INTAKE is ON, then screened and invited; duplicates link; referrals tagged', () => {
+  const env = invitedEnv({ EMAIL_SENDING: 'ON' });
+  env.ctx.setup();
+  addRow(env, 'Email Applications', { 'Message ID': 'm1', 'Received At': '2026-10-27T16:25:35.000Z', 'From Email': 'Kai@Example.com', 'Applicant Name': 'Kai Dela Paz', Subject: 'Transaction Coordinator - Application (Referred: J. Cruz)', 'Position (as typed)': 'Transaction Coordinator', Summary: '3 years as a transaction coordinator for US realtors.', Referral: 'J. Cruz' });
+  addRow(env, 'Email Applications', { 'Message ID': 'm2', 'Received At': '2026-10-27T17:00:00.000Z', 'From Email': 'kai@example.com', 'Applicant Name': 'Kai Dela Paz', Subject: 'Fwd: Transaction Coordinator', 'Position (as typed)': 'Transaction Coordinator', Summary: 'same' });
+  addRow(env, 'Email Applications', { 'Message ID': 'm3', 'Received At': '2026-10-27T18:00:00.000Z', 'From Email': 'maria@example.com', 'Applicant Name': 'Maria Clara Santos', Subject: 'Application', 'Position (as typed)': 'Collections VA', Summary: 'x' });
+  env.ctx.tick();
+  let kai = env.rows('Applicants').find((a) => a.Email === 'kai@example.com');
+  assert.equal(kai['Applicant ID'], 'E-2');
+  assert.equal(kai.Source, 'Email');
+  assert.equal(kai['Applied At (PT)'], '2026-10-27 09:25:35');
+  assert.deepEqual([kai['First Name'], kai['Last Name']], ['Kai Dela', 'Paz']);
+  assert.equal(kai.Tags, 'Referral');
+  assert.match(kai['Invite Hold'], /Email intake invites are off/);
+  const ea = env.rows('Email Applications');
+  assert.deepEqual(ea.map((r) => r['Applicant ID']), ['E-2', 'E-2', 'F-2']); // the second email and the form applicant are linked, not duplicated
+  assert.equal(env.rows('Applicants').filter((a) => a.Email === 'kai@example.com').length, 1);
+  assert.equal(env.rows('Outbox').filter((e) => e['Applicant ID'] === 'E-2').length, 0);
+  // Miguel approves the list
+  env.sheets.Settings.appendRow(['EMAIL_INTAKE', 'ON', '']);
+  env.ctx.tick();
+  kai = env.rows('Applicants').find((a) => a.Email === 'kai@example.com');
+  assert.equal(kai['Invite Hold'], '');
+  const out = env.rows('Outbox').filter((e) => e['Applicant ID'] === 'E-2');
+  assert.equal(out.length, 1);
+  assert.equal(out[0].Type, 'Invite');
+  // the application shows in their inbox thread
+  assert.equal(env.api({ action: 'applicant', id: 'E-2' }).data.thread.filter((t) => t.type === 'Application').length, 2);
+});

@@ -4,7 +4,7 @@ import { useAction } from './useAction';
 import type { ThreadItem } from '@/lib/sheet';
 
 const LABEL: Record<string, string> = {
-  Invite: 'Pre-interview invite', 'Re-invite': 'Re-invite', Reminder: 'Wednesday reminder', Confirmation: 'Confirmation', Reply: 'Reply'
+  Application: 'Application', Invite: 'Pre-interview invite', 'Re-invite': 'Re-invite', Reminder: 'Wednesday reminder', Confirmation: 'Confirmation', Reply: 'Reply'
 };
 
 /**
