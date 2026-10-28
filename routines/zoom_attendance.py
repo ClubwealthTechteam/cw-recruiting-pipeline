@@ -105,6 +105,7 @@ def main():
     lo, hi, start = at(a.start), at(a.end), at(a.interview)
     seen = {}  # (participant key, join_time) -> record
     names = {}  # participant uuid -> every display name seen across polls (people rename after joining)
+    timeline = {}  # participant uuid -> [(poll time, display name)] for the rule: no renaming once named Name_Position
     polls = errors = 0
     while True:
         try:
@@ -114,6 +115,8 @@ def main():
                 pid = p.get('participant_uuid') or p.get('participant_user_id') or p.get('id')
                 if pid:
                     names.setdefault(pid, set()).add(p.get('user_name') or '')
+                    if not p.get('leave_time'):
+                        timeline.setdefault(pid, []).append((dt.datetime.now(PT), p.get('user_name') or ''))
             polls += 1
         except Exception as e:  # keep polling; report at the end
             errors += 1
@@ -135,12 +138,19 @@ def main():
             continue
         l = ts(p.get('leave_time')) or end
         k = re.sub(r'\s+', ' ', parsed[0]).lower()
-        e = people.setdefault(k, {'display': display.strip(), 'name': parsed[0], 'position': parsed[1], 'segments': []})
+        e = people.setdefault(k, {'display': display.strip(), 'name': parsed[0], 'position': parsed[1], 'segments': [], 'renamed': None})
+        # Applicants may not rename once they are Name_Position: time stops at the first poll that saw them renamed away.
+        obs = sorted(timeline.get(pid, []))
+        first_ok = next((i for i, (_, n) in enumerate(obs) if parse_name(n)), None)
+        if first_ok is not None:
+            away = next((t for t, n in obs[first_ok + 1:] if not parse_name(n)), None)
+            if away:
+                e['renamed'] = min(e['renamed'] or away, away)
         e['segments'].append((j.astimezone(PT), l.astimezone(PT)))
 
     rows = []
     for e in people.values():
-        mins = merge_minutes(e['segments'], lo, end)
+        mins = merge_minutes(e['segments'], lo, min(end, e['renamed'] or end))
         if mins <= 0:
             continue
         segs = sorted(e['segments'])
@@ -151,7 +161,8 @@ def main():
             'Interview Date': today.isoformat(), 'Zoom Display Name': e['display'], 'Parsed Name': e['name'],
             'Parsed Position': e['position'], 'Total Minutes': round(mins, 1),
             'First Join': inside[0][0].strftime('%H:%M'), 'Last Leave': max(s[1] for s in segs).strftime('%H:%M'),
-            'Segments': len(segs), 'Minutes Early': early, 'Arrival': label
+            'Segments': len(segs), 'Minutes Early': early,
+            'Arrival': label + (f"; renamed during interview at {e['renamed'].strftime('%H:%M')}, time counted until then" if e['renamed'] else '')
         })
     json.dump({'date': today.isoformat(), 'polls': polls, 'errors': errors, 'records_seen': len(seen), 'rows': rows},
               open(a.out, 'w'), indent=1)
