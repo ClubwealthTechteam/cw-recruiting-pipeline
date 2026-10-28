@@ -445,3 +445,26 @@ test('OLJ times sent as UTC ISO text are stored as Pacific time, like form rows'
   assert.equal(env.ctx.ptStamp_('2026-10-28T05:25:37.000000Z'), '2026-10-27 22:25:37');
   assert.equal(env.ctx.ptStamp_('2026-10-27 15:21:08'), '2026-10-27 15:21:08');
 });
+
+test('Zoom live: minutes so far and arrival show on the applicant during the session; stage set only at finalize', () => {
+  const env = invitedEnv();
+  env.setNow(pdt('2026-10-28T14:10:00'));
+  addRow(env, 'Zoom Attendance', { 'Interview Date': '2026-10-28', 'Zoom Display Name': 'Maria Santos_Collections', 'Parsed Name': 'Maria Santos', 'Parsed Position': 'Collections', 'Total Minutes': 10.4, 'Minutes Early': 12, Arrival: '12 min early (on time)' });
+  env.ctx.tick();
+  let maria = env.rows('Applicants').find((x) => x['First Name'] === 'Maria Clara');
+  assert.equal(maria.Stage, 'Invited');
+  assert.equal(maria['Zoom Minutes'], 10);
+  assert.equal(maria.Arrival, '12 min early (on time)');
+  // the session job rewrites the row's minutes a few minutes later
+  const z = env.sheets['Zoom Attendance'].data;
+  z[1][z[0].indexOf('Total Minutes')] = 26;
+  env.ctx.tick();
+  maria = env.rows('Applicants').find((x) => x['First Name'] === 'Maria Clara');
+  assert.equal(maria['Zoom Minutes'], 26);
+  assert.equal(maria.Stage, 'Invited');
+  env.sheets.Settings.appendRow(['ZOOM_FINALIZE', '2026-10-28', '']);
+  env.ctx.tick();
+  maria = env.rows('Applicants').find((x) => x['First Name'] === 'Maria Clara');
+  assert.equal(maria.Stage, 'Did Not Complete');
+  assert.equal(maria['Zoom Minutes'], 26);
+});

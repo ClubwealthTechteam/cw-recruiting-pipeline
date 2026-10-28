@@ -107,6 +107,57 @@ def main():
     names = {}  # participant uuid -> every display name seen across polls (people rename after joining)
     timeline = {}  # participant uuid -> [(poll time, display name)] for the rule: no renaming once named Name_Position
     polls = errors = 0
+
+    def build_rows():
+        end = min(dt.datetime.now(PT), hi)
+        people = {}
+        for p in seen.values():
+            pid = p.get('participant_uuid') or p.get('participant_user_id') or p.get('id')
+            candidates = [p.get('user_name')] + sorted(names.get(pid, set()))
+            display = next((n for n in candidates if parse_name(n)), None)
+            parsed = parse_name(display)
+            j = ts(p.get('join_time'))
+            if not parsed or not j:
+                continue
+            l = ts(p.get('leave_time')) or end
+            k = re.sub(r'\s+', ' ', parsed[0]).lower()
+            e = people.setdefault(k, {'display': display.strip(), 'name': parsed[0], 'position': parsed[1], 'segments': [], 'renamed': None})
+            # Applicants may not rename once they are Name_Position: time stops at the first poll that saw them renamed away.
+            obs = sorted(timeline.get(pid, []))
+            first_ok = next((i for i, (_, n) in enumerate(obs) if parse_name(n)), None)
+            if first_ok is not None:
+                away = next((t for t, n in obs[first_ok + 1:] if not parse_name(n)), None)
+                if away:
+                    e['renamed'] = min(e['renamed'] or away, away)
+            e['segments'].append((j.astimezone(PT), l.astimezone(PT)))
+
+        rows = []
+        for e in people.values():
+            mins = merge_minutes(e['segments'], lo, min(end, e['renamed'] or end))
+            if mins <= 0:
+                continue
+            segs = sorted(e['segments'])
+            # arrival = first join that reaches into the interview window (ignores earlier, unrelated visits that day)
+            inside = [sg for sg in segs if sg[1] > lo]
+            early, label = arrival(inside[0][0], start)
+            rows.append({
+                'Interview Date': today.isoformat(), 'Zoom Display Name': e['display'], 'Parsed Name': e['name'],
+                'Parsed Position': e['position'], 'Total Minutes': round(mins, 1),
+                'First Join': inside[0][0].strftime('%H:%M'), 'Last Leave': max(s[1] for s in segs).strftime('%H:%M'),
+                'Segments': len(segs), 'Minutes Early': early,
+                'Arrival': label + (f"; renamed during interview at {e['renamed'].strftime('%H:%M')}, time counted until then" if e['renamed'] else '')
+            })
+        return rows
+
+    def save(final):
+        # Written after every poll (live view for the CRM during the session) and once more at the end.
+        rows = build_rows()
+        tmp = a.out + '.tmp'
+        json.dump({'date': today.isoformat(), 'final': final, 'polls': polls, 'errors': errors, 'records_seen': len(seen),
+                   'saved_at': dt.datetime.now(PT).strftime('%H:%M:%S'), 'rows': rows}, open(tmp, 'w'), indent=1)
+        os.replace(tmp, a.out)
+        return rows
+
     while True:
         try:
             for p in live_participants(token()):
@@ -122,50 +173,14 @@ def main():
             errors += 1
             print(f'poll error: {type(e).__name__}', file=sys.stderr)
         now = dt.datetime.now(PT)
+        if not a.once and now < hi:
+            save(False)
+            print(f'snapshot {now.strftime("%H:%M")} polls={polls}', flush=True)
         if a.once or now >= hi:
             break
         time.sleep(max(30, min(a.interval, (hi - now).total_seconds())))
 
-    end = min(dt.datetime.now(PT), hi)
-    people = {}
-    for p in seen.values():
-        pid = p.get('participant_uuid') or p.get('participant_user_id') or p.get('id')
-        candidates = [p.get('user_name')] + sorted(names.get(pid, set()))
-        display = next((n for n in candidates if parse_name(n)), None)
-        parsed = parse_name(display)
-        j = ts(p.get('join_time'))
-        if not parsed or not j:
-            continue
-        l = ts(p.get('leave_time')) or end
-        k = re.sub(r'\s+', ' ', parsed[0]).lower()
-        e = people.setdefault(k, {'display': display.strip(), 'name': parsed[0], 'position': parsed[1], 'segments': [], 'renamed': None})
-        # Applicants may not rename once they are Name_Position: time stops at the first poll that saw them renamed away.
-        obs = sorted(timeline.get(pid, []))
-        first_ok = next((i for i, (_, n) in enumerate(obs) if parse_name(n)), None)
-        if first_ok is not None:
-            away = next((t for t, n in obs[first_ok + 1:] if not parse_name(n)), None)
-            if away:
-                e['renamed'] = min(e['renamed'] or away, away)
-        e['segments'].append((j.astimezone(PT), l.astimezone(PT)))
-
-    rows = []
-    for e in people.values():
-        mins = merge_minutes(e['segments'], lo, min(end, e['renamed'] or end))
-        if mins <= 0:
-            continue
-        segs = sorted(e['segments'])
-        # arrival = first join that reaches into the interview window (ignores earlier, unrelated visits that day)
-        inside = [sg for sg in segs if sg[1] > lo]
-        early, label = arrival(inside[0][0], start)
-        rows.append({
-            'Interview Date': today.isoformat(), 'Zoom Display Name': e['display'], 'Parsed Name': e['name'],
-            'Parsed Position': e['position'], 'Total Minutes': round(mins, 1),
-            'First Join': inside[0][0].strftime('%H:%M'), 'Last Leave': max(s[1] for s in segs).strftime('%H:%M'),
-            'Segments': len(segs), 'Minutes Early': early,
-            'Arrival': label + (f"; renamed during interview at {e['renamed'].strftime('%H:%M')}, time counted until then" if e['renamed'] else '')
-        })
-    json.dump({'date': today.isoformat(), 'polls': polls, 'errors': errors, 'records_seen': len(seen), 'rows': rows},
-              open(a.out, 'w'), indent=1)
+    rows = save(True)
     if a.post:
         # Backup when the routine has no Sheets connector: send rows to the pipeline's Apps Script API.
         url, secret = os.environ.get('APPS_SCRIPT_URL'), os.environ.get('APPS_SCRIPT_SECRET')

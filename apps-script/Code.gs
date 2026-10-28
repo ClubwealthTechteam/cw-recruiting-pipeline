@@ -634,7 +634,13 @@ function processZoom_(st) {
   var z = table_(SH.ZOOM);
   var apps = table_(SH.APPLICANTS);
   var n = 0;
+  var byId = indexBy_(apps.rows, 'Applicant ID');
   z.rows.forEach(function (r) {
+    // Live during the session: matched rows are rewritten every few minutes, so keep the applicant's minutes so far current.
+    if (r['Matched Applicant ID'] && !r.Result) {
+      if (liveZoom_(apps, byId[r['Matched Applicant ID']], r)) n++;
+      return;
+    }
     if (r['Matched Applicant ID'] || r.Result) return;
     var day = ymdOf_(r['Interview Date']);
     var cands = apps.rows.filter(function (a) {
@@ -648,10 +654,7 @@ function processZoom_(st) {
     }
     if (cands.length === 1) {
       update_(z, r, { 'Matched Applicant ID': cands[0]['Applicant ID'] });
-      // Early/late against the 2 PM start; the invite asks them to join 10 minutes early.
-      if (r.Arrival && apps.headers.indexOf('Arrival') !== -1) {
-        update_(apps, cands[0], { Arrival: r.Arrival, 'Minutes Early': r['Minutes Early'] });
-      }
+      liveZoom_(apps, cands[0], r);
     } else {
       update_(z, r, { Result: cands.length ? 'Ambiguous' : 'Not an invitee' });
       if (cands.length) flag_('', 'Zoom name matches several applicants', r['Zoom Display Name'] + ' on ' + day);
@@ -686,6 +689,25 @@ function processZoom_(st) {
     log_('zoomFinalize', 'ok', counts, fin);
   }
   return n;
+}
+
+/**
+ * Copies one matched Zoom row onto its applicant while they are still Invited or Confirmed: arrival (early/late
+ * against the 2 PM start; the invite asks for 10 minutes early) and minutes so far. Final stages are set at ZOOM_FINALIZE.
+ * Returns true when something changed.
+ */
+function liveZoom_(apps, a, r) {
+  if (!a || PRE_INTERVIEW.indexOf(a.Stage) === -1) return false;
+  var f = {};
+  var mins = Math.round(Number(r['Total Minutes']) || 0);
+  if (mins && String(a['Zoom Minutes']) !== String(mins)) f['Zoom Minutes'] = mins;
+  if (r.Arrival && apps.headers.indexOf('Arrival') !== -1 && String(a.Arrival) !== String(r.Arrival)) {
+    f.Arrival = r.Arrival;
+    f['Minutes Early'] = r['Minutes Early'];
+  }
+  if (!Object.keys(f).length) return false;
+  update_(apps, a, f);
+  return true;
 }
 
 // ---------- 6. Wednesday reminders ----------
