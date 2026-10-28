@@ -17,7 +17,9 @@ const pst = (s) => new Date(s + '-08:00');
 test('interview date: Sun-Tue go to that week, Wed-Sat to the following week', () => {
   assert.equal(L.interviewDateFor(pdt('2026-10-25T10:00:00')), '2026-10-28'); // Sun
   assert.equal(L.interviewDateFor(pdt('2026-10-27T23:59:00')), '2026-10-28'); // Tue night
-  assert.equal(L.interviewDateFor(pdt('2026-10-28T08:00:00')), '2026-11-04'); // Wed morning
+  assert.equal(L.interviewDateFor(pdt('2026-10-28T08:00:00')), '2026-10-28'); // Wed morning: same day
+  assert.equal(L.interviewDateFor(pdt('2026-10-28T11:59:00')), '2026-10-28'); // Wed just before the noon cut-off
+  assert.equal(L.interviewDateFor(pdt('2026-10-28T12:00:00')), '2026-11-04'); // Wed noon: next week
   assert.equal(L.interviewDateFor(pdt('2026-10-28T13:59:00')), '2026-11-04'); // Wed before 2 PM
   assert.equal(L.interviewDateFor(pdt('2026-10-29T09:00:00')), '2026-11-04'); // Thu
   assert.equal(L.interviewDateFor(pdt('2026-10-31T22:00:00')), '2026-11-04'); // Sat
@@ -136,4 +138,9 @@ test('invite and reminder emails are signed Club Wealth with the banner, no pers
     assert.match(e.body, /<img src="https:\/\/cwrecruitmentpipeline\.vercel\.app\/email-banner\.png"/);
     assert.doesNotMatch(e.body, /Am Marbella|Recruiter|SUCCESS in the WORLD/);
   }
+});
+
+test('a same-day invite (Wednesday before noon) says today', () => {
+  const e = L.inviteEmail('2026-10-28', new Date('2026-10-28T16:00:00Z')); // Wed 9 AM PDT
+  assert.match(e.body, /pre-interview today, Wednesday, October 28, 2026, at 2:00 PM PACIFIC DAYLIGHT TIME/);
 });

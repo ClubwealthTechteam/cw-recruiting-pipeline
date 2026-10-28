@@ -26,7 +26,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms + Math.random() * 800)
 /** The approved OLJ invite (Miguel, 2026-10-27): the email invite's wording, plain text, no signature. */
 function oljInviteText(session, now) {
   const zoneWord = L.isDaylight(session) ? 'Daylight' : 'Standard';
-  const when = (L.addDays(L.todayPT(now), 1) === session ? 'tomorrow, Wednesday, ' : 'on Wednesday, ') + L.longDate(session);
+  const today = L.todayPT(now);
+  const when = (today === session ? 'today, Wednesday, ' : L.addDays(today, 1) === session ? 'tomorrow, Wednesday, ' : 'on Wednesday, ') + L.longDate(session);
   return [
     'Greetings from Club Wealth!',
     `Please join our virtual pre-interview ${when}, at 2:00 PM PACIFIC ${zoneWord.toUpperCase()} TIME on our Zoom interview.`,
