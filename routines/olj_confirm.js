@@ -61,9 +61,18 @@ function stop(reason, results) {
   process.exit(3);
 }
 
+/** OLJ lists a conversation newest first; put it oldest first. */
+function toMessages(data, partner) {
+  return data.filter((m) => m.message)
+    .sort((a, b) => String(a.message.created).localeCompare(String(b.message.created)) || (a.message.message_id - b.message.message_id))
+    .map((m) => ({ mine: !(m.owner && m.owner.hash_id === partner), body: m.message.body }));
+}
+
 /** Pure: decide what an invitee's messages mean. messages = [{mine: bool, body: string}] in order. */
 function decide(inv, messages) {
-  const inviteAt = messages.findIndex((m) => m.mine && plain(m.body).toLowerCase().includes(INVITE_MARK));
+  // Count only replies after the LATEST invite (some applicants had an older invite from a past week).
+  let inviteAt = -1;
+  messages.forEach((m, i) => { if (m.mine && plain(m.body).toLowerCase().includes(INVITE_MARK)) inviteAt = i; });
   const hasReminder = messages.some((m) => m.mine && plain(m.body).toLowerCase().includes(REMINDER_MARK));
   if (inviteAt === -1) return { result: 'no invite found', hasReminder };
   const replies = messages.slice(inviteAt + 1).filter((m) => !m.mine).map((m) => plain(m.body)).filter(Boolean);
@@ -115,7 +124,7 @@ async function main() {
     const t = threads[inv.key];
     const data = (t && t.data) || [];
     const partner = data[0] && data[0].partner;
-    const messages = data.filter((m) => m.message).map((m) => ({ mine: !(m.owner && m.owner.hash_id === partner), body: m.message.body }));
+    const messages = toMessages(data, partner);
     const r = { id: inv.id, key: inv.key, ...decide(inv, messages), reminderSent: false };
     if (r.result === 'confirmed' && sendAllowed && !r.hasReminder) {
       const box = page.locator('trix-editor:visible');
@@ -143,4 +152,4 @@ async function main() {
 if (require.main === module) {
   main().catch((e) => { try { fs.writeFileSync(OUT, JSON.stringify({ status: 'error', reason: e.message }, null, 1)); } catch {} console.log('ERROR:', e.message); process.exit(1); });
 }
-module.exports = { decide, reminderText };
+module.exports = { decide, reminderText, toMessages };

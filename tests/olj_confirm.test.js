@@ -30,3 +30,22 @@ test('reminder wording uses the session date and zone', () => {
   assert.match(t, /\(e\.g\., John Smith_Position\)\n\nThank you, and we look forward/);
   assert.match(reminderText('2026-11-04'), /Pacific Standard Time \(PST\)/);
 });
+
+test('OLJ conversations arrive newest first; they are put in date order before deciding', () => {
+  const { toMessages } = require('../routines/olj_confirm.js');
+  const data = [
+    { owner: { hash_id: 'P' }, message: { message_id: 3, created: '2026-10-27T23:00:00Z', body: 'John Rey Lim' } },
+    { owner: { hash_id: 'EMP' }, message: { message_id: 2, created: '2026-10-27T22:00:00Z', body: invite.body } },
+    { owner: { hash_id: 'P' }, message: { message_id: 1, created: '2026-10-27T15:00:00Z', body: 'Hi, I would like to apply. Is this full time?' } }
+  ];
+  const msgs = toMessages(data, 'P');
+  assert.deepEqual(msgs.map((m) => m.mine), [false, true, false]);
+  assert.equal(decide(inv, msgs).result, 'confirmed');
+  assert.equal(decide(inv, toMessages(data.slice(1), 'P')).result, 'no reply');
+});
+
+test('only replies after the latest invite count (older invites from past weeks are ignored)', () => {
+  const msgs = [invite, { mine: false, body: 'John Rey Lim' }, { mine: false, body: 'I would like to apply again' }, invite];
+  assert.equal(decide(inv, msgs).result, 'no reply');
+  assert.equal(decide(inv, [...msgs, { mine: false, body: 'John Rey Lim' }]).result, 'confirmed');
+});
