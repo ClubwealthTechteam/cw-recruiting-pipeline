@@ -21,7 +21,7 @@ studies; claims that could not be verified are marked **unverified**.
 
 - **Confirmation rate** = confirmed ÷ invited, per Wednesday session.
 - **Show-up rate** = joined Zoom ÷ confirmed.
-- **Completion rate** = 30+ minutes in Zoom ÷ joined.
+- **Completion rate** = 1h+ in Zoom ÷ joined (Settings MIN_MINUTES_COMPLETED, 60 since 2026-10-28).
 - **No-show rate** = No Show ÷ confirmed. Invitees who never confirmed and did not join are No Confirmation.
 - **Days to interview** = median days from application to the session attended.
 - **Pass rate by position** = Passed or Hired ÷ decided, among those who completed an interview.

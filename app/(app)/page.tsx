@@ -26,7 +26,7 @@ export default async function Dashboard() {
       <section className="tiles">
         <Tile label="Confirmation rate" value={pct(m.confirmationRate)} note="Confirmed ÷ invited" />
         <Tile label="Show-up rate" value={pct(m.showUpRate)} note="Joined Zoom ÷ confirmed" />
-        <Tile label="Completion rate" value={pct(m.completionRate)} note="30+ minutes ÷ joined" />
+        <Tile label="Completion rate" value={pct(m.completionRate)} note="1h+ in Zoom ÷ joined" />
         <Tile label="No-show rate" value={pct(m.noShowRate)} note="No Show ÷ confirmed" />
         <Tile label="Days to interview" value={m.medianDaysToInterview === null ? '—' : String(m.medianDaysToInterview)} note="Median, application to session" />
         <Tile label="Awaiting review" value={String(m.awaitingReview)} note="Interview Completed" href="/candidates?stage=Interview+Completed" />
@@ -41,7 +41,7 @@ export default async function Dashboard() {
         </section>
         <section className="panel">
           <h2>Session rates</h2>
-          <p className="sub">Per Wednesday session. Confirmed ÷ invited, joined ÷ confirmed, 30+ minutes ÷ joined.</p>
+          <p className="sub">Per Wednesday session. Confirmed ÷ invited, joined ÷ confirmed, 1h+ in Zoom ÷ joined.</p>
           <RateTrend data={m.sessions.map((x) => ({
             label: short(x.date),
             confirmation: x.invited ? x.confirmed / x.invited : null,

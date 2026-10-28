@@ -99,6 +99,8 @@ test('positions map free text to standard names', () => {
 test('zoom result threshold', () => {
   assert.equal(L.zoomResult(30, 30), 'Interview Completed');
   assert.equal(L.zoomResult(29.9, 30), 'Did Not Complete');
+  assert.equal(L.zoomResult(59, undefined), 'Did Not Complete'); // default is stayed 1h+
+  assert.equal(L.zoomResult(60, undefined), 'Interview Completed');
 });
 
 test('reply sorting rules (free, no Claude)', () => {

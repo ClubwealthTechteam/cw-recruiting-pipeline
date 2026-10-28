@@ -87,7 +87,7 @@ export default async function Reports({ searchParams }: { searchParams: Promise<
       <div className="two-col">
         <section className="panel">
           <h2>Who completes the interview, by source</h2>
-          <p className="sub">Completed (30+ minutes in Zoom) ÷ invited. The note shows how many that is.</p>
+          <p className="sub">Completed (stayed 1h+ in Zoom) ÷ invited. The note shows how many that is.</p>
           <HBars format="pct" ariaLabel="Completion of invited applicants by source" data={sources.map((g) => ({ label: g.label, value: rate(g.completed, g.invited) ?? 0, note: `${g.completed} of ${g.invited}`, href: g.href }))} />
         </section>
         <section className="panel">

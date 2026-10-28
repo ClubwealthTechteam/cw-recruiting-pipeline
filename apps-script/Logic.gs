@@ -341,7 +341,7 @@ function screenTrack(raw) {
 
 /** Zoom result from total minutes in the meeting. */
 function zoomResult(minutes, minMinutes) {
-  return minutes >= (minMinutes || 30) ? 'Interview Completed' : 'Did Not Complete';
+  return minutes >= (minMinutes || 60) ? 'Interview Completed' : 'Did Not Complete';
 }
 
 
@@ -415,7 +415,7 @@ function slackLate(list) {
 /** Session results after Zoom is finalized. */
 function slackSessionResults(day, c, siteUrl) {
   return '*Session results, ' + longDate(day) + '*\n' + bullets_([
-    'Completed (30+ min): ' + c.completed, 'Did not complete: ' + c.dnc, 'No show (confirmed): ' + c.noshow,
+    'Completed (' + (c.min || 60) + '+ min): ' + c.completed, 'Did not complete: ' + c.dnc, 'No show (confirmed): ' + c.noshow,
     'No confirmation: ' + (c.noconf || 0)
   ]) + (siteUrl ? '\n<' + siteUrl + '/session?date=' + day + '|Open the session>' : '');
 }

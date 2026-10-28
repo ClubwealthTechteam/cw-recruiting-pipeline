@@ -664,14 +664,14 @@ function processZoom_(st) {
 
   var fin = st.get('ZOOM_FINALIZE');
   if (fin && fin !== st.get('ZOOM_FINALIZED_LAST')) {
-    var minMin = Number(st.get('MIN_MINUTES_COMPLETED')) || 30;
+    var minMin = Number(st.get('MIN_MINUTES_COMPLETED')) || 60;
     var minutes = {};
     z.rows.forEach(function (r) {
       if (ymdOf_(r['Interview Date']) === fin && r['Matched Applicant ID']) {
         minutes[r['Matched Applicant ID']] = (minutes[r['Matched Applicant ID']] || 0) + (Number(r['Total Minutes']) || 0);
       }
     });
-    var counts = { completed: 0, dnc: 0, noshow: 0, noconf: 0 };
+    var counts = { completed: 0, dnc: 0, noshow: 0, noconf: 0, min: minMin };
     apps.rows.forEach(function (a) {
       if (ymdOf_(a['Interview Date']) !== fin || PRE_INTERVIEW.indexOf(a.Stage) === -1) return;
       var m = minutes[a['Applicant ID']];

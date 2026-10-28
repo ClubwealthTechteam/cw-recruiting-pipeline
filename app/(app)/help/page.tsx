@@ -38,7 +38,7 @@ const SECTIONS: Section[] = [
       'From 1:40 PM, arrival (minutes early or late) and Zoom minutes update live on This Week\'s Session, about every 5 minutes.',
       'The invite asks applicants to join 10 minutes early; green = on time, amber = under 10 minutes early, red = late.',
       'If someone renames themselves in Zoom, their time stops counting at the rename.',
-      'At 3:30 PM the stages are set: Interview Completed (30+ minutes), Did Not Complete (under 30), No Show (confirmed but did not join) or No Confirmation (invited, never confirmed, did not join).'
+      'At 3:30 PM the stages are set: Interview Completed (stayed 1h+ in Zoom), Did Not Complete (under 1 hour), No Show (confirmed but did not join) or No Confirmation (invited, never confirmed, did not join).'
     ]
   },
   {
