@@ -93,7 +93,12 @@ function settings_() {
   var map = {};
   t.rows.forEach(function (r) { map[r.Key] = r; });
   return {
-    get: function (k) { return map[k] ? String(map[k].Value) : ''; },
+    // Sheets turns typed dates like 2026-10-28 into Date values; always hand back YYYY-MM-DD text.
+    get: function (k) {
+      if (!map[k]) return '';
+      var v = map[k].Value;
+      return Object.prototype.toString.call(v) === '[object Date]' ? Utilities.formatDate(v, TZ, 'yyyy-MM-dd') : String(v);
+    },
     set: function (k, v) {
       if (map[k]) update_(t, map[k], { Value: v });
       else map[k] = append_(t, { Key: k, Value: v });
@@ -528,7 +533,8 @@ function queueReminders_(st) {
   var apps = table_(SH.APPLICANTS);
   var n = 0;
   apps.rows.forEach(function (a) {
-    if (a.Stage === 'Confirmed' && ymdOf_(a['Interview Date']) === today && !a['Reminder Sent At']) {
+    // OLJ applicants get their reminder as an OLJ message (routines/olj_confirm.js), never by email.
+    if (a.Stage === 'Confirmed' && a.Source !== 'OLJ' && ymdOf_(a['Interview Date']) === today && !a['Reminder Sent At']) {
       queueEmail_(st, a, 'Reminder', reminderEmail(today), today);
       n++;
     }
