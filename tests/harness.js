@@ -4,7 +4,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 
 const HEADERS = {
-  Applicants: ['Applicant ID', 'Source', 'Source Ref', 'Applied At (PT)', 'First Name', 'Last Name', 'Email', 'Phone', 'Country', 'Position (as typed)', 'Position', 'Has Experience', 'Years Experience', 'Recent Client', 'US Clients VA', 'US Realtor VA', 'Experience Overview', 'Internet Speed', 'Speedtest Link', 'Voice Recording Link', 'Resume Link', 'Facebook Link', 'Stage', 'Stage Updated At', 'Stage Updated By', 'Interview Date', 'Invite Count', 'Last Invite At', 'Confirmed At', 'Reminder Sent At', 'Re-invite Reason', 'Zoom Name', 'Zoom Minutes', 'Decision Reason', 'Notes', 'OLJ Job Post', 'OLJ Summary', 'OLJ Email Requested At', 'Historical', 'Created At', 'Screen Track', 'Screen Tag', 'Screen Summary', 'Screened At'],
+  Applicants: ['Applicant ID', 'Source', 'Source Ref', 'Applied At (PT)', 'First Name', 'Last Name', 'Email', 'Phone', 'Country', 'Position (as typed)', 'Position', 'Has Experience', 'Years Experience', 'Recent Client', 'US Clients VA', 'US Realtor VA', 'Experience Overview', 'Internet Speed', 'Speedtest Link', 'Voice Recording Link', 'Resume Link', 'Facebook Link', 'Stage', 'Stage Updated At', 'Stage Updated By', 'Interview Date', 'Invite Count', 'Last Invite At', 'Confirmed At', 'Reminder Sent At', 'Re-invite Reason', 'Zoom Name', 'Zoom Minutes', 'Decision Reason', 'Notes', 'OLJ Job Post', 'OLJ Summary', 'OLJ Email Requested At', 'Historical', 'Created At', 'Screen Track', 'Screen Tag', 'Screen Summary', 'Screened At', 'Invite Hold'],
   History: ['Timestamp (PT)', 'Applicant ID', 'From Stage', 'To Stage', 'Changed By', 'Reason'],
   Outbox: ['Email ID', 'Applicant ID', 'Type', 'To', 'Subject', 'Body', 'Interview Date', 'Queued At', 'Status', 'Sent At', 'Error', 'Test'],
   Replies: ['Message ID', 'Received At', 'From Email', 'Subject', 'Reply Text', 'Matched Applicant ID', 'Match Method', 'Category', 'Action Taken', 'Processed At'],
@@ -78,7 +78,7 @@ function load({ now, formRows = [], mode = 'TEST', settings = {}, rejected = [] 
       getActiveSpreadsheet: () => ({ getId: () => 'PIPE', getSheetByName: (n) => sheets[n] || null, insertSheet: (n) => (sheets[n] = makeSheet(n, [])) }),
       openById: () => ({ getSheetByName: (n) => (n === 'Rejected' ? rejectedSheet : source) })
     },
-    Utilities: { formatDate: fmt },
+    Utilities: { formatDate: fmt, sleep: () => {} },
     LockService: { getScriptLock: () => ({ tryLock: () => true, waitLock: () => {}, releaseLock: () => {} }) },
     PropertiesService: { getScriptProperties: () => ({ getProperty: () => 's3cret' }) },
     ContentService: { createTextOutput: (s) => ({ s, setMimeType() { return this; } }), MimeType: { JSON: 'json' } },

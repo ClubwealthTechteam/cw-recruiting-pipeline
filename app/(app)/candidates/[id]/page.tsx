@@ -64,6 +64,7 @@ export default async function Candidate({ params }: { params: Promise<{ id: stri
         <section className="panel">
           <h2>Invite</h2>
           {s(a['Do Not Invite']) && <p className="error"><strong>Do not invite.</strong> {s(a['Do Not Invite'])}.</p>}
+          {!s(a['Do Not Invite']) && s(a['Invite Hold']) && <p className="hint"><strong>Not invited automatically:</strong> {s(a['Invite Hold'])}. You can still invite by hand if this is a mistake.</p>}
           <InviteButtons id={appId} isOlj={s(a.Source) === 'OLJ'} hasEmail={!!a.Email} emailReady={d.emailSending === 'ON'} blocked={!!s(a['Do Not Invite'])} />
           <p className="hint">Invites are for the next Wednesday at 2:00 PM PT. The applicant moves to Invited once it is sent.</p>
         </section>

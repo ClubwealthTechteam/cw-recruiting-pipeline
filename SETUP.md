@@ -42,6 +42,19 @@ Apps Script → Project Settings → Script Properties: add `ZAPIER_SEND_HOOK` =
 sheet on purpose). Then Settings `EMAIL_SENDING` = `ON`. Every 5 minutes Apps Script posts each Queued Invite,
 Re-invite, Reminder or Confirmation to the hook and marks it Sent (or Failed, which is flagged). OLJ invites are never
 emailed. Set `EMAIL_SENDING` to anything else to stop all email at once.
+Emails go one at a time, about 25 s apart (Microsoft 365 refuses overlapping SMTP logins). Both Apps Script and
+the Zap refuse any body that is not the approved template (Club Wealth sign-off and banner).
+
+### Automatic screening (Miguel, 2026-10-28)
+With `AUTO_INVITES` = `ON`, every new form response and OLJ applicant is screened before an invite is queued:
+- open positions only: Collections VA, Inside Sales Agent (ISA, which includes Real Estate Appointment Setter),
+  Real Estate Admin VA (TC/LC);
+- form applicants also need "Has experience" = Yes and internet of 50 Mbps or more;
+- never anyone on the Rejected tab, and one invite per email address;
+- session: Wednesday 2 PM PT, same day if they applied before Wednesday 12 PM PT, otherwise next week.
+Passing form applicants get the email invite; passing OLJ applicants get an OLJ invite (sent only if they said
+they are interested and sent a summary/resume). Anyone held back keeps Stage Applied with the reason in
+`Invite Hold`, shown on their page.
 
 ## 4. Testing (MODE = TEST)
 

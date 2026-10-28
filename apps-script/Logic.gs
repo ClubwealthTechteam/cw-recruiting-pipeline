@@ -220,12 +220,37 @@ function parseZoomName(display) {
 var POSITION_RULES = [
   [/collection|accounts? receivable/, 'Collections VA'],
   [/inside sales|\bisa\b/, 'Inside Sales Agent (ISA)'],
-  [/appointment|setter|cold call|lead gen/, 'Appointment Setter'],
-  [/transaction|listing|admin/, 'Real Estate Admin VA (TC/LC)'],
+  // Miguel, 2026-10-28: Real Estate Appointment Setter is the ISA job.
+  [/appointment|setter|cold call|lead gen/, 'Inside Sales Agent (ISA)'],
+  [/customer (service|support)|case manager/, 'Customer Service'],
+  [/transaction|listing|admin|\btc\b|\blc\b/, 'Real Estate Admin VA (TC/LC)'],
   [/marketing|ads/, 'Marketing & Ads Specialist'],
   [/customer service|case manager/, 'Customer Service'],
   [/general|virtual assist|\bva\b/, 'General VA']
 ];
+
+/** The positions Club Wealth is hiring for now (Miguel, 2026-10-28). Only these are invited automatically. */
+var OPEN_POSITIONS = ['Collections VA', 'Inside Sales Agent (ISA)', 'Real Estate Admin VA (TC/LC)'];
+
+/**
+ * Screening before any invite (Miguel, 2026-10-28). Returns '' when the applicant may be invited, else the reason
+ * they are held back. Form applicants also need experience and 50+ Mbps; OLJ applicants are checked for interest
+ * and a summary/resume by the OLJ sender before it sends.
+ */
+function inviteHoldReason(a) {
+  var pos = String(a.Position || '');
+  if (OPEN_POSITIONS.indexOf(pos) === -1) return 'Position not open: ' + (pos || 'unknown');
+  if (String(a.Source) === 'OLJ') return '';
+  if (/^\s*no\b/i.test(String(a['Has Experience'] || ''))) return 'No experience';
+  if (/below/i.test(String(a['Internet Speed'] || ''))) return 'Internet below 50 Mbps';
+  return '';
+}
+
+/** True when an email body is the current approved template (Club Wealth sign-off and banner, no personal signature). */
+function approvedEmailBody(html) {
+  var b = String(html || '');
+  return b.indexOf(BANNER_URL) !== -1 && b.indexOf('Am Marbella') === -1;
+}
 
 function standardPosition(raw, overrides) {
   var key = String(raw || '').toLowerCase().replace(/\s+/g, ' ').trim();
@@ -308,6 +333,7 @@ if (typeof module !== 'undefined') {
     inviteEmail: inviteEmail, reminderEmail: reminderEmail, confirmationEmail: confirmationEmail,
     normName: normName, nameMatches: nameMatches, parseZoomName: parseZoomName,
     standardPosition: standardPosition, zoomResult: zoomResult, STAGES: STAGES,
-    stripQuoted: stripQuoted, typedFullName: typedFullName, classifyReply: classifyReply, screenTrack: screenTrack
+    stripQuoted: stripQuoted, typedFullName: typedFullName, classifyReply: classifyReply, screenTrack: screenTrack,
+    inviteHoldReason: inviteHoldReason, approvedEmailBody: approvedEmailBody, OPEN_POSITIONS: OPEN_POSITIONS
   };
 }
