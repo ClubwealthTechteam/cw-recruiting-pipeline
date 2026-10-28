@@ -7,7 +7,7 @@ import CandidatesTable, { type CandidateRow } from '@/components/CandidatesTable
 import DataError from '@/components/DataError';
 
 const PAGE = 200;
-const CLOSED = ['Passed', 'Hired', 'Onboarded', 'Not Fit'];
+const CLOSED = ['Passed Interview', 'Hired', 'Onboarded', 'Not Fit'];
 
 type Q = { stage?: string; fit?: string; source?: string; position?: string; session?: string; q?: string; history?: string; page?: string; tag?: string; week?: string; score?: string };
 

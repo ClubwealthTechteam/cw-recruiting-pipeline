@@ -1,7 +1,7 @@
 'use client';
 import { useState } from 'react';
 import { useAction } from './useAction';
-import { CRITERIA, CRITERIA_LABEL, scoreSummary } from '@/lib/pipeline';
+import { CRITERIA, CRITERIA_LABEL, scoreSummary, nextPassed } from '@/lib/pipeline';
 
 type Card = Record<string, string | number>;
 
@@ -16,7 +16,8 @@ export default function Scorecard({ id, me, stage, cards }: { id: string; me: st
   const { run, busy, error } = useAction();
   const s = scoreSummary(cards);
   const complete = CRITERIA.every((k) => scores[k] >= 1);
-  const decided = ['Passed', 'Hired', 'Onboarded', 'Not Fit'].includes(stage);
+  const decided = ['Passed Interview', 'Hired', 'Onboarded', 'Not Fit'].includes(stage);
+  const apply = s.suggestion === 'Passed' ? nextPassed(stage) : s.suggestion;
 
   return (
     <div className="scorecard">
@@ -27,8 +28,8 @@ export default function Scorecard({ id, me, stage, cards }: { id: string; me: st
             : <div className="muted">Not rated yet. Scores start at 0 until someone rates all five.</div>}
           {s.count > 0 && !decided && (
             <button className="btn primary small-btn" disabled={busy}
-              onClick={() => run({ action: 'setStage', ids: [id], stage: s.suggestion, reason: `Scorecard ${s.average.toFixed(1)}/5` })}>
-              Apply: {s.suggestion}
+              onClick={() => run({ action: 'setStage', ids: [id], stage: apply, reason: `Scorecard ${s.average.toFixed(1)}/5` })}>
+              Apply: {apply}
             </button>
           )}
           {decided && s.count > 0 && <div className="hint">Decision already made: {stage}.</div>}

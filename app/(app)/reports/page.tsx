@@ -39,14 +39,14 @@ export default async function Reports({ searchParams }: { searchParams: Promise<
 
   function group(label: string, href: string, rows: Row[]): Group {
     const invited = rows.filter((a) => Number(a['Invite Count']) > 0 || s(a.Stage) !== 'Applied');
-    const completed = rows.filter((a) => did(a, 'Interview Completed') || did(a, 'Passed') || did(a, 'Hired') || did(a, 'Onboarded'));
+    const completed = rows.filter((a) => did(a, 'Interview Completed') || did(a, 'Passed Pre-Interview') || did(a, 'Passed Interview') || did(a, 'Hired') || did(a, 'Onboarded'));
     const hired = rows.filter((a) => did(a, 'Hired') || did(a, 'Onboarded'));
     return {
       label, href, applied: rows.length, invited: invited.length,
       confirmed: rows.filter((a) => a['Confirmed At'] || did(a, 'Confirmed')).length,
       // everyone who completed also joined, even when their Zoom minutes were not recorded (e.g. moved to Passed by hand)
       joined: rows.filter((a) => Number(a['Zoom Minutes']) > 0 || did(a, 'Did Not Complete') || completed.includes(a)).length,
-      completed: completed.length, passed: rows.filter((a) => did(a, 'Passed') || did(a, 'Hired') || did(a, 'Onboarded')).length, hired: hired.length,
+      completed: completed.length, passed: rows.filter((a) => did(a, 'Passed Pre-Interview') || did(a, 'Passed Interview') || did(a, 'Hired') || did(a, 'Onboarded')).length, hired: hired.length,
       toHire: median(hired.map((a) => daysBetween(s(a['Applied At (PT)']), (when(a, 'Hired') || when(a, 'Onboarded')))).filter((x) => x >= 0)),
       toInterview: median(completed.map((a) => daysBetween(s(a['Applied At (PT)']), s(a['Interview Date']))).filter((x) => x >= 0))
     };

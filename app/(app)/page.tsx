@@ -59,7 +59,7 @@ export default async function Dashboard() {
         </section>
         <section className="panel">
           <h2>Pass rate by position</h2>
-          <p className="sub">Of applicants who completed an interview and have a decision, the share Passed or Hired.</p>
+          <p className="sub">Of applicants who completed an interview and have a decision, the share that passed (pre-interview or interview) or was hired.</p>
           <HBars format="pct" ariaLabel="Pass rate by position" data={m.byPosition.map((p) => ({ label: p.position, value: p.rate ?? 0, note: `of ${p.decided}`, href: `/candidates?stage=All&position=${encodeURIComponent(p.position)}` }))} />
         </section>
       </div>

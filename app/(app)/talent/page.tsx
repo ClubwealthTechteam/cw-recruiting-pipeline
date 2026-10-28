@@ -8,7 +8,7 @@ import InviteButtons from '@/components/InviteButtons';
 
 type Q = { position?: string; q?: string };
 // Not in the pool while their process is still running or decided.
-const IN_PROGRESS = ['Invited', 'Confirmed', 'Interview Completed', 'Passed', 'Hired', 'Onboarded'];
+const IN_PROGRESS = ['Invited', 'Confirmed', 'Interview Completed', 'Passed Pre-Interview', 'Passed Interview', 'Hired', 'Onboarded'];
 const POOL_TAG = 'talent pool';
 
 /**

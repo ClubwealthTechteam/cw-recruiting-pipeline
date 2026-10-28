@@ -853,7 +853,7 @@ function weeklyReport() {
   if (!days.length) return;
   var day = days[days.length - 1];
   var inv = apps.filter(function (a) { return ymdOf_(a['Interview Date']) === day && a.Stage !== 'Applied'; });
-  var done = function (a) { return ['Interview Completed', 'Passed', 'Hired', 'Onboarded'].indexOf(a.Stage) !== -1; };
+  var done = function (a) { return ['Interview Completed', 'Passed Pre-Interview', 'Passed Interview', 'Hired', 'Onboarded'].indexOf(a.Stage) !== -1; };
   var joined = function (a) { return Number(a['Zoom Minutes']) > 0 || done(a) || a.Stage === 'Did Not Complete'; };
   var group = function (key) {
     var m = {};

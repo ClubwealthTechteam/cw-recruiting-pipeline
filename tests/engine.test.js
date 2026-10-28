@@ -207,7 +207,7 @@ test('site API: secret required, bulk stage change logs history, reason required
   assert.equal(d.ok, true);
   assert.equal(d.data.applicants.length, 3);
   assert.equal(env.api({ action: 'setStage', by: 'Am', ids: ['F-2'], stage: 'Not Fit' }).ok, false);
-  const r = env.api({ action: 'setStage', by: 'Am', ids: ['F-2', 'F-3'], stage: 'Passed' });
+  const r = env.api({ action: 'setStage', by: 'Am', ids: ['F-2', 'F-3'], stage: 'Passed Pre-Interview' });
   assert.equal(r.data.updated, 2);
   assert.equal(env.rows('History').filter((h) => h['Changed By'] === 'Am').length, 2);
   assert.equal(env.api({ action: 'setStage', by: 'Hacker', ids: ['F-2'], stage: 'Hired' }).ok, false);

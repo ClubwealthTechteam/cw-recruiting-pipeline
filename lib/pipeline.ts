@@ -2,24 +2,28 @@ import type { Row } from './sheet';
 
 export const STAGES = [
   'Applied', 'Invited', 'Confirmed', 'Open for re-invite', 'Interview Completed',
-  'Did Not Complete', 'No Show', 'No Confirmation', 'Passed', 'Hired', 'Onboarded', 'Not Fit'
+  'Did Not Complete', 'No Show', 'No Confirmation', 'Passed Pre-Interview', 'Passed Interview', 'Hired', 'Onboarded', 'Not Fit'
 ] as const;
 
 /** Board column order: the main flow first, then the side outcomes. */
 export const BOARD_STAGES = [
-  'Applied', 'Invited', 'Confirmed', 'Interview Completed', 'Passed', 'Hired', 'Onboarded',
+  'Applied', 'Invited', 'Confirmed', 'Interview Completed', 'Passed Pre-Interview', 'Passed Interview', 'Hired', 'Onboarded',
   'Open for re-invite', 'Did Not Complete', 'No Show', 'No Confirmation', 'Not Fit'
 ];
 
 /** Hired or further along (Onboarded counts as hired everywhere). */
 export const HIRED = ['Hired', 'Onboarded'];
+/** Passed comes in two steps, Passed Pre-Interview then Passed Interview, and after both the person is Hired. */
+export const PASSED = ['Passed Pre-Interview', 'Passed Interview'];
+/** The next Passed step for someone at this stage (the scorecard's "Passed" suggestion applies this). */
+export const nextPassed = (stage: string) => (stage === 'Passed Pre-Interview' ? 'Passed Interview' : 'Passed Pre-Interview');
 export type Stage = (typeof STAGES)[number];
 
 /** Grey = not engaged yet, blue = in progress, amber = needs action, red = missed, green = success. */
 export const STAGE_TONE: Record<string, string> = {
   Applied: 'grey', Invited: 'blue', Confirmed: 'blue', 'Open for re-invite': 'amber',
   'Interview Completed': 'amber', 'Did Not Complete': 'red', 'No Show': 'red', 'No Confirmation': 'grey',
-  Passed: 'green', Hired: 'green', Onboarded: 'green', 'Not Fit': 'grey'
+  'Passed Pre-Interview': 'green', 'Passed Interview': 'green', Hired: 'green', Onboarded: 'green', 'Not Fit': 'grey'
 };
 
 /** Screening tags (Claude): Great = clearly meets the rule (1+ year or highly relevant), Good = meets 6 months, Not Fit = does not or not enough info. */
@@ -147,11 +151,11 @@ export function metrics(allApplicants: Row[], history: Row[], flags: Row[], now 
   const sum = (k: keyof SessionStats) => finished.reduce((t, x) => t + (x[k] as number), 0);
 
   // Pass rate by position, among those who completed an interview and have a decision
-  const decided = tracked.filter((a) => did(a, 'Interview Completed') && ['Passed', 'Hired', 'Onboarded', 'Not Fit'].includes(s(a.Stage)));
+  const decided = tracked.filter((a) => did(a, 'Interview Completed') && [...PASSED, ...HIRED, 'Not Fit'].includes(s(a.Stage)));
   const positions = [...new Set(decided.map((a) => s(a.Position) || 'Other'))].sort();
   const byPosition = positions.map((p) => {
     const rows = decided.filter((a) => (s(a.Position) || 'Other') === p);
-    const passed = rows.filter((a) => ['Passed', 'Hired', 'Onboarded'].includes(s(a.Stage))).length;
+    const passed = rows.filter((a) => [...PASSED, ...HIRED].includes(s(a.Stage))).length;
     return { position: p, decided: rows.length, passed, rate: rate(passed, rows.length) };
   });
 

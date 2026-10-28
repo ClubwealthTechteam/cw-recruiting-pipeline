@@ -61,14 +61,14 @@ const SECTIONS: Section[] = [
     title: 'Pipeline Board',
     href: '/board',
     items: [
-      'One column per stage: Applied, Invited, Confirmed, Interview Completed, Passed, Hired, Onboarded, then re-invite, Did Not Complete, No Show, No Confirmation and Not Fit.',
+      'One column per stage: Applied, Invited, Confirmed, Interview Completed, Passed Pre-Interview, Passed Interview, Hired, Onboarded, then re-invite, Did Not Complete, No Show, No Confirmation and Not Fit.',
       'Drag a card to another column to move the applicant. Drag near the edge to scroll sideways, or use the "Move…" menu on the card.'
     ]
   },
   {
     title: 'Candidate profile',
     items: [
-      'Interview scorecard: rate Communication, English, Experience, Internet and Work setup (workspace & device) from 1 to 5. It shows 0 until rated; then the CRM suggests Passed (3.5 or higher with no 1s) or Not Fit, and one click applies it.',
+      'Interview scorecard: rate Communication, English, Experience, Internet and Work setup (workspace & device) from 1 to 5. It shows 0 until rated; then the CRM suggests Passed (3.5 or higher with no 1s) or Not Fit, and one click applies it. Passed moves someone to Passed Pre-Interview, then to Passed Interview; after both they are marked Hired.',
       'Inbox: the email conversation and, for OLJ applicants, the OLJ conversation, with a box to reply. Email replies go out from CareersCW with the sign-off and banner; OLJ replies go out on the next OLJ run. Unread OLJ conversations stay unread for you.',
       'Tags, notes, the timeline of everything that happened, application answers and links, and invite buttons.'
     ]

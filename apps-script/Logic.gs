@@ -16,7 +16,8 @@ var STAGES = [
   'Did Not Complete',
   'No Show',
   'No Confirmation',
-  'Passed',
+  'Passed Pre-Interview',
+  'Passed Interview',
   'Hired',
   'Onboarded',
   'Not Fit'

@@ -10,7 +10,8 @@ const PRESETS: Record<string, string[]> = {
   'Open for re-invite': ['Schedule conflict', 'Asked to reschedule', 'Emergency', 'Technical problem on the day'],
   'No Show': ['Confirmed but did not join Zoom'],
   'No Confirmation': ['Invited, never confirmed, did not join'],
-  Passed: ['Passed pre-interview'],
+  'Passed Pre-Interview': ['Passed the pre-interview'],
+  'Passed Interview': ['Passed the interview'],
   Hired: ['Offer accepted'],
   Onboarded: ['Started onboarding']
 };
