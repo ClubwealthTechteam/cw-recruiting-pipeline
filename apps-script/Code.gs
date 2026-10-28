@@ -342,7 +342,53 @@ function backfillScreenTracks_() {
   return n;
 }
 
-// ---------- 2. sent emails ----------
+// ---------- 2. sending (Zapier) and sent emails ----------
+
+var EMAIL_TYPES = ['Invite', 'Re-invite', 'Reminder', 'Confirmation'];
+
+/**
+ * Hands each queued email to the Zapier "recruiting-pipeline-email-sender" hook, which sends it from
+ * CareersCW@clubwealth.com over SMTP. Runs only while Settings EMAIL_SENDING = ON and the hook URL is in the
+ * ZAPIER_SEND_HOOK script property. OLJ invites are never emailed. Marks each row Sent, or Failed with the reason.
+ */
+function dispatchEmails_(st) {
+  if (st.get('EMAIL_SENDING') !== 'ON') return 0;
+  var hook = PropertiesService.getScriptProperties().getProperty('ZAPIER_SEND_HOOK');
+  if (!hook) return 0;
+  var out = table_(SH.OUTBOX);
+  var byId = indexBy_(table_(SH.APPLICANTS).rows, 'Applicant ID');
+  var n = 0;
+  out.rows.filter(function (e) {
+    return e.Status === 'Queued' && EMAIL_TYPES.indexOf(e.Type) !== -1;
+  }).slice(0, 25).forEach(function (e) {
+    var a = byId[e['Applicant ID']];
+    var blocked = a && (e.Type === 'Invite' || e.Type === 'Re-invite') ? doNotInvite_(st, a) : '';
+    if (blocked) {
+      update_(out, e, { Status: 'Cancelled', Error: 'Do not invite: ' + blocked });
+      return;
+    }
+    var res;
+    try {
+      res = UrlFetchApp.fetch(hook, {
+        method: 'post', contentType: 'application/json', muteHttpExceptions: true,
+        payload: JSON.stringify({
+          email_id: e['Email ID'], type: e.Type, to: e.To, subject: e.Subject, html_body: e.Body, test: e.Test === 'Y'
+        })
+      });
+    } catch (err) {
+      update_(out, e, { Status: 'Failed', Error: 'Zapier not reached: ' + String(err && err.message || err).slice(0, 200) });
+      return;
+    }
+    var code = res.getResponseCode();
+    if (code >= 200 && code < 300) {
+      update_(out, e, { Status: 'Sent', 'Sent At': nowStr_() });
+      n++;
+    } else {
+      update_(out, e, { Status: 'Failed', Error: 'Zapier returned ' + code });
+    }
+  });
+  return n;
+}
 
 function applySentEmails_(st) {
   var out = table_(SH.OUTBOX);
@@ -629,6 +675,7 @@ function tick() {
       intake: importNewFormRows_(st),
       manualInvites: syncManualInvites_(st),
       screenTracks: backfillScreenTracks_(),
+      emailed: dispatchEmails_(st),
       sent: applySentEmails_(st),
       replies: processReplies_(st),
       olj: processOLJ_(st),

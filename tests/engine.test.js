@@ -1,7 +1,7 @@
 // End-to-end run of apps-script/Code.gs against an in-memory spreadsheet. Run: npm test
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { load } = require('./harness');
+const { load, ctxCalls } = require('./harness');
 
 const pdt = (s) => new Date(s + '-07:00');
 const formRow = (ts, first, last, email, pos, invited = '') =>
@@ -360,4 +360,30 @@ test('applicants whose email is on the Rejected tab are never invited, by OLJ or
   env.ctx.tick(); env.ctx.tick();
   assert.equal(env.rows('Outbox').filter((e) => e['Applicant ID'] === 'O-k9').length, 0);
   assert.equal(env.rows('Needs Attention').filter((f) => f['Applicant ID'] === 'O-k9' && f.Type === 'Do not invite').length, 1);
+});
+
+test('queued emails go to the Zapier hook only while EMAIL_SENDING is ON, and never OLJ invites', () => {
+  const env = invitedEnv({ AUTO_INVITES: 'OFF' });
+  env.ctx.tick();
+  ctxCalls.posts = []; ctxCalls.code = 200;
+  addRow(env, 'Outbox', { 'Email ID': 'E-1', 'Applicant ID': 'F-2', Type: 'Invite', To: 'jose@example.com', Subject: 'ClubWealth | Pre-Interview invite', Body: '<p>x</p>', 'Interview Date': '2026-10-28', Status: 'Queued' });
+  addRow(env, 'Outbox', { 'Email ID': 'E-2', 'Applicant ID': 'F-3', Type: 'OLJ Invite', To: 'OLJ:k1', Subject: '(OnlineJobs.ph message)', Status: 'Queued' });
+  env.ctx.tick();
+  assert.equal(env.rows('Outbox').find((e) => e['Email ID'] === 'E-1').Status, 'Queued', 'nothing sent while EMAIL_SENDING is off');
+  env.sheets.Settings.appendRow(['EMAIL_SENDING', 'ON', '']);
+  env.ctx.tick();
+  const hooked = ctxCalls.posts.filter((p) => /email_id/.test(p.body || ''));
+  assert.equal(hooked.length, 1);
+  assert.equal(JSON.parse(hooked[0].body).email_id, 'E-1');
+  const sent = env.rows('Outbox').find((e) => e['Email ID'] === 'E-1');
+  assert.equal(sent.Status, 'Sent');
+  assert.equal(env.rows('Outbox').find((e) => e['Email ID'] === 'E-2').Status, 'Queued', 'OLJ invites are left for the OLJ sender');
+  assert.equal(env.rows('Applicants').find((a) => a['Applicant ID'] === 'F-2').Stage, 'Invited');
+  // a Zapier error marks the row Failed (flagged), and it is not retried
+  ctxCalls.code = 500;
+  addRow(env, 'Outbox', { 'Email ID': 'E-3', 'Applicant ID': 'F-1', Type: 'Reminder', To: 'maria@example.com', Subject: 'ClubWealth | Pre-reminder invite', Body: '<p>x</p>', Status: 'Queued' });
+  env.ctx.tick(); env.ctx.tick();
+  assert.equal(env.rows('Outbox').find((e) => e['Email ID'] === 'E-3').Status, 'Failed');
+  assert.equal(ctxCalls.posts.filter((p) => /E-3/.test(p.body || '')).length, 1);
+  ctxCalls.code = 200;
 });

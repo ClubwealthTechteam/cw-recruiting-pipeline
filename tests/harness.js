@@ -83,7 +83,7 @@ function load({ now, formRows = [], mode = 'TEST', settings = {}, rejected = [] 
     PropertiesService: { getScriptProperties: () => ({ getProperty: () => 's3cret' }) },
     ContentService: { createTextOutput: (s) => ({ s, setMimeType() { return this; } }), MimeType: { JSON: 'json' } },
     ScriptApp: { getProjectTriggers: () => [], deleteTrigger() {}, newTrigger: () => ({ timeBased: () => ({ everyMinutes: () => ({ create() {} }) }), forSpreadsheet: () => ({ onFormSubmit: () => ({ create() {} }), onChange: () => ({ create() {} }) }) }) },
-    UrlFetchApp: { fetch: (url, opts) => { (ctxCalls.fetches = ctxCalls.fetches || []).push(url); return {}; } }
+    UrlFetchApp: { fetch: (url, opts) => { (ctxCalls.fetches = ctxCalls.fetches || []).push(url); (ctxCalls.posts = ctxCalls.posts || []).push({ url, body: opts && opts.payload }); return { getResponseCode: () => ctxCalls.code || 200 }; } }
   };
   vm.createContext(ctx);
   for (const f of ['Logic.gs', 'Code.gs']) vm.runInContext(fs.readFileSync(path.join(__dirname, '../apps-script', f), 'utf8'), ctx, { filename: f });

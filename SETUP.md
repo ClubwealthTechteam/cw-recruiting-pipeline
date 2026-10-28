@@ -29,12 +29,19 @@ Project → **Settings → Environment Variables** (Production and Preview):
 
 Then **Deployments → Redeploy**.
 
-## 3. Zapier (CareersCW@clubwealth.com)
+## 3. Zapier (CareersCW@clubwealth.com) — sending only
 
-Connections: **SMTP by Zapier** (smtp.office365.com, 587, TLS) and **IMAP by Zapier** (outlook.office365.com, 993, SSL).
-Two workflows (built after the connections exist):
-- **Send:** new Outbox row with Status `Queued` → SMTP send (To, Subject, HTML Body) → update the row: Status `Sent`, Sent At (or `Failed` + Error).
-- **Replies:** new email in the CareersCW inbox → add a Replies row (Message ID, Received At, From Email, Subject, Reply Text).
+Connection: **SMTP by Zapier** for CareersCW@clubwealth.com (smtp.office365.com, port 587, Use TLS = No; the
+connection still upgrades to TLS). Replies are not read automatically (Microsoft 365 blocks IMAP password logins);
+Am reads the CareersCW inbox and moves email applicants to Confirmed on the site.
+
+Workflow **recruiting-pipeline-email-sender** (private, https://zapier.com/workflow/01a1831b-ac07-7da4-8012-701ef2afcff3):
+a catch hook that sends one email per call from CareersCW, only with the pipeline's own subjects.
+
+Apps Script → Project Settings → Script Properties: add `ZAPIER_SEND_HOOK` = the hook's webhook URL (kept out of the
+sheet on purpose). Then Settings `EMAIL_SENDING` = `ON`. Every 5 minutes Apps Script posts each Queued Invite,
+Re-invite, Reminder or Confirmation to the hook and marks it Sent (or Failed, which is flagged). OLJ invites are never
+emailed. Set `EMAIL_SENDING` to anything else to stop all email at once.
 
 ## 4. Testing (MODE = TEST)
 
