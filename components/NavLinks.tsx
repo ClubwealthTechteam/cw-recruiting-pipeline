@@ -11,7 +11,8 @@ const ICON: Record<string, string> = {
   '/session': 'M4 6h16v14H4zM4 10h16M8 3v4m8-4v4',
   '/talent': 'M12 3l2.6 5.6 6 .7-4.5 4.1 1.2 6L12 16.5 6.7 19.4l1.2-6L3.4 9.3l6-.7z',
   '/reports': 'M4 20V10m6 10V4m6 16v-7m4 7H2',
-  '/attention': 'M12 3l10 18H2zm0 7v5m0 3v.5'
+  '/attention': 'M12 3l10 18H2zm0 7v5m0 3v.5',
+  '/help': 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zm-2.5-11a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6v.6M12 17v.5'
 };
 const LINKS = [
   { href: '/', label: 'Dashboard' },
@@ -20,7 +21,8 @@ const LINKS = [
   { href: '/session', label: "This Week's Session" },
   { href: '/talent', label: 'Talent Pool' },
   { href: '/reports', label: 'Reports' },
-  { href: '/attention', label: 'Needs Attention' }
+  { href: '/attention', label: 'Needs Attention' },
+  { href: '/help', label: 'Help' }
 ];
 const KEY = 'cw-sidebar';
 
