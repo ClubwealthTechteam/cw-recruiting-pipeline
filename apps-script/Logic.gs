@@ -295,6 +295,22 @@ function typedFullName(text) {
  * Ignored: auto-replies and bounces. Cannot Attend: wording about not making it.
  * Question: contains a question mark. Confirmed: a typed full name. Anything else: Other (flagged).
  */
+var ACCEPTS = /\b(confirm(ed|ing)?|accept(ed|ing)?|available|attend(ing)?|will (be there|join)|i'?ll (be there|join)|see you|count me in|noted|yes)\b/i;
+
+/**
+ * A reply from a matched applicant that confirms even without the exact "full name only" form:
+ * it names them (first name + surname anywhere) or says they accept/confirm/will attend, and is not a
+ * can't-attend or a question. (Today's replies: "I confirm my availability…, <full name>", "I gladly accept".)
+ */
+function confirmsFor(text, first, last) {
+  var body = stripQuoted(text);
+  if (!body || CANNOT_ATTEND.test(body) || body.indexOf('?') !== -1) return false;
+  var words = normName(body).split(' ');
+  var f = normName(first).split(' ')[0], l = normName(last).split(' ').pop();
+  var named = !!(f && l && words.indexOf(f) !== -1 && words.indexOf(l) !== -1);
+  return named || ACCEPTS.test(body);
+}
+
 function classifyReply(subject, text) {
   var body = stripQuoted(text);
   if (AUTO_REPLY.test(String(subject || '')) || AUTO_REPLY.test(body.slice(0, 200))) return 'Ignored';
@@ -333,7 +349,7 @@ if (typeof module !== 'undefined') {
     inviteEmail: inviteEmail, reminderEmail: reminderEmail, confirmationEmail: confirmationEmail,
     normName: normName, nameMatches: nameMatches, parseZoomName: parseZoomName,
     standardPosition: standardPosition, zoomResult: zoomResult, STAGES: STAGES,
-    stripQuoted: stripQuoted, typedFullName: typedFullName, classifyReply: classifyReply, screenTrack: screenTrack,
+    stripQuoted: stripQuoted, typedFullName: typedFullName, classifyReply: classifyReply, confirmsFor: confirmsFor, screenTrack: screenTrack,
     inviteHoldReason: inviteHoldReason, approvedEmailBody: approvedEmailBody, OPEN_POSITIONS: OPEN_POSITIONS
   };
 }
