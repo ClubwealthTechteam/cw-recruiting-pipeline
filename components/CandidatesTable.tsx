@@ -5,6 +5,7 @@ import StageBadge from './StageBadge';
 import StageForm from './StageForm';
 import FitBadge from './FitBadge';
 import { InlineStage, QuickNote } from './InlineActions';
+import UndoButton from './UndoButton';
 
 export type CandidateRow = {
   id: string; name: string; email: string; stage: string; source: string; position: string;
@@ -22,7 +23,7 @@ export default function CandidatesTable({ rows }: { rows: CandidateRow[] }) {
     <>
       <div className="bulk-bar">
         <span>{sel.length ? `${sel.length} selected` : 'Select applicants to move them in bulk'}</span>
-        <StageForm ids={sel} onDone={() => setSel([])} />
+        <div className="bulk-right"><UndoButton /><StageForm ids={sel} onDone={() => setSel([])} /></div>
       </div>
       <table className="table candidates">
         <thead>

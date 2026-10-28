@@ -2,6 +2,7 @@
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { toast } from './Toaster';
+import { pushUndo, dropUndo, type UndoEntry } from './undo';
 
 /** What the toast says after each action succeeds, unless the caller passes its own message. */
 function doneMessage(body: Record<string, unknown>): string {
@@ -24,21 +25,57 @@ function doneMessage(body: Record<string, unknown>): string {
   }
 }
 
-/** Posts one action to /api/action, shows a toast, then refreshes the page data. */
+type Body = Record<string, unknown>;
+
+/** The request that reverses an action, from what the action returned (null when it cannot be undone). */
+function undoFor(body: Body, data: Record<string, unknown> | null): Body | null {
+  if (!data) return null;
+  if (body.action === 'setStage') {
+    const u = data.undo as { moves?: unknown[]; queued?: unknown[] } | undefined;
+    return u && u.moves && u.moves.length ? { action: 'undoStage', ...u } : null;
+  }
+  if (body.action === 'addNote' && data.line) return { action: 'undoNote', id: body.id, line: data.line };
+  if (body.action === 'setTags' && typeof data.before === 'string') return { action: 'setTags', id: body.id, tags: data.before };
+  return null;
+}
+
+/** Runs one undo entry and says how it went. Shared by the toast, the Undo buttons and Ctrl+Z. */
+export async function runUndo(entry: UndoEntry, refresh: () => void) {
+  dropUndo(entry.at);
+  try {
+    const r = await post(entry.body);
+    const sent = Number(r?.alreadySent) || 0;
+    toast(sent ? `Undone: ${entry.label}. ${sent} email had already gone out and could not be stopped.` : `Undone: ${entry.label} ✓`, sent ? 'error' : 'ok');
+  } catch (e) {
+    toast(e instanceof Error ? e.message : 'Could not undo', 'error');
+  }
+  refresh();
+}
+
+async function post(body: Body) {
+  const res = await fetch('/api/action', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const json = await res.json();
+  if (!json.ok) throw new Error(json.error || 'Something went wrong');
+  return json.data;
+}
+
+/** Posts one action to /api/action, shows a toast (with Undo where it can be undone), then refreshes the page data. */
 export function useAction() {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  async function run(body: Record<string, unknown>, opts: { success?: string } = {}) {
+  async function run(body: Body, opts: { success?: string } = {}) {
     setBusy(true);
     setError('');
     try {
-      const res = await fetch('/api/action', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-      const json = await res.json();
-      if (!json.ok) throw new Error(json.error || 'Something went wrong');
-      toast(opts.success || doneMessage(body));
+      const data = await post(body);
+      const undo = undoFor(body, data);
+      const message = opts.success || doneMessage(body);
+      const entry = undo ? { label: message.replace(/ ✓.*$/, ''), body: undo, at: Date.now() } : null;
+      if (entry) pushUndo(entry);
+      toast(message, 'ok', entry ? { label: 'Undo', run: () => runUndo(entry, () => router.refresh()) } : undefined);
       router.refresh();
-      return json.data ?? true;
+      return data ?? true;
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Something went wrong';
       setError(msg);

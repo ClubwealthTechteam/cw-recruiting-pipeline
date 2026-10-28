@@ -589,3 +589,24 @@ test('Onboarded is a stage the site can move people to', () => {
   assert.equal(env.api({ action: 'setStage', by: 'Am', ids: ['F-2'], stage: 'Onboarded' }).ok, true);
   assert.equal(env.rows('Applicants')[0].Stage, 'Onboarded');
 });
+
+test('undo: a stage move goes back, its queued re-invite is cancelled; a note is removed', () => {
+  const env = invitedEnv();
+  const mv = env.api({ action: 'setStage', by: 'Am', ids: ['F-2', 'F-3'], stage: 'Open for re-invite', reason: 'Schedule conflict' }).data;
+  assert.equal(mv.undo.moves.length, 2);
+  assert.equal(mv.undo.queued.length, 2);
+  assert.equal(env.rows('Outbox').filter((e) => e.Type === 'Re-invite' && e.Status === 'Queued').length, 2);
+  const u = env.api({ action: 'undoStage', by: 'Am', ...mv.undo }).data;
+  assert.deepEqual([u.undone, u.cancelledEmails, u.alreadySent], [2, 2, 0]);
+  const apps = env.rows('Applicants');
+  assert.deepEqual(apps.slice(0, 2).map((a) => [a.Stage, a['Re-invite Reason']]), [['Invited', ''], ['Invited', '']]);
+  assert.equal(env.rows('Outbox').filter((e) => e.Type === 'Re-invite' && e.Status === 'Cancelled').length, 2);
+  assert.equal(env.rows('History').filter((h) => h.Reason === 'Undo').length, 2);
+  // undoing twice does nothing more
+  assert.equal(env.api({ action: 'undoStage', by: 'Am', ...mv.undo }).data.undone, 0);
+  // notes
+  env.api({ action: 'addNote', by: 'Am', id: 'F-2', note: 'first' });
+  const n = env.api({ action: 'addNote', by: 'Am', id: 'F-2', note: 'oops' }).data;
+  assert.equal(env.api({ action: 'undoNote', by: 'Am', id: 'F-2', line: n.line }).data.removed, true);
+  assert.match(env.rows('Applicants')[0].Notes, /first$/);
+});

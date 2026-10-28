@@ -15,6 +15,8 @@ export default function Board({ stages, cards }: { stages: string[]; cards: Boar
   const [over, setOver] = useState('');
   const [moved, setMoved] = useState<Record<string, string>>({}); // shows the move at once, before the sheet confirms
   const stageOf = (c: BoardCard) => moved[c.id] || c.stage;
+  // fresh data from the sheet (after a move, an undo or the auto refresh) replaces the shown-at-once moves
+  useEffect(() => { setMoved({}); }, [cards]);
 
   // While a card is dragged near the left or right edge, scroll the board sideways (browsers don't do it for us).
   const boardRef = useRef<HTMLDivElement>(null);

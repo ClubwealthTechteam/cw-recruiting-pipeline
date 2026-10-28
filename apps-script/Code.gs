@@ -1148,26 +1148,63 @@ function api_(req) {
         throw new Error('A reason is required for ' + req.stage);
       }
       var done = 0;
+      var undo = { moves: [], queued: [] }; // what "Undo" needs to put back (see undoStage)
       (req.ids || []).forEach(function (id) {
         var a = byId[id];
         if (!a || a.Stage === req.stage) return;
+        undo.moves.push({ id: id, from: a.Stage, decision: String(a['Decision Reason'] || ''), reinvite: String(a['Re-invite Reason'] || '') });
         setStage_(apps, a, req.stage, req.by, req.reason);
         if (req.stage === 'Not Fit' || req.stage === 'Did Not Complete') update_(apps, a, { 'Decision Reason': req.reason });
         if (req.stage === 'Open for re-invite') {
           update_(apps, a, { 'Re-invite Reason': req.reason });
           var next = a['Interview Date'] ? reinviteDateFor(ymdOf_(a['Interview Date'])) : interviewDateFor(new Date());
-          queueInvite_(st2, a, next, 'Re-invite');
+          var q = queueInvite_(st2, a, next, 'Re-invite');
+          if (q) undo.queued.push(q['Email ID']);
         }
         done++;
       });
-      return { updated: done };
+      return { updated: done, undo: undo };
+    }
+    if (req.action === 'undoStage') {
+      // Puts each applicant back in the stage they had, restores the reasons, and cancels any email the move
+      // queued that has not gone out yet. Only moves that are still as they were are undone.
+      var outU = table_(SH.OUTBOX);
+      var cancelled = 0, alreadySent = 0;
+      (req.queued || []).forEach(function (eid) {
+        var e = outU.rows.filter(function (r) { return r['Email ID'] === eid; })[0];
+        if (!e) return;
+        if (e.Status === 'Queued') { update_(outU, e, { Status: 'Cancelled', Error: 'Undone by ' + req.by }); cancelled++; }
+        else if (e.Status === 'Sent') alreadySent++;
+      });
+      var back = 0;
+      (req.moves || []).forEach(function (m) {
+        var a = byId[m.id];
+        if (!a || STAGES.indexOf(m.from) === -1 || a.Stage === m.from) return;
+        setStage_(apps, a, m.from, req.by, 'Undo');
+        var f = {};
+        if (String(a['Decision Reason'] || '') !== String(m.decision || '')) f['Decision Reason'] = m.decision || '';
+        if (String(a['Re-invite Reason'] || '') !== String(m.reinvite || '')) f['Re-invite Reason'] = m.reinvite || '';
+        if (Object.keys(f).length) update_(apps, a, f);
+        back++;
+      });
+      return { undone: back, cancelledEmails: cancelled, alreadySent: alreadySent };
     }
     if (req.action === 'addNote') {
       var a1 = byId[req.id];
       if (!a1) throw new Error('not found');
       var line = nowStr_() + ' ' + req.by + ': ' + String(req.note || '').slice(0, 1000);
       update_(apps, a1, { Notes: a1.Notes ? a1.Notes + '\n' + line : line });
-      return { ok: true };
+      return { ok: true, line: line };
+    }
+    if (req.action === 'undoNote') {
+      var an = byId[req.id];
+      if (!an) throw new Error('not found');
+      var lines = String(an.Notes || '').split('\n');
+      var idx = lines.lastIndexOf(String(req.line || ''));
+      if (idx === -1) return { removed: false };
+      lines.splice(idx, 1);
+      update_(apps, an, { Notes: lines.join('\n') });
+      return { removed: true };
     }
     if (req.action === 'setEmail') {
       var a2 = byId[req.id];
@@ -1228,8 +1265,9 @@ function api_(req) {
       var at = byId[req.id];
       if (!at) throw new Error('not found');
       if (apps.headers.indexOf('Tags') === -1) throw new Error('Run setup() once in Apps Script to add the Tags column.');
+      var before = String(at.Tags || '');
       update_(apps, at, { Tags: cleanTags_(req.tags) });
-      return { tags: at.Tags };
+      return { tags: at.Tags, before: before };
     }
     if (req.action === 'saveView' || req.action === 'deleteView') {
       var vt = table_(SH.VIEWS);
