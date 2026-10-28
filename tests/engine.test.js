@@ -438,3 +438,10 @@ test('the same person on OLJ with a different email is not invited twice', () =>
   assert.equal(olj['Invite Hold'], 'Already invited as F-3 (same person)');
   assert.equal(env.rows('Outbox').filter((e) => e['Applicant ID'] === 'O-k77').length, 0);
 });
+
+test('OLJ times sent as UTC ISO text are stored as Pacific time, like form rows', () => {
+  const env = invitedEnv();
+  assert.equal(env.ctx.ptStamp_('2026-10-28T16:47:18.000000Z'), '2026-10-28 09:47:18');
+  assert.equal(env.ctx.ptStamp_('2026-10-28T05:25:37.000000Z'), '2026-10-27 22:25:37');
+  assert.equal(env.ctx.ptStamp_('2026-10-27 15:21:08'), '2026-10-27 15:21:08');
+});

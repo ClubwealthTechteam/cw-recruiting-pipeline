@@ -1,5 +1,6 @@
 import 'server-only';
 import { unstable_cache, revalidateTag } from 'next/cache';
+import { ptStamp } from '@/lib/pipeline';
 
 export type Row = Record<string, string | number>;
 export type PipelineData = {
@@ -12,6 +13,12 @@ export type PipelineData = {
   emailSending?: string;
   fetchedAt?: number;
 };
+
+/** Applied times in one format (Pacific), so every page sorts and dates them the same way. */
+function normalize(d: PipelineData): PipelineData {
+  for (const a of d.applicants) if (a['Applied At (PT)']) a['Applied At (PT)'] = ptStamp(a['Applied At (PT)']);
+  return d;
+}
 
 async function call<T>(body: Record<string, unknown>): Promise<T> {
   const url = process.env.APPS_SCRIPT_URL;
@@ -39,14 +46,14 @@ export const PIPELINE_TAG = 'pipeline';
  * Applicants from before the system come with a few fields only (enough for counts) and without their history.
  */
 export const getData = unstable_cache(
-  async () => ({ ...(await call<PipelineData>({ action: 'data', slim: true })), fetchedAt: Date.now() }),
+  async () => ({ ...normalize(await call<PipelineData>({ action: 'data', slim: true })), fetchedAt: Date.now() }),
   ['pipeline-data-v3'],
   { revalidate: 30, tags: [PIPELINE_TAG] }
 );
 
 /** Everything, including the ~2,000 applicants from before the system. Only for "Include applicants from before the system". */
 export const getDataWithHistory = unstable_cache(
-  async () => ({ ...(await call<PipelineData>({ action: 'data', slim: true, withHistory: true })), fetchedAt: Date.now() }),
+  async () => ({ ...normalize(await call<PipelineData>({ action: 'data', slim: true, withHistory: true })), fetchedAt: Date.now() }),
   ['pipeline-data-all-v1'],
   { revalidate: 120, tags: [PIPELINE_TAG] }
 );
@@ -56,6 +63,7 @@ export const getApplicant = unstable_cache(
   async (id: string): Promise<Row | null> => {
     try {
       const r = await call<{ applicant: Row | null }>({ action: 'applicant', id });
+      if (r.applicant?.['Applied At (PT)']) r.applicant['Applied At (PT)'] = ptStamp(r.applicant['Applied At (PT)']);
       return r.applicant;
     } catch {
       // Older Apps Script without the "applicant" action: fall back to the full data set.

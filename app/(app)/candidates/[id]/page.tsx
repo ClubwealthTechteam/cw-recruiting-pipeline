@@ -2,7 +2,7 @@ import { Fragment } from 'react';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getData, getDataWithHistory, getApplicant } from '@/lib/sheet';
-import { s, fullName, ymd, formatDate } from '@/lib/pipeline';
+import { s, fullName, ymd, formatDate, formatDateTime } from '@/lib/pipeline';
 import StageBadge from '@/components/StageBadge';
 import StageForm from '@/components/StageForm';
 import { NoteForm, EmailForm } from '@/components/SmallForms';
@@ -54,7 +54,7 @@ export default async function Candidate({ params }: { params: Promise<{ id: stri
       <header className="page-head detail-head">
         <div>
           <h1>{fullName(a) || '(no name)'}</h1>
-          <div className="muted">{s(a.Position)} · {s(a.Source)} · Applied {formatDate(ymd(a['Applied At (PT)']))}</div>
+          <div className="muted">{s(a.Position)} · {s(a.Source)} · Applied {formatDateTime(s(a['Applied At (PT)']))}</div>
         </div>
         <StageBadge stage={s(a.Stage)} />
       </header>
