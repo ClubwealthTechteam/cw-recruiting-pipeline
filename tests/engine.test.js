@@ -72,8 +72,8 @@ test('LIVE import of history: invited rows plus upcoming not-yet-invited, no ema
   assert.equal(out[0].Subject, 'ClubWealth | Pre-Interview invite');
 });
 
-function invitedEnv(extraSettings = {}) {
-  const env = load({ mode: 'LIVE', now: pdt('2026-10-27T12:00:00'), settings: extraSettings, formRows: [
+function invitedEnv(extraSettings = {}, rejected = []) {
+  const env = load({ mode: 'LIVE', now: pdt('2026-10-27T12:00:00'), settings: extraSettings, rejected, formRows: [
     formRow(pdt('2026-10-23T10:00:00'), 'Maria Clara', 'Santos', 'maria@example.com', 'Collections VA', 'Yes'),
     formRow(pdt('2026-10-24T10:00:00'), 'Jose', 'Dela Cruz', 'jose@example.com', 'ISA', 'Yes'),
     formRow(pdt('2026-10-25T10:00:00'), 'Ana', 'Reyes', 'ana@example.com', 'Appointment Setter', 'Yes')
@@ -343,4 +343,21 @@ test('screen tracks are set on intake and backfilled; sendInvite queues OLJ or e
   const re = env.api({ action: 'sendInvite', by: 'Am', id: 'F-2', channel: 'email' });
   assert.equal(re.ok, true, re.error);
   assert.equal(env.rows('Outbox').filter((e) => e.Type === 'Invite' && e['Applicant ID'] === 'F-2').length, 1);
+});
+
+test('applicants whose email is on the Rejected tab are never invited, by OLJ or email, and are flagged once', () => {
+  const env = invitedEnv({ AUTO_INVITES: 'OFF', EMAIL_SENDING: 'ON' }, [' Lito@Example.com ', 'can reapply beginning july 2026']);
+  addRow(env, 'OLJ', { 'Conversation Key': 'k9', 'Job Post': 'Club Wealth Inside Sales Agent', 'Applicant Name': 'Lito Lapid', 'Email Found': 'lito@example.com', Summary: 's' });
+  env.ctx.tick();
+  assert.match(env.api({ action: 'sendInvite', by: 'Am', id: 'O-k9', channel: 'olj' }).error, /Do not invite/);
+  assert.match(env.api({ action: 'sendInvite', by: 'Am', id: 'O-k9', channel: 'email' }).error, /Do not invite/);
+  assert.equal(env.rows('Outbox').filter((e) => e['Applicant ID'] === 'O-k9').length, 0);
+  assert.match(env.api({ action: 'applicant', id: 'O-k9' }).data.applicant['Do Not Invite'], /Rejected tab/);
+  assert.equal(env.api({ action: 'applicant', id: 'F-2' }).data.applicant['Do Not Invite'], '');
+  // automatic invites skip and flag once, however many runs
+  const st = env.sheets.Settings; const sh = st.data[0];
+  st.data.find((r) => r[0] === 'AUTO_INVITES')[sh.indexOf('Value')] = 'ON';
+  env.ctx.tick(); env.ctx.tick();
+  assert.equal(env.rows('Outbox').filter((e) => e['Applicant ID'] === 'O-k9').length, 0);
+  assert.equal(env.rows('Needs Attention').filter((f) => f['Applicant ID'] === 'O-k9' && f.Type === 'Do not invite').length, 1);
 });
