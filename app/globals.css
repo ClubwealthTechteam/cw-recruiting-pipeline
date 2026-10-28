@@ -159,3 +159,8 @@ input:focus, select:focus, textarea:focus { outline: 2px solid #b9cff3; border-c
 .freshness { display: flex; justify-content: flex-end; gap: 10px; align-items: center; font-size: 12px; color: var(--muted); margin: -12px 0 6px; }
 .link-btn { background: none; border: 0; padding: 0; color: var(--accent); font: inherit; cursor: pointer; }
 .link-btn:disabled { color: var(--muted); cursor: default; }
+
+.fit-tip { position: fixed; z-index: 60; max-width: 360px; background: #fff; border: 1px solid #cfd5df; border-radius: 6px; padding: 10px 12px; font-size: 13px; box-shadow: 0 6px 18px rgba(16,24,40,.14); pointer-events: none; }
+.fit-tip .tip-head { font-weight: 600; margin-bottom: 4px; }
+.badge.fit { min-width: 56px; text-align: center; }
+.invite-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }

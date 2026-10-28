@@ -195,7 +195,8 @@ function applicantFromForm_(prefix, rowNum, r, overrides) {
     'Has Experience': r[FORM.HAS_EXP], 'Years Experience': r[FORM.YEARS], 'Recent Client': r[FORM.RECENT],
     'US Clients VA': r[FORM.US_CLIENTS], 'US Realtor VA': r[FORM.US_REALTOR], 'Experience Overview': r[FORM.OVERVIEW],
     'Internet Speed': r[FORM.SPEED], 'Speedtest Link': r[FORM.SPEED_LINK], 'Voice Recording Link': r[FORM.VOICE],
-    'Resume Link': r[FORM.RESUME], 'Facebook Link': r[FORM.FB], 'Invite Count': 0, 'Created At': nowStr_()
+    'Resume Link': r[FORM.RESUME], 'Facebook Link': r[FORM.FB], 'Invite Count': 0, 'Created At': nowStr_(),
+    'Screen Track': screenTrack(r[FORM.POSITION]) || 'Not screened'
   };
 }
 
@@ -298,6 +299,19 @@ function syncManualInvites_(st) {
   return n;
 }
 
+/** Fills Screen Track for current applicants that do not have one yet (rows added before screening existed). */
+function backfillScreenTracks_() {
+  var apps = table_(SH.APPLICANTS);
+  if (apps.headers.indexOf('Screen Track') === -1) return 0;
+  var n = 0;
+  apps.rows.forEach(function (a) {
+    if (a['Screen Track'] || a.Historical === 'Y') return;
+    update_(apps, a, { 'Screen Track': screenTrack(a['Position (as typed)'] || a['OLJ Job Post']) || 'Not screened' });
+    n++;
+  });
+  return n;
+}
+
 // ---------- 2. sent emails ----------
 
 function applySentEmails_(st) {
@@ -315,13 +329,13 @@ function applySentEmails_(st) {
       return;
     }
     if (status !== 'Sent' || !a) return;
-    if (e.Type === 'Invite' || e.Type === 'Re-invite') {
+    if (e.Type === 'Invite' || e.Type === 'Re-invite' || e.Type === 'OLJ Invite') {
       update_(apps, a, {
         'Interview Date': ymdOf_(e['Interview Date']), 'Invite Count': (Number(a['Invite Count']) || 0) + 1,
         'Last Invite At': e['Sent At'] || nowStr_()
       });
       if (a.Stage === 'Applied' || a.Stage === 'Open for re-invite') {
-        setStage_(apps, a, 'Invited', 'System', e.Type + ' sent for ' + ymdOf_(e['Interview Date']));
+        setStage_(apps, a, 'Invited', String(e['Queued By'] || 'System'), e.Type + ' sent for ' + ymdOf_(e['Interview Date']));
       }
     } else if (e.Type === 'Reminder') {
       update_(apps, a, { 'Reminder Sent At': e['Sent At'] || nowStr_() });
@@ -434,6 +448,7 @@ function processOLJ_(st) {
         'Last Name': parts.length > 1 ? parts[parts.length - 1] : '', Email: email,
         'Position (as typed)': o['Job Post'], Position: standardPosition(o['Job Post'], overrides),
         'OLJ Job Post': o['Job Post'], 'OLJ Summary': o.Summary, 'OLJ Email Requested At': o['Email Requested At'] || '',
+        'Screen Track': screenTrack(o['Job Post']) || 'Not screened',
         Stage: 'Applied', 'Stage Updated At': nowStr_(), 'Stage Updated By': 'System',
         'Invite Count': 0, 'Created At': nowStr_()
       });
@@ -583,6 +598,7 @@ function tick() {
     var c = {
       intake: importNewFormRows_(st),
       manualInvites: syncManualInvites_(st),
+      screenTracks: backfillScreenTracks_(),
       sent: applySentEmails_(st),
       replies: processReplies_(st),
       olj: processOLJ_(st),
@@ -606,7 +622,8 @@ function setup() {
   var ss = ss_();
   var out = sheet_(SH.OUTBOX);
   var oh = out.getRange(1, 1, 1, out.getLastColumn()).getValues()[0];
-  if (oh.indexOf('Applied') === -1) out.getRange(1, oh.length + 1).setValue('Applied').setFontWeight('bold');
+  if (oh.indexOf('Applied') === -1) { out.getRange(1, oh.length + 1).setValue('Applied').setFontWeight('bold'); oh.push('Applied'); }
+  if (oh.indexOf('Queued By') === -1) out.getRange(1, oh.length + 1).setValue('Queued By').setFontWeight('bold');
   if (!ss.getSheetByName(SH.TEST_FORM)) {
     var tf = ss.insertSheet(SH.TEST_FORM);
     var src = SpreadsheetApp.openById(settings_().get('SOURCE_SHEET_ID')).getSheetByName('Form Responses 1');
@@ -659,7 +676,7 @@ var MANUAL_BY = ['Miguel', 'Camille', 'Am'];
 
 var LIST_FIELDS = ['Applicant ID', 'Source', 'Applied At (PT)', 'First Name', 'Last Name', 'Email', 'Position (as typed)',
   'Position', 'Stage', 'Stage Updated At', 'Stage Updated By', 'Interview Date', 'Invite Count', 'Confirmed At',
-  'Reminder Sent At', 'Zoom Minutes', 'Historical'];
+  'Reminder Sent At', 'Zoom Minutes', 'Historical', 'Screen Track', 'Screen Tag', 'Screen Summary'];
 
 // ---------- chat bubble (answers come from a Claude routine, read-only) ----------
 
@@ -720,7 +737,8 @@ function api_(req) {
       flags: plain_(table_(SH.FLAGS).rows),
       zoom: plain_(table_(SH.ZOOM).rows),
       outbox: plain_(table_(SH.OUTBOX).rows).map(function (e) { delete e.Body; return e; }),
-      mode: st.get('MODE')
+      mode: st.get('MODE'),
+      emailSending: st.get('EMAIL_SENDING')
     };
   }
   if (req.action === 'applicant') {
@@ -784,6 +802,31 @@ function api_(req) {
         queueInvite_(st2, a2, iv, 'Invite');
       }
       return { ok: true };
+    }
+    if (req.action === 'sendInvite') {
+      var ai = byId[req.id];
+      if (!ai) throw new Error('not found');
+      var session = interviewDateFor(new Date());
+      var outT = table_(SH.OUTBOX);
+      var dup = outT.rows.some(function (e) {
+        return e['Applicant ID'] === ai['Applicant ID'] && ymdOf_(e['Interview Date']) === session &&
+          ['Invite', 'Re-invite', 'OLJ Invite'].indexOf(e.Type) !== -1 && (e.Status === 'Queued' || e.Status === 'Sent');
+      });
+      if (dup) throw new Error('An invite for Wednesday ' + longDate(session) + ' is already queued or sent.');
+      if (req.channel === 'email') {
+        if (st2.get('EMAIL_SENDING') !== 'ON') throw new Error('Email sending is not connected yet (CareersCW in Zapier). Use OLJ, or invite by hand.');
+        if (!ai.Email) throw new Error('This applicant has no email address.');
+        queueEmail_(st2, ai, 'Invite', inviteEmail(session, new Date()), session);
+      } else if (req.channel === 'olj') {
+        if (ai.Source !== 'OLJ' || !ai['Source Ref']) throw new Error('This applicant did not come from OnlineJobs.ph.');
+        append_(outT, {
+          'Email ID': id_('E'), 'Applicant ID': ai['Applicant ID'], Type: 'OLJ Invite', To: 'OLJ:' + ai['Source Ref'],
+          Subject: '(OnlineJobs.ph message)', Body: '', 'Interview Date': session, 'Queued At': nowStr_(), Status: 'Queued',
+          'Queued By': req.by
+        });
+      } else throw new Error('bad channel');
+      update_(apps, ai, { 'Interview Date': session });
+      return { queued: true, session: session, channel: req.channel };
     }
     if (req.action === 'chatAsk') {
       var cid = id_('C');

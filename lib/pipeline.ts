@@ -13,6 +13,9 @@ export const STAGE_TONE: Record<string, string> = {
   Passed: 'green', Hired: 'green', 'Not Fit': 'grey'
 };
 
+/** Screening tags (Claude): Great = clearly meets the rule (1+ year or highly relevant), Good = meets 6 months, Not Fit = does not or not enough info. */
+export const FIT_TONE: Record<string, string> = { Great: 'green', Good: 'blue', 'Not Fit': 'grey' };
+
 export const REASON_REQUIRED = ['Not Fit', 'Did Not Complete', 'Open for re-invite'];
 
 export const s = (v: unknown) => (v === undefined || v === null ? '' : String(v));

@@ -116,3 +116,16 @@ test('bot confirmation reply is signed by Club Wealth, not a person', () => {
   assert.doesNotMatch(c.body, /Am Marbella/);
   assert.match(c.body, /Wednesday, November 4, 2026, at 2:00 PM Pacific Standard Time \(PST\)/);
 });
+
+test('screening track from the typed position', () => {
+  assert.equal(L.screenTrack('Real Estate Admin VA (Transaction/Listing Coordinator)'), 'Transaction Coordinator');
+  assert.equal(L.screenTrack('Listing Coordinator'), 'Transaction Coordinator');
+  assert.equal(L.screenTrack('TC'), 'Transaction Coordinator');
+  assert.equal(L.screenTrack('Club Wealth Inside Sales Agent'), 'ISA CW');
+  assert.equal(L.screenTrack('Real Estate Inside Sales Agent (ISA)'), 'ISA Homexa');
+  assert.equal(L.screenTrack('Inside Sales Agent'), 'ISA (unspecified)');
+  assert.equal(L.screenTrack('Collections Virtual Assistant (Remote)'), 'Collections');
+  assert.equal(L.screenTrack('Accounts Receivable or Collections Specialist'), 'Collections');
+  assert.equal(L.screenTrack('Real Estate Appointment Setter'), '');
+  assert.equal(L.screenTrack('AI-SAVVY MARKETING & ADS SPECIALIST'), '');
+});

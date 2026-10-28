@@ -7,6 +7,8 @@ import StageBadge from '@/components/StageBadge';
 import StageForm from '@/components/StageForm';
 import { NoteForm, EmailForm } from '@/components/SmallForms';
 import DataError from '@/components/DataError';
+import FitBadge from '@/components/FitBadge';
+import InviteButtons from '@/components/InviteButtons';
 
 const LINKS = ['Resume Link', 'Voice Recording Link', 'Speedtest Link', 'Facebook Link'];
 const FIELDS = ['Position (as typed)', 'Country', 'Phone', 'Has Experience', 'Years Experience', 'Recent Client', 'US Clients VA', 'US Realtor VA', 'Internet Speed'];
@@ -53,6 +55,18 @@ export default async function Candidate({ params }: { params: Promise<{ id: stri
         <StageBadge stage={s(a.Stage)} />
       </header>
       {flags.length > 0 && <div className="panel warn">{flags.length} open item{flags.length > 1 ? 's' : ''} in <Link href="/attention">Needs Attention</Link> for this applicant.</div>}
+      <div className="two-col">
+        <section className="panel">
+          <h2>Screening</h2>
+          <p><FitBadge tag={s(a['Screen Tag'])} track={s(a['Screen Track'])} /> <span className="muted">{s(a['Screen Track'])}</span></p>
+          {a['Screen Summary'] ? <p className="prewrap">{s(a['Screen Summary'])}</p> : <p className="muted">Not screened yet.</p>}
+        </section>
+        <section className="panel">
+          <h2>Invite</h2>
+          <InviteButtons id={appId} isOlj={s(a.Source) === 'OLJ'} hasEmail={!!a.Email} emailReady={d.emailSending === 'ON'} />
+          <p className="hint">Invites are for the next Wednesday at 2:00 PM PT. The applicant moves to Invited once it is sent.</p>
+        </section>
+      </div>
       <section className="panel"><h2>Move stage</h2><StageForm ids={[appId]} current={s(a.Stage)} /></section>
       <div className="two-col">
         <section className="panel">

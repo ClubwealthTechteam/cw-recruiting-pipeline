@@ -12,14 +12,9 @@ export function validChatToken(id: string, token: string): boolean {
   return a.length === b.length && timingSafeEqual(a, b);
 }
 
-/**
- * Starts the "Recruiting – chat bubble" Claude routine (runs on the Claude plan, no API key or API charges).
- * Same mechanism as the Admin Hub: the routine's own API trigger token, kept in Vercel.
- */
-export async function fireChatRoutine(text: string) {
-  const id = process.env.CHAT_ROUTINE_ID;
-  const token = process.env.CHAT_ROUTINE_TOKEN;
-  if (!id || !token) throw new Error('The assistant is not connected yet (CHAT_ROUTINE_ID / CHAT_ROUTINE_TOKEN).');
+/** Starts a Claude routine through its API trigger (runs on the Claude plan; same method as the Admin Hub). */
+export async function fireRoutine(id: string | undefined, token: string | undefined, text: string) {
+  if (!id || !token) throw new Error('not configured');
   const res = await fetch(`https://api.anthropic.com/v1/claude_code/routines/${id}/fire`, {
     method: 'POST',
     headers: {
@@ -31,5 +26,15 @@ export async function fireChatRoutine(text: string) {
     body: JSON.stringify({ text }),
     signal: AbortSignal.timeout(10_000)
   });
-  if (!res.ok) throw new Error(res.status === 429 ? 'The assistant is busy. Try again in a minute.' : `The assistant could not start (${res.status}).`);
+  if (!res.ok) throw new Error(res.status === 429 ? 'busy, try again in a minute' : `could not start (${res.status})`);
+}
+
+/** The "Recruiting – chat bubble answers" routine. */
+export async function fireChatRoutine(text: string) {
+  if (!process.env.CHAT_ROUTINE_ID || !process.env.CHAT_ROUTINE_TOKEN) throw new Error('The assistant is not connected yet (CHAT_ROUTINE_ID / CHAT_ROUTINE_TOKEN).');
+  try {
+    await fireRoutine(process.env.CHAT_ROUTINE_ID, process.env.CHAT_ROUTINE_TOKEN, text);
+  } catch (e) {
+    throw new Error(`The assistant ${e instanceof Error ? e.message : 'could not start'}.`);
+  }
 }
