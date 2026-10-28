@@ -3,6 +3,8 @@ import ChatBubble from '@/components/ChatBubble';
 import Freshness from '@/components/Freshness';
 import AutoRefresh from '@/components/AutoRefresh';
 import NewVersionNotice from '@/components/NewVersionNotice';
+import TopProgress from '@/components/TopProgress';
+import { Suspense } from 'react';
 import { requireUser } from '@/lib/auth';
 import { getData } from '@/lib/sheet';
 import { s } from '@/lib/pipeline';
@@ -24,6 +26,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   }
   return (
     <div className="shell">
+      <Suspense fallback={null}><TopProgress /></Suspense>
       <aside className="sidebar">
         <div className="brand">Club Wealth</div>
         <div className="product">Recruiting Pipeline</div>

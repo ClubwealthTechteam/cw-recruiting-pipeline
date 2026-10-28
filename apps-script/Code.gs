@@ -830,6 +830,9 @@ var LIST_FIELDS = ['Applicant ID', 'Source', 'Applied At (PT)', 'First Name', 'L
   'Reminder Sent At', 'Zoom Minutes', 'Historical', 'Screen Track', 'Screen Tag', 'Screen Summary', 'Invite Hold',
   'Minutes Early', 'Arrival'];
 
+/** The few fields sent for applicants from before the system, enough for counts by week, source and stage. */
+var OLD_FIELDS = ['Applicant ID', 'Source', 'Applied At (PT)', 'Position', 'Stage', 'Historical'];
+
 // ---------- chat bubble (answers come from a Claude routine, read-only) ----------
 
 function chatRow_(t, id) {
@@ -874,22 +877,28 @@ function zoomRowsApi_(req) {
 
 function api_(req) {
   if (req.action === 'data') {
+    // By default the ~2,000 applicants invited by hand before the system are sent as a few small fields only
+    // (enough for counts), and their history and old emails are left out, so the site loads fast.
+    // withHistory sends everything (the "Include applicants from before the system" box).
     var st = settings_();
-    var apps = plain_(table_(SH.APPLICANTS).rows);
-    if (req.slim) {
-      // List pages and dashboards only: small columns, so the response stays fast.
-      apps = apps.map(function (a) {
-        var o = {};
-        LIST_FIELDS.forEach(function (k) { if (a[k] !== '' && a[k] !== undefined) o[k] = a[k]; });
-        return o;
-      });
-    }
+    var all = !!req.withHistory;
+    var rows = table_(SH.APPLICANTS).rows;
+    var old = {};
+    if (!all) rows.forEach(function (a) { if (a.Historical === 'Y') old[a['Applicant ID']] = true; });
+    var mine = function (r) { return !old[r['Applicant ID']]; };
+    var pick = function (a, fields) {
+      var o = {};
+      fields.forEach(function (k) { if (a[k] !== '' && a[k] !== undefined) o[k] = a[k]; });
+      return o;
+    };
+    if (req.slim) rows = rows.map(function (a) { return pick(a, old[a['Applicant ID']] ? OLD_FIELDS : LIST_FIELDS); });
     return {
-      applicants: apps,
-      history: plain_(table_(SH.HISTORY).rows),
+      applicants: plain_(rows),
+      history: plain_(table_(SH.HISTORY).rows.filter(mine)),
       flags: plain_(table_(SH.FLAGS).rows),
-      zoom: plain_(table_(SH.ZOOM).rows),
-      outbox: plain_(table_(SH.OUTBOX).rows).map(function (e) { delete e.Body; return e; }),
+      zoom: plain_(table_(SH.ZOOM).rows.filter(function (z) { return !old[z['Matched Applicant ID']]; })),
+      outbox: plain_(table_(SH.OUTBOX).rows.filter(mine)).map(function (e) { delete e.Body; return e; }),
+      withHistory: all,
       mode: st.get('MODE'),
       emailSending: st.get('EMAIL_SENDING')
     };
