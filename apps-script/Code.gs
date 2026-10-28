@@ -578,16 +578,31 @@ function screenAndInvite_(st, apps, a) {
   return queueInvite_(st, a, session, 'Invite');
 }
 
-/** "Already invited (same email)" when another applicant row with this email already has an invite queued or sent. */
+/**
+ * Catches the same person applying twice (form and OLJ, or two forms): another applicant row with the same email,
+ * or the same first and last name, already has an invite queued or sent for a session that has not passed.
+ */
 function sameEmailInvited_(a) {
   var e = String(a.Email || '').trim().toLowerCase();
-  if (!e) return '';
-  var dup = table_(SH.OUTBOX).rows.some(function (x) {
-    return x['Applicant ID'] !== a['Applicant ID'] && String(x.To).trim().toLowerCase() === e &&
-      ['Invite', 'Re-invite'].indexOf(x.Type) !== -1 && (x.Status === 'Queued' || x.Status === 'Sent') &&
-      ymdOf_(x['Interview Date']) >= todayPT(new Date());
+  // first given name + surname, so "Maria A. Santos" on OLJ matches "Maria Santos" on the form
+  var key = function (r) {
+    var f = normName(r['First Name']).split(' ')[0], l = normName(r['Last Name']).split(' ').pop();
+    return f && l ? f + ' ' + l : '';
+  };
+  var name = key(a);
+  var today = todayPT(new Date());
+  var invitedIds = {};
+  table_(SH.OUTBOX).rows.forEach(function (x) {
+    if (['Invite', 'Re-invite', 'OLJ Invite'].indexOf(x.Type) !== -1 && (x.Status === 'Queued' || x.Status === 'Sent') &&
+        ymdOf_(x['Interview Date']) >= today) invitedIds[x['Applicant ID']] = String(x.To).trim().toLowerCase();
   });
-  return dup ? 'Already invited (same email)' : '';
+  var hit = table_(SH.APPLICANTS).rows.filter(function (b) {
+    if (b['Applicant ID'] === a['Applicant ID'] || !(b['Applicant ID'] in invitedIds)) return false;
+    var be = String(b.Email || '').trim().toLowerCase();
+    return (e && (be === e || invitedIds[b['Applicant ID']] === e)) ||
+      (!!name && key(b) === name);
+  })[0];
+  return hit ? 'Already invited as ' + hit['Applicant ID'] + ' (same person)' : '';
 }
 
 function pendingInvite_(applicantId) {

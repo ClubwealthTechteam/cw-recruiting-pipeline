@@ -193,7 +193,7 @@ test('form applicants are screened before the invite: held-back reasons are reco
   assert.deepEqual(out.map((e) => e.To), ['good@example.com']);
   assert.match(out[0].Body, /today, Wednesday, October 28, 2026/);
   const holds = env.rows('Applicants').filter((a) => a.Stage === 'Applied').map((a) => [a['First Name'] + ' ' + a['Last Name'], a['Invite Hold']]);
-  assert.deepEqual(holds, [['Good Fit', ''], ['Gen Va', 'Position not open: General VA'], ['Good Again', 'Already invited (same email)']]);
+  assert.deepEqual(holds, [['Good Fit', ''], ['Gen Va', 'Position not open: General VA'], ['Good Again', 'Already invited as F-3 (same person)']]);
 });
 
 test('site API: secret required, bulk stage change logs history, reason required for Not Fit', () => {
@@ -401,4 +401,16 @@ test('queued emails go to the Zapier hook only while EMAIL_SENDING is ON, and ne
   assert.equal(env.rows('Outbox').find((e) => e['Email ID'] === 'E-3').Status, 'Failed');
   assert.equal(ctxCalls.posts.filter((p) => /E-3/.test(p.body || '')).length, 1);
   ctxCalls.code = 200;
+});
+
+test('the same person on OLJ with a different email is not invited twice', () => {
+  const env = load({ mode: 'LIVE', now: pdt('2026-10-28T09:00:00'), settings: { AUTO_INVITES: 'ON' }, formRows: [formRow(pdt('2026-10-20T10:00:00'), 'Old', 'One', 'old@example.com', 'ISA', 'Yes')] });
+  env.ctx.importHistory();
+  env.ctx.SpreadsheetApp.openById().getSheetByName().appendRow(formRow(pdt('2026-10-28T08:00:00'), 'Maria', 'Santos', 'ms@example.com', 'Collections VA', ''));
+  env.ctx.tick();
+  addRow(env, 'OLJ', { 'Conversation Key': 'k77', 'Job Post': 'Collections Virtual Assistant (Remote)', 'Applicant Name': 'Maria A. Santos', 'Email Found': 'other@example.com', Summary: 's' });
+  env.ctx.tick();
+  const olj = env.rows('Applicants').find((x) => x['Applicant ID'] === 'O-k77');
+  assert.equal(olj['Invite Hold'], 'Already invited as F-3 (same person)');
+  assert.equal(env.rows('Outbox').filter((e) => e['Applicant ID'] === 'O-k77').length, 0);
 });
