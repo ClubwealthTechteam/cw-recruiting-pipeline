@@ -3,6 +3,8 @@
  * Sends queued "Send invite via OLJ" requests from the site (Outbox rows Type "OLJ Invite", Status "Queued").
  * One sign-in per run, normal pace, stops on any captcha or verification. Sends only the approved invite text
  * (no signature), once per conversation and session date. Never labels, archives, pins or hires.
+ * Sends ONLY when the applicant said they are interested AND sent a summary, resume or cover message, and is
+ * not on the do-not-invite list (queue item "blocked" is set by the caller after checking the sheets).
  *
  * Usage: node olj_send.js --queue queue.json --out result.json
  *   queue.json: [{ "emailId": "E-…", "key": "<conversation key>", "session": "YYYY-MM-DD" }]
@@ -42,6 +44,27 @@ function oljInviteText(session, now) {
   ].join('\n\n');
 }
 
+const plainText = (html) => String(html || '').replace(/<br\s*\/?>/gi, '\n').replace(/<\/(div|p|li)>/gi, '\n').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/[ \t]+/g, ' ').trim();
+
+/**
+ * Miguel's rule (2026-10-28): invite only if the applicant said they are interested in the position AND sent a
+ * summary, resume or cover message. messages = applicant's own messages [{ body, hasAttachment }].
+ * Returns { ok, reason }.
+ */
+function applicationReady(messages) {
+  const text = messages.map((m) => plainText(m.body)).join('\n');
+  const lower = text.toLowerCase();
+  const interested = /\binterest(ed)?\b|\bapply(ing)?\b|\bapplication\b|\bapplied\b|this (position|role|job|opportunity)|the (position|role)|\bopportunity\b|\bconsider (me|my)\b/.test(lower);
+  const resumeLink = /\b(resume|cv|curriculum vitae|portfolio)\b/.test(lower) && /(https?:\/\/|drive\.google|docs\.google|\.pdf\b)/.test(lower);
+  const attachment = messages.some((m) => m.hasAttachment);
+  const words = text.split(/\s+/).filter(Boolean).length;
+  const summary = words >= 60 || /\b(\d+\+?\s*(years?|yrs?|months?))\b.*\b(experience|exp)\b|\bexperience (in|as|with)\b/.test(lower) && words >= 25;
+  if (!messages.length) return { ok: false, reason: 'No message from the applicant yet' };
+  if (!interested) return { ok: false, reason: 'Has not said they are interested in the position' };
+  if (!(resumeLink || attachment || summary)) return { ok: false, reason: 'No summary, resume or cover message yet' };
+  return { ok: true, reason: resumeLink || attachment ? 'Interested, sent a resume' : 'Interested, sent a summary/cover message' };
+}
+
 function toHtml(text) {
   const esc = (x) => x.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   return text.split(/\n\s*\n/).map((bl) => {
@@ -64,7 +87,13 @@ async function main() {
   const browser = await chromium.launch();
   const page = await (await browser.newContext({ viewport: { width: 1366, height: 1000 } })).newPage();
   let lastAdd = null;
-  page.on('response', (r) => { if (r.request().method() === 'POST' && /\/add(\?|$)/.test(r.url())) lastAdd = r.status(); });
+  const threads = {};
+  page.on('response', async (r) => {
+    const u = r.url();
+    if (r.request().method() === 'POST' && /\/add(\?|$)/.test(u)) lastAdd = r.status();
+    const t = r.request().method() === 'GET' && u.match(/\/thread\/([A-Za-z0-9]+)(\?|$)/);
+    if (t) { try { threads[t[1]] = await r.json(); } catch {} }
+  });
 
   await page.goto('https://www.onlinejobs.ph/login', { waitUntil: 'domcontentloaded' });
   await sleep(1500);
@@ -85,6 +114,13 @@ async function main() {
       results.push({ emailId: q.emailId, status: 'Skipped', note: 'invite for this date already in the conversation' });
       continue;
     }
+    const data = (threads[q.key] && threads[q.key].data) || [];
+    const partner = data[0] && data[0].partner;
+    const mine = data.filter((m) => m.message && m.owner && m.owner.hash_id === partner)
+      .map((m) => ({ body: m.message.body, hasAttachment: !!(m.attachments && m.attachments.length) || /attachment|\.pdf|\.docx?/i.test(JSON.stringify(m.files || m.attachment || '')) }));
+    const ready = applicationReady(mine);
+    if (!ready.ok) { results.push({ emailId: q.emailId, status: 'Skipped', note: ready.reason }); continue; }
+    if (q.blocked) { results.push({ emailId: q.emailId, status: 'Skipped', note: 'On the do-not-invite list: ' + q.blocked }); continue; }
     const box = page.locator('trix-editor:visible');
     const btn = page.locator('button:visible', { hasText: /^\s*send message\s*$/i });
     if ((await box.count()) !== 1 || (await btn.count()) !== 1) { results.push({ emailId: q.emailId, status: 'Failed', error: 'message box not found' }); continue; }
@@ -106,4 +142,4 @@ async function main() {
 if (require.main === module) {
   main().catch((e) => { try { fs.writeFileSync(OUT, JSON.stringify({ status: 'error', reason: e.message }, null, 1)); } catch {} console.log('ERROR:', e.message); process.exit(1); });
 }
-module.exports = { oljInviteText };
+module.exports = { oljInviteText, applicationReady };
