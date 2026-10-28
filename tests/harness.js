@@ -61,6 +61,7 @@ function fmt(date, tz, pattern) {
 const ctxCalls = {};
 function load({ now, formRows = [], mode = 'TEST', settings = {}, rejected = [] }) {
   const sheets = {};
+  const props = {};
   for (const [k, h] of Object.entries(HEADERS)) sheets[k] = makeSheet(k, [h]);
   sheets.Outbox.data[0].push('Applied', 'Queued By');
   const base = { MODE: mode, TEST_EMAIL: 'techteam@clubwealth.com', SOURCE_SHEET_ID: 'SRC', MIN_MINUTES_COMPLETED: '30', ...settings };
@@ -81,7 +82,8 @@ function load({ now, formRows = [], mode = 'TEST', settings = {}, rejected = [] 
     },
     Utilities: { formatDate: fmt, sleep: () => {} },
     LockService: { getScriptLock: () => ({ tryLock: () => true, waitLock: () => {}, releaseLock: () => {} }) },
-    PropertiesService: { getScriptProperties: () => ({ getProperty: () => 's3cret' }) },
+    // secrets and hook URLs read as 's3cret'; anything the script stores itself (setProperty) reads back as stored
+    PropertiesService: { getScriptProperties: () => ({ getProperty: (k) => (k in props ? props[k] : /_AT$/.test(k) ? null : 's3cret'), setProperty: (k, v) => { props[k] = String(v); } }) },
     ContentService: { createTextOutput: (s) => ({ s, setMimeType() { return this; } }), MimeType: { JSON: 'json' } },
     ScriptApp: { WeekDay: { THURSDAY: 'THURSDAY' }, getProjectTriggers: () => [], deleteTrigger() {}, newTrigger: () => ({ timeBased: () => ({ everyMinutes: () => ({ create() {} }), onWeekDay: () => ({ atHour: () => ({ create() {} }) }) }), forSpreadsheet: () => ({ onFormSubmit: () => ({ create() {} }), onChange: () => ({ create() {} }) }) }) },
     UrlFetchApp: { fetch: (url, opts) => { (ctxCalls.fetches = ctxCalls.fetches || []).push(url); (ctxCalls.posts = ctxCalls.posts || []).push({ url, body: opts && opts.payload }); return { getResponseCode: () => ctxCalls.code || 200 }; } }
