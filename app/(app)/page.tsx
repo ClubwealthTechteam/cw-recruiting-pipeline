@@ -27,7 +27,7 @@ export default async function Dashboard() {
         <Tile label="Confirmation rate" value={pct(m.confirmationRate)} note="Confirmed ÷ invited" />
         <Tile label="Show-up rate" value={pct(m.showUpRate)} note="Joined Zoom ÷ confirmed" />
         <Tile label="Completion rate" value={pct(m.completionRate)} note="30+ minutes ÷ joined" />
-        <Tile label="No-show rate" value={pct(m.noShowRate)} note="No Show ÷ invited" />
+        <Tile label="No-show rate" value={pct(m.noShowRate)} note="No Show ÷ confirmed" />
         <Tile label="Days to interview" value={m.medianDaysToInterview === null ? '—' : String(m.medianDaysToInterview)} note="Median, application to session" />
         <Tile label="Awaiting review" value={String(m.awaitingReview)} note="Interview Completed" href="/candidates?stage=Interview+Completed" />
         <Tile label="Needs attention" value={String(m.openFlags)} note="Open items" href="/attention" />
@@ -78,11 +78,11 @@ export default async function Dashboard() {
         <p className="sub">The numbers behind the session chart.</p>
         {m.sessions.length === 0 ? <p className="empty">No sessions tracked yet. Numbers appear after the first Wednesday run by the system.</p> : (
           <table className="table">
-            <thead><tr><th>Wednesday</th><th>Invited</th><th>Confirmed</th><th>Joined</th><th>Completed</th><th>No Show</th><th style={{ width: '30%' }}>Invited vs completed</th></tr></thead>
+            <thead><tr><th>Wednesday</th><th>Invited</th><th>Confirmed</th><th>Joined</th><th>Completed</th><th>No Show</th><th>No Confirmation</th><th style={{ width: '30%' }}>Invited vs completed</th></tr></thead>
             <tbody>
               {m.sessions.map((x) => (
                 <tr key={x.date}>
-                  <td><Link href={`/session?date=${x.date}`}>{formatDate(x.date)}</Link></td><td>{x.invited}</td><td>{x.confirmed}</td><td>{x.attended}</td><td>{x.completed}</td><td>{x.noShow}</td>
+                  <td><Link href={`/session?date=${x.date}`}>{formatDate(x.date)}</Link></td><td>{x.invited}</td><td>{x.confirmed}</td><td>{x.attended}</td><td>{x.completed}</td><td>{x.noShow}</td><td>{x.noConfirmation}</td>
                   <td><div className="hbar"><div className="hbar-total" style={{ width: `${(x.invited / maxSession) * 100}%` }}><div className="hbar-done" style={{ width: `${x.invited ? (x.completed / x.invited) * 100 : 0}%` }} /></div></div></td>
                 </tr>
               ))}

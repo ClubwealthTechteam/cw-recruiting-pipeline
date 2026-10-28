@@ -202,5 +202,5 @@ test('Slack messages are short bulleted lists', () => {
   const many = L.slackAttention(Array.from({ length: 10 }, (_, i) => ({ type: 'Applicant question', name: 'P' + i })), '');
   assert.match(many, /• \+2 more$/);
   assert.match(L.slackLate([{ name: 'Romie', minutesLate: 7 }]), /Romie joined 7 min late/);
-  assert.match(L.slackSessionResults('2026-10-28', { completed: 5, dnc: 2, noshow: 3 }, ''), /No show: 3/);
+  assert.match(L.slackSessionResults('2026-10-28', { completed: 5, dnc: 2, noshow: 3, noconf: 4 }, ''), /No show \(confirmed\): 3\n• No confirmation: 4/);
 });

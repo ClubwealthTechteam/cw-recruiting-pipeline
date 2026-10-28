@@ -15,6 +15,7 @@ var STAGES = [
   'Interview Completed',
   'Did Not Complete',
   'No Show',
+  'No Confirmation',
   'Passed',
   'Hired',
   'Onboarded',
@@ -414,7 +415,8 @@ function slackLate(list) {
 /** Session results after Zoom is finalized. */
 function slackSessionResults(day, c, siteUrl) {
   return '*Session results, ' + longDate(day) + '*\n' + bullets_([
-    'Completed (30+ min): ' + c.completed, 'Did not complete: ' + c.dnc, 'No show: ' + c.noshow
+    'Completed (30+ min): ' + c.completed, 'Did not complete: ' + c.dnc, 'No show (confirmed): ' + c.noshow,
+    'No confirmation: ' + (c.noconf || 0)
   ]) + (siteUrl ? '\n<' + siteUrl + '/session?date=' + day + '|Open the session>' : '');
 }
 

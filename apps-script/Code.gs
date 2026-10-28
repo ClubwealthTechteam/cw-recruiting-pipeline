@@ -671,14 +671,15 @@ function processZoom_(st) {
         minutes[r['Matched Applicant ID']] = (minutes[r['Matched Applicant ID']] || 0) + (Number(r['Total Minutes']) || 0);
       }
     });
-    var counts = { completed: 0, dnc: 0, noshow: 0 };
+    var counts = { completed: 0, dnc: 0, noshow: 0, noconf: 0 };
     apps.rows.forEach(function (a) {
       if (ymdOf_(a['Interview Date']) !== fin || PRE_INTERVIEW.indexOf(a.Stage) === -1) return;
       var m = minutes[a['Applicant ID']];
-      var res = m === undefined ? 'No Show' : zoomResult(m, minMin);
+      // Not seen in Zoom: No Show only for people who confirmed; invited but never confirmed is No Confirmation.
+      var res = m !== undefined ? zoomResult(m, minMin) : a.Stage === 'Confirmed' ? 'No Show' : 'No Confirmation';
       if (m !== undefined) update_(apps, a, { 'Zoom Minutes': Math.round(m) });
       setStage_(apps, a, res, 'System', m === undefined ? 'Not seen in Zoom' : Math.round(m) + ' minutes in Zoom');
-      if (!isTest_(a)) counts[res === 'No Show' ? 'noshow' : res === 'Did Not Complete' ? 'dnc' : 'completed']++;
+      if (!isTest_(a)) counts[{ 'No Show': 'noshow', 'No Confirmation': 'noconf', 'Did Not Complete': 'dnc' }[res] || 'completed']++;
     });
     z.rows.forEach(function (r) {
       if (ymdOf_(r['Interview Date']) === fin && r['Matched Applicant ID'] && !r.Result) {

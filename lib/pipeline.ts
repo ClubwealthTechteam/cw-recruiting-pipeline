@@ -2,13 +2,13 @@ import type { Row } from './sheet';
 
 export const STAGES = [
   'Applied', 'Invited', 'Confirmed', 'Open for re-invite', 'Interview Completed',
-  'Did Not Complete', 'No Show', 'Passed', 'Hired', 'Onboarded', 'Not Fit'
+  'Did Not Complete', 'No Show', 'No Confirmation', 'Passed', 'Hired', 'Onboarded', 'Not Fit'
 ] as const;
 
 /** Board column order: the main flow first, then the side outcomes. */
 export const BOARD_STAGES = [
   'Applied', 'Invited', 'Confirmed', 'Interview Completed', 'Passed', 'Hired', 'Onboarded',
-  'Open for re-invite', 'Did Not Complete', 'No Show', 'Not Fit'
+  'Open for re-invite', 'Did Not Complete', 'No Show', 'No Confirmation', 'Not Fit'
 ];
 
 /** Hired or further along (Onboarded counts as hired everywhere). */
@@ -18,7 +18,7 @@ export type Stage = (typeof STAGES)[number];
 /** Grey = not engaged yet, blue = in progress, amber = needs action, red = missed, green = success. */
 export const STAGE_TONE: Record<string, string> = {
   Applied: 'grey', Invited: 'blue', Confirmed: 'blue', 'Open for re-invite': 'amber',
-  'Interview Completed': 'amber', 'Did Not Complete': 'red', 'No Show': 'red',
+  'Interview Completed': 'amber', 'Did Not Complete': 'red', 'No Show': 'red', 'No Confirmation': 'grey',
   Passed: 'green', Hired: 'green', Onboarded: 'green', 'Not Fit': 'grey'
 };
 
@@ -100,7 +100,7 @@ function days(a: string, b: string): number {
   return (Date.parse(`${ymd(b)}T00:00:00Z`) - Date.parse(`${ymd(a)}T00:00:00Z`)) / 86_400_000;
 }
 
-export type SessionStats = { date: string; invited: number; confirmed: number; attended: number; completed: number; noShow: number };
+export type SessionStats = { date: string; invited: number; confirmed: number; attended: number; completed: number; noShow: number; noConfirmation: number };
 
 /**
  * Funnel numbers. Historical applicants (invited by hand before the system, no Zoom data) are left out of
@@ -138,10 +138,11 @@ export function metrics(allApplicants: Row[], history: Row[], flags: Row[], now 
       confirmed: inv.filter((a) => s(a['Confirmed At']) || did(a, 'Confirmed')).length,
       attended: inv.filter(attended).length,
       completed: inv.filter((a) => did(a, 'Interview Completed')).length,
-      noShow: inv.filter((a) => did(a, 'No Show')).length
+      noShow: inv.filter((a) => did(a, 'No Show')).length,
+      noConfirmation: inv.filter((a) => did(a, 'No Confirmation')).length
     };
   });
-  const finished = sessions.filter((x) => x.attended + x.noShow > 0);
+  const finished = sessions.filter((x) => x.attended + x.noShow + x.noConfirmation > 0);
   const sum = (k: keyof SessionStats) => finished.reduce((t, x) => t + (x[k] as number), 0);
 
   // Pass rate by position, among those who completed an interview and have a decision
@@ -161,7 +162,7 @@ export function metrics(allApplicants: Row[], history: Row[], flags: Row[], now 
     confirmationRate: rate(sum('confirmed'), sum('invited')),
     showUpRate: rate(sum('attended'), sum('confirmed')),
     completionRate: rate(sum('completed'), sum('attended')),
-    noShowRate: rate(sum('noShow'), sum('invited')),
+    noShowRate: rate(sum('noShow'), sum('confirmed')),
     medianDaysToInterview: median(toInterview),
     byPosition,
     openFlags: flags.filter((f) => s(f.Status) === 'Open').length,

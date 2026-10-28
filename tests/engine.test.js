@@ -143,7 +143,7 @@ test('Wednesday 6 AM reminders go to confirmed applicants for that day only, onc
   assert.match(rem[0].Body, /later today, Wednesday, October 28, 2026, at 2:00 PM Pacific Daylight Time \(PDT\)/);
 });
 
-test('Zoom: 30+ minutes completed, under 30 did not complete, unseen no show, non-invitees ignored', () => {
+test('Zoom: 30+ minutes completed, under 30 did not complete, unseen confirmed no show, unseen unconfirmed no confirmation, non-invitees ignored', () => {
   const env = invitedEnv();
   env.setNow(pdt('2026-10-28T15:35:00'));
   addRow(env, 'Zoom Attendance', { 'Interview Date': '2026-10-28', 'Zoom Display Name': 'Maria Santos_Collections', 'Parsed Name': 'Maria Santos', 'Parsed Position': 'Collections', 'Total Minutes': 45, 'Minutes Early': 12, Arrival: '12 min early (on time)' });
@@ -152,6 +152,8 @@ test('Zoom: 30+ minutes completed, under 30 did not complete, unseen no show, no
   env.ctx.tick();
   // not final yet: stages unchanged
   assert.ok(env.rows('Applicants').every((a) => a.Stage === 'Invited'));
+  const A = env.sheets.Applicants.data;
+  A.find((r) => r[A[0].indexOf('First Name')] === 'Ana')[A[0].indexOf('Stage')] = 'Confirmed';
   env.sheets.Settings.appendRow(['ZOOM_FINALIZE', '2026-10-28', '']);
   env.ctx.tick();
   const a = Object.fromEntries(env.rows('Applicants').map((x) => [x['First Name'], x]));
@@ -255,7 +257,7 @@ test('Zoom backup path: zoomRows API appends rows and finalizes the day', () => 
   env.ctx.tick();
   const a = Object.fromEntries(env.rows('Applicants').map((x) => [x['First Name'], x]));
   assert.equal(a['Maria Clara'].Stage, 'Interview Completed');
-  assert.equal(a.Jose.Stage, 'No Show');
+  assert.equal(a.Jose.Stage, 'No Confirmation'); // invited, never confirmed, not seen
 });
 
 test('site API: data leaves out the before-system applicants\' details and history unless asked', () => {
@@ -335,7 +337,7 @@ test('settings stored as dates by Sheets still work: reminders queue once, Zoom 
   env.setNow(pdt('2026-10-28T15:35:00'));
   env.sheets.Settings.appendRow(['ZOOM_FINALIZE', new Date('2026-10-28T00:00:00-07:00'), '']);
   env.ctx.tick();
-  assert.equal(env.rows('Applicants').find((a) => a['First Name'] === 'Ana').Stage, 'No Show');
+  assert.equal(env.rows('Applicants').find((a) => a['First Name'] === 'Ana').Stage, 'No Confirmation');
 });
 
 test('OLJ applicants never get the reminder by email', () => {
@@ -581,7 +583,7 @@ test('test applicants are never counted: no Slack alert, not in session results'
   ctxCalls.posts = [];
   env.ctx.tick();
   const msg = ctxCalls.posts.map((p) => p.body || '').find((b) => /Session results/.test(b));
-  assert.match(JSON.parse(msg).text, /No show: 2/); // 3 invitees, one of them a test applicant
+  assert.match(JSON.parse(msg).text, /No confirmation: 2/); // 3 unconfirmed invitees, one of them a test applicant
 });
 
 test('Onboarded is a stage the site can move people to', () => {
