@@ -3,7 +3,7 @@ import { currentUser } from '@/lib/auth';
 import { act } from '@/lib/sheet';
 import { fireRoutine } from '@/lib/chat';
 
-const ALLOWED = ['setStage', 'addNote', 'setEmail', 'resolveFlag', 'sendInvite'];
+const ALLOWED = ['setStage', 'addNote', 'setEmail', 'resolveFlag', 'sendInvite', 'saveScore', 'setTags', 'saveView', 'deleteView', 'sendReply', 'sendOljMessage'];
 
 export async function POST(req: Request) {
   const user = await currentUser();
@@ -13,7 +13,7 @@ export async function POST(req: Request) {
   const { action, ...payload } = body;
   try {
     const data = await act(action, user, payload);
-    if (action === 'sendInvite' && payload.channel === 'olj') {
+    if ((action === 'sendInvite' && payload.channel === 'olj') || action === 'sendOljMessage') {
       // Start the OLJ sender now if it is connected; otherwise the next scheduled OLJ run sends it.
       const started = await fireRoutine(process.env.OLJ_SEND_ROUTINE_ID, process.env.OLJ_SEND_ROUTINE_TOKEN, 'Send queued OLJ invites')
         .then(() => true).catch(() => false);

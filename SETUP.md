@@ -44,6 +44,22 @@ Re-invite, Reminder or Confirmation to the hook and marks it Sent (or Failed, wh
 emailed. Set `EMAIL_SENDING` to anything else to stop all email at once.
 Emails go one at a time, about 25 s apart (Microsoft 365 refuses overlapping SMTP logins). Both Apps Script and
 the Zap refuse any body that is not the approved template (Club Wealth sign-off and banner).
+Answers typed in the CRM inbox are Outbox type **Reply** (subject "RE: ClubWealth | Pre-Interview invite"), sent the
+same way with the same sign-off and banner.
+
+### Slack DMs to Am and Camille
+
+Workflow **recruiting-pipeline-slack-alerts** (private, https://zapier.com/workflow/01a183c5-fd35-7a96-bf49-fe5a0629541b)
+DMs one short message to Am and Camille per call (`{"text": …, "test": true}` sends to Miguel only).
+Apps Script → Script Properties: add `SLACK_HOOK` = that workflow's webhook URL. Settings `SLACK_ALERTS` = `OFF` pauses it.
+Messages: new Great/Good-fit applicants and new Needs Attention items (batched every 5 minutes), late joiners during
+the Wednesday session, the session results after Zoom is finalized, and a weekly report on Thursday at 9 AM
+(script time zone: Project Settings → Time zone = America/Los_Angeles). The first run only starts the clock (no backlog).
+
+### After pasting a new Code.gs with new tabs or columns
+Run `setup()` once from the editor: it adds the Scorecards and Views tabs, the Applicants "Tags" column, the OLJ
+"Thread" column and the weekly-report trigger, and recreates the other triggers.
+
 
 ### Automatic screening (Miguel, 2026-10-28)
 With `AUTO_INVITES` = `ON`, every new form response and OLJ applicant is screened before an invite is queued:

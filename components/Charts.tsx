@@ -1,5 +1,6 @@
 'use client';
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 
 /* Plain SVG charts. One y-scale per chart, thin marks, hover tooltips, nulls drawn as gaps (never as 0). */
 
@@ -19,8 +20,9 @@ function Tooltip({ tip }: { tip: Tip }) {
 }
 
 /** Applicants per week, stacked Form + OLJ, with a 2px gap between segments. */
-export function WeeklyBars({ data }: { data: { label: string; form: number; olj: number }[] }) {
+export function WeeklyBars({ data }: { data: { label: string; form: number; olj: number; href?: string }[] }) {
   const [tip, setTip] = useState<Tip>(null);
+  const router = useRouter();
   const W = 760, H = 260, L = 40, B = 30, T = 22;
   const max = Math.max(1, ...data.map((d) => d.form + d.olj));
   const step = (W - L) / data.length, bw = Math.min(46, step * 0.55);
@@ -36,8 +38,8 @@ export function WeeklyBars({ data }: { data: { label: string; form: number; olj:
           const hf = y(0) - y(d.form);
           const ho = y(0) - y(d.olj);
           return (
-            <g key={d.label}
-              onMouseMove={(e) => setTip({ x: e.nativeEvent.offsetX + 12, y: e.nativeEvent.offsetY - 10, lines: [`Week of ${d.label}`, `Form: ${d.form}`, `OnlineJobs.ph: ${d.olj}`, `Total: ${total}`] })}>
+            <g key={d.label} className={d.href ? 'clickable' : ''} onClick={() => d.href && router.push(d.href)}
+              onMouseMove={(e) => setTip({ x: e.nativeEvent.offsetX + 12, y: e.nativeEvent.offsetY - 10, lines: [`Week of ${d.label}`, `Form: ${d.form}`, `OnlineJobs.ph: ${d.olj}`, `Total: ${total}`, ...(d.href ? ['Click to see the people'] : [])] })}>
               <rect x={L + i * step} y={T} width={step} height={H - T - B} fill="transparent" />
               {d.form > 0 && <rect x={x} y={y(d.form)} width={bw} height={hf} rx={d.olj ? 0 : 4} fill={SERIES[0]} />}
               {d.olj > 0 && <rect x={x} y={y(total)} width={bw} height={Math.max(0, ho - 2)} rx={4} fill={SERIES[1]} />}
@@ -112,8 +114,9 @@ export function RateTrend({ data }: { data: { label: string; confirmation: numbe
 }
 
 /** Horizontal bars, one series. value is a count or a 0–1 rate (format says which). */
-export function HBars({ data, format, ariaLabel }: { data: { label: string; value: number; note?: string }[]; format: 'count' | 'pct'; ariaLabel: string }) {
+export function HBars({ data, format, ariaLabel }: { data: { label: string; value: number; note?: string; href?: string }[]; format: 'count' | 'pct'; ariaLabel: string }) {
   const [tip, setTip] = useState<Tip>(null);
+  const router = useRouter();
   const max = format === 'pct' ? 1 : Math.max(1, ...data.map((d) => d.value));
   const rowH = 36, W = 760, L = 250, R = 110;
   const H = data.length * rowH + 6;
@@ -126,7 +129,8 @@ export function HBars({ data, format, ariaLabel }: { data: { label: string; valu
           const w = Math.max(d.value > 0 ? 3 : 0, ((W - L - R) * d.value) / max);
           const yy = i * rowH + 6;
           return (
-            <g key={d.label} onMouseMove={(e) => setTip({ x: e.nativeEvent.offsetX + 12, y: e.nativeEvent.offsetY - 10, lines: [d.label, show(d.value) + (d.note ? ` · ${d.note}` : '')] })}>
+            <g key={d.label} className={d.href ? 'clickable' : ''} onClick={() => d.href && router.push(d.href)}
+              onMouseMove={(e) => setTip({ x: e.nativeEvent.offsetX + 12, y: e.nativeEvent.offsetY - 10, lines: [d.label, show(d.value) + (d.note ? ` · ${d.note}` : ''), ...(d.href ? ['Click to see the people'] : [])] })}>
               <rect x={0} y={yy - 3} width={W} height={rowH} fill="transparent" />
               <text x={L - 12} y={yy + 16} textAnchor="end" className="axis-strong">{d.label}</text>
               <rect x={L} y={yy + 2} width={W - L - R} height={18} fill="#f0f3f8" rx={4} />
