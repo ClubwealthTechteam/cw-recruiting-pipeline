@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { getData } from '@/lib/sheet';
-import { metrics, pct, formatDate, STAGES, s as str } from '@/lib/pipeline';
+import { metrics, pct, formatDate, STAGES, s as str, ymd, positionCounts, daysAgoPT, upcomingWednesday } from '@/lib/pipeline';
 import { WeeklyBars, RateTrend, HBars } from '@/components/Charts';
 import DataError from '@/components/DataError';
 
@@ -10,6 +10,11 @@ export default async function Dashboard() {
   const m = metrics(d.applicants, d.history, d.flags);
   const active = d.applicants.filter((a) => str(a.Historical) !== 'Y');
   const maxSession = Math.max(1, ...m.sessions.map((x) => x.invited));
+  const since = daysAgoPT(30);
+  const recent = active.filter((a) => ymd(a['Applied At (PT)']) >= since);
+  const nextSession = upcomingWednesday();
+  const forNext = active.filter((a) => ymd(a['Interview Date']) === nextSession);
+  const nextByPosition = new Map(positionCounts(forNext).map((x) => [x.position, x.count]));
 
   return (
     <>
@@ -58,6 +63,14 @@ export default async function Dashboard() {
           <HBars format="pct" ariaLabel="Pass rate by position" data={m.byPosition.map((p) => ({ label: p.position, value: p.rate ?? 0, note: `of ${p.decided}` }))} />
         </section>
       </div>
+
+      <section className="panel">
+        <h2>Applicants by position</h2>
+        <p className="sub">{recent.length} applied in the last 30 days, Form and OLJ. The note shows how many are on the {formatDate(nextSession)} session. Click a position on the Candidates page to see the people.</p>
+        <HBars format="count" ariaLabel="Applicants by position, last 30 days" data={positionCounts(recent).map((x) => ({
+          label: x.position, value: x.count, note: `${nextByPosition.get(x.position) || 0} for ${formatDate(nextSession).replace(/, \d{4}$/, '')}`
+        }))} />
+      </section>
 
       <section className="panel">
         <h2>Interview sessions</h2>
