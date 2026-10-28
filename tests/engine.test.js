@@ -472,10 +472,10 @@ test('Zoom live: minutes so far and arrival show on the applicant during the ses
 test('scorecards: one card per person per applicant, averaged; data and applicant carry them', () => {
   const env = invitedEnv({ EMAIL_SENDING: 'ON' });
   env.ctx.setup();
-  const r1 = env.api({ action: 'saveScore', by: 'Am', id: 'F-2', scores: { Communication: 4, English: 4, Experience: 3, Internet: 4 }, note: 'clear' });
+  const r1 = env.api({ action: 'saveScore', by: 'Am', id: 'F-2', scores: { Communication: 4, English: 4, Experience: 3, Internet: 4, 'Work Setup': 4 }, note: 'clear' });
   assert.equal(r1.data.suggestion, 'Passed');
-  env.api({ action: 'saveScore', by: 'Am', id: 'F-2', scores: { Communication: 3, English: 3, Experience: 3, Internet: 3 } }); // Am edits hers
-  const r2 = env.api({ action: 'saveScore', by: 'Camille', id: 'F-2', scores: { Communication: 4, English: 4, Experience: 4, Internet: 4 } });
+  env.api({ action: 'saveScore', by: 'Am', id: 'F-2', scores: { Communication: 3, English: 3, Experience: 3, Internet: 3, 'Work Setup': 3 } }); // Am edits hers
+  const r2 = env.api({ action: 'saveScore', by: 'Camille', id: 'F-2', scores: { Communication: 4, English: 4, Experience: 4, Internet: 4, 'Work Setup': 4 } });
   assert.equal(r2.data.count, 2);
   assert.equal(r2.data.average, 3.5);
   assert.equal(env.rows('Scorecards').length, 2);

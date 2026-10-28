@@ -175,15 +175,17 @@ test('confirmations written in different ways still count once the sender is mat
   assert.equal(L.confirmsFor('Thanks', 'Ana', 'Reyes'), false);
 });
 
-test('scorecards: 0 until all four criteria are rated; Passed at 3.5+ with no 1s, else Not Fit', () => {
+test('scorecards: 0 until all five criteria are rated; Passed at 3.5+ with no 1s, else Not Fit', () => {
   assert.deepEqual(L.scoreSummary([]), { average: 0, count: 0, suggestion: '' });
-  assert.equal(L.scoreSummary([{ Communication: 4, English: 0, Experience: 4, Internet: 4 }]).count, 0);
-  const pass = L.scoreSummary([{ Communication: 4, English: 4, Experience: 3, Internet: 4 }, { Communication: 3, English: 4, Experience: 3, Internet: 5 }]);
+  assert.equal(L.scoreSummary([{ Communication: 4, English: 0, Experience: 4, Internet: 4, 'Work Setup': 4 }]).count, 0);
+  const pass = L.scoreSummary([{ Communication: 4, English: 4, Experience: 3, Internet: 4, 'Work Setup': 4 }, { Communication: 3, English: 4, Experience: 3, Internet: 5, 'Work Setup': 5 }]);
   assert.equal(pass.count, 2);
-  assert.equal(pass.average, 3.8);
+  assert.equal(pass.average, 3.9);
+  // a card from before Work Setup existed (four scores only) does not count as rated
+  assert.equal(L.scoreSummary([{ Communication: 4, English: 4, Experience: 4, Internet: 4 }]).count, 0);
   assert.equal(pass.suggestion, 'Passed');
-  assert.equal(L.scoreSummary([{ Communication: 5, English: 5, Experience: 5, Internet: 1 }]).suggestion, 'Not Fit');
-  assert.equal(L.scoreSummary([{ Communication: 3, English: 3, Experience: 3, Internet: 4 }]).suggestion, 'Not Fit');
+  assert.equal(L.scoreSummary([{ Communication: 5, English: 5, Experience: 5, Internet: 1, 'Work Setup': 1 }]).suggestion, 'Not Fit');
+  assert.equal(L.scoreSummary([{ Communication: 3, English: 3, Experience: 3, Internet: 4, 'Work Setup': 4 }]).suggestion, 'Not Fit');
 });
 
 test('reply email: plain text escaped, approved sign-off and banner, invite subject', () => {

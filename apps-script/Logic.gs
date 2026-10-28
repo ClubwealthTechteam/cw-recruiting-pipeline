@@ -357,12 +357,13 @@ function replyEmail(text) {
 
 // ---------- interview scorecards ----------
 
-var SCORE_CRITERIA = ['Communication', 'English', 'Experience', 'Internet'];
+// Miguel, 2026-10-28: Work Setup = the applicant's workspace and device (headset, mic, camera, LAN).
+var SCORE_CRITERIA = ['Communication', 'English', 'Experience', 'Internet', 'Work Setup'];
 var SCORE_PASS = 3.5;
 
 /**
  * Average of the saved scorecards (each criterion 1-5; 0 = not rated yet). Suggests Passed at 3.5 or higher
- * with no criterion scored 1 by anyone, otherwise Not Fit. Nothing is suggested until someone rates all four.
+ * with no criterion scored 1 by anyone, otherwise Not Fit. Nothing is suggested until someone rates every criterion.
  */
 function scoreSummary(cards) {
   var rated = (cards || []).filter(function (c) {

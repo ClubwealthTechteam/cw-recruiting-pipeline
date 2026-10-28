@@ -187,9 +187,11 @@ export const daysAgoPT = (days: number, now = new Date()) => addDays(todayPT(now
 
 // ---------- interview scorecards (same rule as scoreSummary in Logic.gs) ----------
 
-export const CRITERIA = ['Communication', 'English', 'Experience', 'Internet'] as const;
+export const CRITERIA = ['Communication', 'English', 'Experience', 'Internet', 'Work Setup'] as const;
+/** How each criterion is labelled on the scorecard. */
+export const CRITERIA_LABEL: Record<string, string> = { 'Work Setup': 'Work setup (workspace & device)' };
 
-/** 0 until someone rates all four; then the average of everyone's cards. Passed at 3.5+ with no 1s, otherwise Not Fit. */
+/** 0 until someone rates every criterion; then the average of everyone's cards. Passed at 3.5+ with no 1s, otherwise Not Fit. */
 export function scoreSummary(cards: Row[]): { average: number; count: number; suggestion: '' | 'Passed' | 'Not Fit' } {
   const rated = cards.filter((c) => CRITERIA.every((k) => Number(c[k]) >= 1 && Number(c[k]) <= 5));
   if (!rated.length) return { average: 0, count: 0, suggestion: '' };
