@@ -88,7 +88,7 @@ function stop(reason, extra = {}) {
       rows.push({
         key: t.thread.hash_id, jobPost: j.title, name: (t.partner && t.partner.name) || '', email: (t.partner && t.partner.email) || '',
         partnerHash: t.partner && t.partner.hash_id, subject: t.thread.subject || '', messages: t.thread.convo_count || 0,
-        lastMessageAt: t.latest_message_date || '', unread: !!t.unread_status, applicantMessages: null
+        lastMessageAt: t.latest_message_date || '', unread: !!t.unread_status, applicantMessages: null, thread: null
       });
     }
   }
@@ -104,6 +104,13 @@ function stop(reason, extra = {}) {
     r.applicantMessages = msgs
       .filter((m) => m.owner && m.owner.hash_id === r.partnerHash && m.message)
       .map((m) => ({ created: m.message.created, body: String(m.message.body || '').replace(/<[^>]+>/g, ' ').slice(0, 3000) }));
+    // The last 20 messages from both sides, for the CRM's OLJ inbox (OLJ tab "Thread").
+    r.thread = msgs.filter((m) => m.message).slice(-20).map((m) => ({
+      from: m.owner && m.owner.hash_id === r.partnerHash ? 'applicant' : 'us',
+      at: m.message.created,
+      text: String(m.message.body || '').replace(/<br\s*\/?>/gi, '\n').replace(/<\/(div|p|li)>/gi, '\n').replace(/<[^>]+>/g, ' ')
+        .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim().slice(0, 1000)
+    }));
     opened++;
   }
   await browser.close();

@@ -468,3 +468,96 @@ test('Zoom live: minutes so far and arrival show on the applicant during the ses
   assert.equal(maria.Stage, 'Did Not Complete');
   assert.equal(maria['Zoom Minutes'], 26);
 });
+
+test('scorecards: one card per person per applicant, averaged; data and applicant carry them', () => {
+  const env = invitedEnv({ EMAIL_SENDING: 'ON' });
+  env.ctx.setup();
+  const r1 = env.api({ action: 'saveScore', by: 'Am', id: 'F-2', scores: { Communication: 4, English: 4, Experience: 3, Internet: 4 }, note: 'clear' });
+  assert.equal(r1.data.suggestion, 'Passed');
+  env.api({ action: 'saveScore', by: 'Am', id: 'F-2', scores: { Communication: 3, English: 3, Experience: 3, Internet: 3 } }); // Am edits hers
+  const r2 = env.api({ action: 'saveScore', by: 'Camille', id: 'F-2', scores: { Communication: 4, English: 4, Experience: 4, Internet: 4 } });
+  assert.equal(r2.data.count, 2);
+  assert.equal(r2.data.average, 3.5);
+  assert.equal(env.rows('Scorecards').length, 2);
+  assert.equal(env.api({ action: 'saveScore', by: 'Am', id: 'F-2', scores: { Communication: 9 } }).ok, false);
+  assert.equal(env.api({ action: 'data', slim: true }).data.scores.length, 2);
+  assert.equal(env.api({ action: 'applicant', id: 'F-2' }).data.scores.length, 2);
+});
+
+test('tags and saved views', () => {
+  const env = invitedEnv();
+  env.ctx.setup();
+  assert.equal(env.api({ action: 'setTags', by: 'Am', id: 'F-2', tags: ' talent pool, Bilingual,talent POOL ,, ' }).data.tags, 'talent pool, Bilingual');
+  assert.equal(env.api({ action: 'data', slim: true }).data.applicants.find((a) => a['Applicant ID'] === 'F-2').Tags, 'talent pool, Bilingual');
+  env.api({ action: 'saveView', by: 'Camille', name: 'Great ISA', query: '?fit=Great&position=ISA' });
+  env.api({ action: 'saveView', by: 'Am', name: 'great isa', query: 'fit=Great' }); // same name: replaced
+  let views = env.api({ action: 'data', slim: true }).data.views;
+  assert.deepEqual(views.map((v) => [v.Name, v.Query]), [['Great ISA', 'fit=Great']]);
+  env.api({ action: 'deleteView', by: 'Am', name: 'Great ISA' });
+  assert.equal(env.api({ action: 'data', slim: true }).data.views.length, 0);
+});
+
+test('email inbox: thread shows replies and our answers; a reply from the CRM is queued with the approved template', () => {
+  const env = invitedEnv({ EMAIL_SENDING: 'ON' });
+  env.ctx.setup();
+  env.ctx.tick(); // invites queued and sent through the hook
+  addRow(env, 'Replies', { 'Message ID': 'm1', 'Received At': '2026-10-27 11:00:00', 'From Email': 'maria@example.com', Subject: 'RE: ClubWealth | Pre-Interview invite', 'Reply Text': 'Can I join at 3 PM?' });
+  env.ctx.tick();
+  const r = env.api({ action: 'sendReply', by: 'Camille', id: 'F-2', text: 'Hi Maria,\n\nThe session starts at 2 PM PT.' });
+  assert.equal(r.data.queued, true);
+  const out = env.rows('Outbox').filter((e) => e.Type === 'Reply');
+  assert.equal(out.length, 1);
+  assert.equal(out[0].To, 'maria@example.com');
+  assert.equal(out[0]['Queued By'], 'Camille');
+  assert.equal(out[0].Subject, 'RE: ClubWealth | Pre-Interview invite');
+  const t = env.api({ action: 'applicant', id: 'F-2' }).data.thread;
+  // invited by hand before the system (no invite in Outbox): their reply, then our answer
+  assert.deepEqual(t.map((x) => x.dir), ['in', 'out']);
+  assert.equal(t[0].text, 'Can I join at 3 PM?');
+  assert.equal(t[1].text, 'Hi Maria,\n\nThe session starts at 2 PM PT.');
+  assert.equal(t[1].by, 'Camille');
+  assert.equal(env.api({ action: 'sendReply', by: 'Am', id: 'F-2', text: '   ' }).ok, false);
+});
+
+test('Slack: first run only starts the clock; then new good applicants and Needs Attention go out batched', () => {
+  const { ctxCalls } = require('./harness');
+  const env = invitedEnv();
+  env.ctx.setup();
+  ctxCalls.posts = [];
+  env.ctx.tick(); // starts SLACK_SINCE, sends nothing (no backlog)
+  assert.equal(ctxCalls.posts.filter((p) => /good applicant/.test(p.body || '')).length, 0);
+  env.setNow(pdt('2026-10-27T12:10:00'));
+  const apps = env.sheets.Applicants.data;
+  const h = apps[0];
+  apps[1][h.indexOf('Screen Tag')] = 'Great';
+  apps[1][h.indexOf('Screened At')] = '2026-10-27 12:09:00';
+  env.ctx.tick();
+  const msgs = ctxCalls.posts.map((p) => p.body || '').filter((b) => /good applicant/.test(b));
+  assert.equal(msgs.length, 1);
+  assert.match(JSON.parse(msgs[0]).text, /1 new good applicant\*\n• Maria Clara Santos, Collections VA \(Great\)/);
+  env.setNow(pdt('2026-10-27T12:20:00'));
+  env.ctx.tick(); // nothing new
+  assert.equal(ctxCalls.posts.map((p) => p.body || '').filter((b) => /good applicant/.test(b)).length, 1);
+});
+
+test('OLJ inbox: saved OLJ messages show as a thread; an answer from the CRM is queued for the OLJ sender', () => {
+  const env = invitedEnv();
+  env.ctx.setup(); // adds the OLJ "Thread" column
+  const thread = JSON.stringify([
+    { from: 'applicant', at: '2026-10-27T15:00:00.000000Z', text: 'Hello, I am interested in the Collections role.' },
+    { from: 'us', at: '2026-10-27T16:00:00.000000Z', text: 'Greetings from Club Wealth!' }
+  ]);
+  addRow(env, 'OLJ', { 'Conversation Key': 'c123', 'Job Post': 'Collections Virtual Assistant', 'Applicant Name': 'Lito Lapid', 'Email Found': 'lito@example.com', Summary: 'Interested; 3 yrs collections.', Thread: thread });
+  env.ctx.tick();
+  assert.equal(env.api({ action: 'sendOljMessage', by: 'Am', id: 'O-c123', text: 'Yes, the session is Wednesday at 2 PM PT.' }).data.queued, true);
+  assert.equal(env.api({ action: 'sendOljMessage', by: 'Am', id: 'F-2', text: 'hi' }).ok, false); // form applicant: no OLJ
+  const msg = env.rows('Outbox').find((e) => e.Type === 'OLJ Message');
+  assert.equal(msg.To, 'OLJ:c123');
+  assert.equal(msg.Body, 'Yes, the session is Wednesday at 2 PM PT.');
+  const t = env.api({ action: 'applicant', id: 'O-c123' }).data.thread;
+  assert.deepEqual(t.map((x) => [x.dir, x.channel]), [['in', 'OLJ'], ['out', 'OLJ'], ['out', 'OLJ'], ['out', 'OLJ']]);
+  assert.equal(t[0].at, '2026-10-27 08:00:00');
+  assert.ok(t.some((x) => x.status === 'Queued' && x.text === 'Yes, the session is Wednesday at 2 PM PT.' && x.by === 'Am'));
+  // never emailed: the email sender ignores OLJ messages
+  assert.equal(env.ctx.EMAIL_TYPES.includes('OLJ Message'), false);
+});

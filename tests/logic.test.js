@@ -174,3 +174,31 @@ test('confirmations written in different ways still count once the sender is mat
   assert.equal(L.confirmsFor('Sorry, I cannot attend today.', 'Ana', 'Reyes'), false);
   assert.equal(L.confirmsFor('Thanks', 'Ana', 'Reyes'), false);
 });
+
+test('scorecards: 0 until all four criteria are rated; Passed at 3.5+ with no 1s, else Not Fit', () => {
+  assert.deepEqual(L.scoreSummary([]), { average: 0, count: 0, suggestion: '' });
+  assert.equal(L.scoreSummary([{ Communication: 4, English: 0, Experience: 4, Internet: 4 }]).count, 0);
+  const pass = L.scoreSummary([{ Communication: 4, English: 4, Experience: 3, Internet: 4 }, { Communication: 3, English: 4, Experience: 3, Internet: 5 }]);
+  assert.equal(pass.count, 2);
+  assert.equal(pass.average, 3.8);
+  assert.equal(pass.suggestion, 'Passed');
+  assert.equal(L.scoreSummary([{ Communication: 5, English: 5, Experience: 5, Internet: 1 }]).suggestion, 'Not Fit');
+  assert.equal(L.scoreSummary([{ Communication: 3, English: 3, Experience: 3, Internet: 4 }]).suggestion, 'Not Fit');
+});
+
+test('reply email: plain text escaped, approved sign-off and banner, invite subject', () => {
+  const r = L.replyEmail('Hi Maria,\n\nYes, <3 PM> works.');
+  assert.equal(r.subject, 'RE: ClubWealth | Pre-Interview invite');
+  assert.match(r.body, /<p>Hi Maria,<\/p><p>Yes, &lt;3 PM&gt; works.<\/p>/);
+  assert.equal(L.approvedEmailBody(r.body), true);
+});
+
+test('Slack messages are short bulleted lists', () => {
+  const m = L.slackNewApplicants([{ name: 'Maria Santos', position: 'Collections VA', tag: 'Great' }, { name: 'Jose Cruz', position: 'ISA', tag: 'Good' }], 'https://x');
+  assert.equal(m, '*2 new good applicants*\n• Maria Santos, Collections VA (Great)\n• Jose Cruz, ISA (Good)\n<https://x/candidates|Open Candidates>');
+  assert.equal(L.slackNewApplicants([], ''), '');
+  const many = L.slackAttention(Array.from({ length: 10 }, (_, i) => ({ type: 'Applicant question', name: 'P' + i })), '');
+  assert.match(many, /• \+2 more$/);
+  assert.match(L.slackLate([{ name: 'Romie', minutesLate: 7 }]), /Romie joined 7 min late/);
+  assert.match(L.slackSessionResults('2026-10-28', { completed: 5, dnc: 2, noshow: 3 }, ''), /No show: 3/);
+});

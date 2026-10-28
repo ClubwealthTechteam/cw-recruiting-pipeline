@@ -9,6 +9,8 @@
  *
  * Usage: node olj_send.js --queue queue.json --out result.json
  *   queue.json: [{ "emailId": "E-…", "key": "<conversation key>", "session": "YYYY-MM-DD" }]
+ *   An answer typed in the CRM's OLJ inbox (Outbox Type "OLJ Message") is { "emailId", "key", "type": "OLJ Message", "text" }:
+ *   it is sent exactly as typed, once, without the invite checks.
  */
 const fs = require('fs');
 const path = require('path');
@@ -112,7 +114,9 @@ async function main() {
     await sleep(2500);
     if (!new URL(page.url()).pathname.startsWith('/message/conversation/')) { await browser.close(); return finish('stopped', 'unexpected page'); }
     const body = (await page.locator('body').innerText()).toLowerCase();
-    if (body.includes(`wednesday, ${L.longDate(q.session).toLowerCase()}, at 2:00 pm pacific`) && body.includes('on our zoom interview')) {
+    const isMessage = q.type === 'OLJ Message';
+    if (isMessage && !String(q.text || '').trim()) { results.push({ emailId: q.emailId, status: 'Skipped', note: 'empty message' }); continue; }
+    if (!isMessage && body.includes(`wednesday, ${L.longDate(q.session).toLowerCase()}, at 2:00 pm pacific`) && body.includes('on our zoom interview')) {
       results.push({ emailId: q.emailId, status: 'Skipped', note: 'invite for this date already in the conversation' });
       continue;
     }
@@ -120,13 +124,13 @@ async function main() {
     const partner = data[0] && data[0].partner;
     const mine = data.filter((m) => m.message && m.owner && m.owner.hash_id === partner)
       .map((m) => ({ body: m.message.body, hasAttachment: !!(m.attachments && m.attachments.length) || /attachment|\.pdf|\.docx?/i.test(JSON.stringify(m.files || m.attachment || '')) }));
-    const ready = applicationReady(mine);
+    const ready = isMessage ? { ok: true } : applicationReady(mine);
     if (!ready.ok) { results.push({ emailId: q.emailId, status: 'Skipped', note: ready.reason }); continue; }
     if (q.blocked) { results.push({ emailId: q.emailId, status: 'Skipped', note: 'On the do-not-invite list: ' + q.blocked }); continue; }
     const box = page.locator('trix-editor:visible');
     const btn = page.locator('button:visible', { hasText: /^\s*send message\s*$/i });
     if ((await box.count()) !== 1 || (await btn.count()) !== 1) { results.push({ emailId: q.emailId, status: 'Failed', error: 'message box not found' }); continue; }
-    const text = oljInviteText(q.session, new Date());
+    const text = isMessage ? String(q.text).trim() : oljInviteText(q.session, new Date());
     await box.evaluate((e, h) => { e.editor.loadHTML(h); }, toHtml(text));
     await sleep(600);
     if (norm(await box.evaluate((e) => e.innerText)) !== norm(text)) { results.push({ emailId: q.emailId, status: 'Failed', error: 'text mismatch' }); continue; }
