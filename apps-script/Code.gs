@@ -827,8 +827,11 @@ function siteUrl_() {
 function slackAlerts_(st) {
   if (!PropertiesService.getScriptProperties().getProperty('SLACK_HOOK') || st.get('SLACK_ALERTS') === 'OFF') return 0;
   var now = nowStr_();
-  var since = st.get('SLACK_SINCE');
-  if (!since) { st.set('SLACK_SINCE', now); return 0; }
+  // Kept in Script Properties, NOT the Settings tab: Sheets turns "2026-10-28 12:23:30" into a date and settings_()
+  // reads dates back as "2026-10-28" (no time), which made every run re-send the same alerts (fixed 2026-10-28).
+  var props = PropertiesService.getScriptProperties();
+  var since = props.getProperty('SLACK_SINCE_AT');
+  if (!/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(since || '')) { props.setProperty('SLACK_SINCE_AT', now); return 0; }
   var apps = table_(SH.APPLICANTS).rows;
   var byId = indexBy_(apps, 'Applicant ID');
   var name = function (a) { return a ? (a['First Name'] + ' ' + a['Last Name']).trim() : ''; };
@@ -841,7 +844,7 @@ function slackAlerts_(st) {
   lateArrivals_ = [];
   if (!msgs.length) return 0; // nothing new: no write, so a quiet tick stays quiet
   var sent = msgs.filter(function (m) { return slack_(m); }).length;
-  st.set('SLACK_SINCE', now);
+  props.setProperty('SLACK_SINCE_AT', now);
   return sent;
 }
 

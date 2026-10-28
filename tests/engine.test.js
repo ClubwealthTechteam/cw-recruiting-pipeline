@@ -642,3 +642,19 @@ test('email applications: held until EMAIL_INTAKE is ON, then screened and invit
   // the application shows in their inbox thread
   assert.equal(env.api({ action: 'applicant', id: 'E-2' }).data.thread.filter((t) => t.type === 'Application').length, 2);
 });
+
+test('Slack: the same alert is never sent twice, even across many quiet runs (repeat bug 2026-10-28)', () => {
+  const { ctxCalls } = require('./harness');
+  const env = invitedEnv();
+  env.ctx.setup();
+  env.ctx.tick(); // starts the clock
+  const A = env.sheets.Applicants.data, h = A[0];
+  A[1][h.indexOf('Screen Tag')] = 'Great';
+  A[1][h.indexOf('Screened At')] = '2026-10-27 12:09:00';
+  env.setNow(pdt('2026-10-27T12:10:00'));
+  ctxCalls.posts = [];
+  for (let i = 0; i < 6; i++) { env.setNow(pdt(`2026-10-27T12:${String(10 + i * 5).padStart(2, '0')}:00`)); env.ctx.tick(); }
+  assert.equal(ctxCalls.posts.map((p) => p.body || '').filter((b) => /good applicant/.test(b)).length, 1);
+  // Settings never holds the clock any more (Sheets would turn it into a date)
+  assert.equal(env.rows('Settings').some((r) => r.Key === 'SLACK_SINCE'), false);
+});
