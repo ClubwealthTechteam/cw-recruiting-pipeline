@@ -33,13 +33,13 @@ export default async function Session({ searchParams }: { searchParams: Promise<
       </section>
       <section className="panel">
         <table className="table">
-          <thead><tr><th>Name</th><th>Position</th><th>Stage</th><th>Confirmed</th><th>Reminder</th><th>Zoom minutes</th></tr></thead>
+          <thead><tr><th>Name</th><th>Position</th><th>Stage</th><th>Confirmed</th><th>Reminder</th><th>Arrival</th><th>Zoom minutes</th></tr></thead>
           <tbody>
             {roster.map((a) => (
               <tr key={s(a['Applicant ID'])}>
                 <td><Link href={`/candidates/${encodeURIComponent(s(a['Applicant ID']))}`}>{fullName(a)}</Link></td>
                 <td>{s(a.Position)}</td><td><StageBadge stage={s(a.Stage)} /></td>
-                <td>{a['Confirmed At'] ? 'Yes' : 'No'}</td><td>{a['Reminder Sent At'] ? 'Sent' : '—'}</td><td>{s(a['Zoom Minutes']) || '—'}</td>
+                <td>{a['Confirmed At'] ? 'Yes' : 'No'}</td><td>{a['Reminder Sent At'] ? 'Sent' : '—'}</td><td><Arrival a={a} /></td><td>{s(a['Zoom Minutes']) || '—'}</td>
               </tr>
             ))}
           </tbody>
@@ -55,4 +55,13 @@ export default async function Session({ searchParams }: { searchParams: Promise<
       )}
     </>
   );
+}
+
+/** Early/late against the 2 PM start; red when they joined after it, amber when under the 10 minutes early the invite asks for. */
+function Arrival({ a }: { a: Record<string, unknown> }) {
+  const label = s(a.Arrival);
+  if (!label) return <>—</>;
+  const early = Number(a['Minutes Early']);
+  const tone = early < 0 ? 'red' : early < 10 ? 'amber' : 'green';
+  return <span className={`badge ${tone}`}>{label}</span>;
 }

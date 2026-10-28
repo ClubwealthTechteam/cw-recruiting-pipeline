@@ -146,8 +146,8 @@ test('Wednesday 6 AM reminders go to confirmed applicants for that day only, onc
 test('Zoom: 30+ minutes completed, under 30 did not complete, unseen no show, non-invitees ignored', () => {
   const env = invitedEnv();
   env.setNow(pdt('2026-10-28T15:35:00'));
-  addRow(env, 'Zoom Attendance', { 'Interview Date': '2026-10-28', 'Zoom Display Name': 'Maria Santos_Collections', 'Parsed Name': 'Maria Santos', 'Parsed Position': 'Collections', 'Total Minutes': 45 });
-  addRow(env, 'Zoom Attendance', { 'Interview Date': '2026-10-28', 'Zoom Display Name': 'Jose Dela Cruz_ISA', 'Parsed Name': 'Jose Dela Cruz', 'Parsed Position': 'ISA', 'Total Minutes': 12 });
+  addRow(env, 'Zoom Attendance', { 'Interview Date': '2026-10-28', 'Zoom Display Name': 'Maria Santos_Collections', 'Parsed Name': 'Maria Santos', 'Parsed Position': 'Collections', 'Total Minutes': 45, 'Minutes Early': 12, Arrival: '12 min early (on time)' });
+  addRow(env, 'Zoom Attendance', { 'Interview Date': '2026-10-28', 'Zoom Display Name': 'Jose Dela Cruz_ISA', 'Parsed Name': 'Jose Dela Cruz', 'Parsed Position': 'ISA', 'Total Minutes': 12, 'Minutes Early': -7, Arrival: '7 min late' });
   addRow(env, 'Zoom Attendance', { 'Interview Date': '2026-10-28', 'Zoom Display Name': 'Random Guy_VA', 'Parsed Name': 'Random Guy', 'Parsed Position': 'VA', 'Total Minutes': 50 });
   env.ctx.tick();
   // not final yet: stages unchanged
@@ -157,6 +157,8 @@ test('Zoom: 30+ minutes completed, under 30 did not complete, unseen no show, no
   const a = Object.fromEntries(env.rows('Applicants').map((x) => [x['First Name'], x]));
   assert.equal(a['Maria Clara'].Stage, 'Interview Completed');
   assert.equal(a['Maria Clara']['Zoom Minutes'], 45);
+  assert.equal(a['Maria Clara'].Arrival, '12 min early (on time)');
+  assert.equal(a.Jose.Arrival, '7 min late');
   assert.equal(a.Jose.Stage, 'Did Not Complete');
   assert.equal(a.Ana.Stage, 'No Show');
   assert.equal(env.rows('Zoom Attendance')[2].Result, 'Not an invitee');

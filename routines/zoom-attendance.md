@@ -24,3 +24,6 @@ Recruiting pipeline: Wednesday Zoom attendance. Read-only on Zoom; write only to
 5. Reply with counts only: polls, errors, participants recorded. No names, emails or phone numbers.
 Do not change anything else in the sheet, and do not contact anyone.
 ```
+
+
+**Arrival (2026-10-28):** each row also carries `Minutes Early` (negative = late) and `Arrival` text, measured from the interview start (`--interview`, default 14:00 PT). The invite asks applicants to join 10 minutes early, so 10+ minutes early is "on time". Apps Script copies both onto the matched applicant; the site shows them on the session page and the applicant page.
