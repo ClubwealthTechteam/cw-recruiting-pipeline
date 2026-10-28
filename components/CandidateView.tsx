@@ -47,7 +47,7 @@ export default async function CandidateView({ appId, panel = false }: { appId: s
   for (const z of d.zoom.filter((x) => s(x['Matched Applicant ID']) === appId)) {
     events.push({ at: s(z['Recorded At'] || z['Interview Date']), text: `Zoom: "${z['Zoom Display Name']}" · ${z['Total Minutes']} minutes${z.Arrival ? ` · ${z.Arrival}` : ''}` });
   }
-  events.push({ at: s(a['Applied At (PT)']), text: `Applied via ${s(a.Source) === 'OLJ' ? 'OnlineJobs.ph' : 'the application form'}` });
+  events.push({ at: s(a['Applied At (PT)']), text: s(a.Source) === 'Referral' ? `Added as a referral${a['Source Ref'] ? ` (${s(a['Source Ref'])})` : ''}` : `Applied via ${s(a.Source) === 'OLJ' ? 'OnlineJobs.ph' : s(a.Source) === 'Email' ? 'an email to CareersCW' : 'the application form'}` });
   if (s(a['Stage Updated By']) === 'Import') events.push({ at: s(a['Stage Updated At']), text: 'Brought into the system as Invited (invited by hand before the system started)' });
   if (a['Confirmed At']) events.push({ at: s(a['Confirmed At']), text: 'Replied with full name (confirmed)' });
   events.sort((x, y) => y.at.localeCompare(x.at));

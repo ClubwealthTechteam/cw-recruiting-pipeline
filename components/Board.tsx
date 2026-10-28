@@ -1,11 +1,12 @@
 'use client';
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
-import { REASON_REQUIRED } from '@/lib/pipeline';
+import { REASON_REQUIRED, type ZoomLive } from '@/lib/pipeline';
+import ZoomBadge from './ZoomBadge';
 import { useAction } from './useAction';
 import { InlineStage } from './InlineActions';
 
-export type BoardCard = { id: string; name: string; stage: string; position: string; source: string; fit: string; session: string; score: string; arrival: string; test?: boolean };
+export type BoardCard = { id: string; name: string; stage: string; position: string; source: string; fit: string; session: string; score: string; arrival: string; test?: boolean; zoom?: ZoomLive };
 const PER_COLUMN = 60;
 const FIT_TONE: Record<string, string> = { Great: 'green', Good: 'blue', 'Not Fit': 'grey' };
 
@@ -73,6 +74,7 @@ export default function Board({ stages, cards }: { stages: string[]; cards: Boar
                 <div className="muted small">{c.position} · {c.source}{c.session ? ` · ${c.session}` : ''}</div>
                 <div className="card-move" onMouseDown={(e) => e.stopPropagation()}><InlineStage id={c.id} stage={stageOf(c)} /></div>
                 <div className="card-badges">
+                  <ZoomBadge z={c.zoom} />
                   {c.test && <span className="badge grey">Test</span>}
                   {c.fit && <span className={`badge ${FIT_TONE[c.fit] || 'grey'}`}>{c.fit}</span>}
                   {c.score && <span className="badge blue" title="Scorecard average">{c.score}/5</span>}

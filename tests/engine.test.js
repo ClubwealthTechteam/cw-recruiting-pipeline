@@ -143,7 +143,7 @@ test('Wednesday 6 AM reminders go to confirmed applicants for that day only, onc
   assert.match(rem[0].Body, /later today, Wednesday, October 28, 2026, at 2:00 PM Pacific Daylight Time \(PDT\)/);
 });
 
-test('Zoom: 30+ minutes completed, under 30 did not complete, unseen no show, non-invitees ignored', () => {
+test('Zoom: 30+ minutes completed, under 30 did not complete, unseen confirmed no show, unseen unconfirmed no confirmation, non-invitees ignored', () => {
   const env = invitedEnv();
   env.setNow(pdt('2026-10-28T15:35:00'));
   addRow(env, 'Zoom Attendance', { 'Interview Date': '2026-10-28', 'Zoom Display Name': 'Maria Santos_Collections', 'Parsed Name': 'Maria Santos', 'Parsed Position': 'Collections', 'Total Minutes': 45, 'Minutes Early': 12, Arrival: '12 min early (on time)' });
@@ -152,6 +152,8 @@ test('Zoom: 30+ minutes completed, under 30 did not complete, unseen no show, no
   env.ctx.tick();
   // not final yet: stages unchanged
   assert.ok(env.rows('Applicants').every((a) => a.Stage === 'Invited'));
+  const A = env.sheets.Applicants.data;
+  A.find((r) => r[A[0].indexOf('First Name')] === 'Ana')[A[0].indexOf('Stage')] = 'Confirmed';
   env.sheets.Settings.appendRow(['ZOOM_FINALIZE', '2026-10-28', '']);
   env.ctx.tick();
   const a = Object.fromEntries(env.rows('Applicants').map((x) => [x['First Name'], x]));
@@ -205,7 +207,7 @@ test('site API: secret required, bulk stage change logs history, reason required
   assert.equal(d.ok, true);
   assert.equal(d.data.applicants.length, 3);
   assert.equal(env.api({ action: 'setStage', by: 'Am', ids: ['F-2'], stage: 'Not Fit' }).ok, false);
-  const r = env.api({ action: 'setStage', by: 'Am', ids: ['F-2', 'F-3'], stage: 'Passed' });
+  const r = env.api({ action: 'setStage', by: 'Am', ids: ['F-2', 'F-3'], stage: 'Passed Pre-Interview' });
   assert.equal(r.data.updated, 2);
   assert.equal(env.rows('History').filter((h) => h['Changed By'] === 'Am').length, 2);
   assert.equal(env.api({ action: 'setStage', by: 'Hacker', ids: ['F-2'], stage: 'Hired' }).ok, false);
@@ -255,7 +257,7 @@ test('Zoom backup path: zoomRows API appends rows and finalizes the day', () => 
   env.ctx.tick();
   const a = Object.fromEntries(env.rows('Applicants').map((x) => [x['First Name'], x]));
   assert.equal(a['Maria Clara'].Stage, 'Interview Completed');
-  assert.equal(a.Jose.Stage, 'No Show');
+  assert.equal(a.Jose.Stage, 'No Confirmation'); // invited, never confirmed, not seen
 });
 
 test('site API: data leaves out the before-system applicants\' details and history unless asked', () => {
@@ -335,7 +337,7 @@ test('settings stored as dates by Sheets still work: reminders queue once, Zoom 
   env.setNow(pdt('2026-10-28T15:35:00'));
   env.sheets.Settings.appendRow(['ZOOM_FINALIZE', new Date('2026-10-28T00:00:00-07:00'), '']);
   env.ctx.tick();
-  assert.equal(env.rows('Applicants').find((a) => a['First Name'] === 'Ana').Stage, 'No Show');
+  assert.equal(env.rows('Applicants').find((a) => a['First Name'] === 'Ana').Stage, 'No Confirmation');
 });
 
 test('OLJ applicants never get the reminder by email', () => {
@@ -581,7 +583,7 @@ test('test applicants are never counted: no Slack alert, not in session results'
   ctxCalls.posts = [];
   env.ctx.tick();
   const msg = ctxCalls.posts.map((p) => p.body || '').find((b) => /Session results/.test(b));
-  assert.match(JSON.parse(msg).text, /No show: 2/); // 3 invitees, one of them a test applicant
+  assert.match(JSON.parse(msg).text, /No confirmation: 2/); // 3 unconfirmed invitees, one of them a test applicant
 });
 
 test('Onboarded is a stage the site can move people to', () => {
@@ -609,6 +611,36 @@ test('undo: a stage move goes back, its queued re-invite is cancelled; a note is
   const n = env.api({ action: 'addNote', by: 'Am', id: 'F-2', note: 'oops' }).data;
   assert.equal(env.api({ action: 'undoNote', by: 'Am', id: 'F-2', line: n.line }).data.removed, true);
   assert.match(env.rows('Applicants')[0].Notes, /first$/);
+});
+
+test('email applications: held until EMAIL_INTAKE is ON, then screened and invited; duplicates link; referrals tagged', () => {
+  const env = invitedEnv({ EMAIL_SENDING: 'ON' });
+  env.ctx.setup();
+  addRow(env, 'Email Applications', { 'Message ID': 'm1', 'Received At': '2026-10-27T16:25:35.000Z', 'From Email': 'Kai@Example.com', 'Applicant Name': 'Kai Dela Paz', Subject: 'Transaction Coordinator - Application (Referred: J. Cruz)', 'Position (as typed)': 'Transaction Coordinator', Summary: '3 years as a transaction coordinator for US realtors.', Referral: 'J. Cruz' });
+  addRow(env, 'Email Applications', { 'Message ID': 'm2', 'Received At': '2026-10-27T17:00:00.000Z', 'From Email': 'kai@example.com', 'Applicant Name': 'Kai Dela Paz', Subject: 'Fwd: Transaction Coordinator', 'Position (as typed)': 'Transaction Coordinator', Summary: 'same' });
+  addRow(env, 'Email Applications', { 'Message ID': 'm3', 'Received At': '2026-10-27T18:00:00.000Z', 'From Email': 'maria@example.com', 'Applicant Name': 'Maria Clara Santos', Subject: 'Application', 'Position (as typed)': 'Collections VA', Summary: 'x' });
+  env.ctx.tick();
+  let kai = env.rows('Applicants').find((a) => a.Email === 'kai@example.com');
+  assert.equal(kai['Applicant ID'], 'E-2');
+  assert.equal(kai.Source, 'Email');
+  assert.equal(kai['Applied At (PT)'], '2026-10-27 09:25:35');
+  assert.deepEqual([kai['First Name'], kai['Last Name']], ['Kai Dela', 'Paz']);
+  assert.equal(kai.Tags, 'Referral');
+  assert.match(kai['Invite Hold'], /Email intake invites are off/);
+  const ea = env.rows('Email Applications');
+  assert.deepEqual(ea.map((r) => r['Applicant ID']), ['E-2', 'E-2', 'F-2']); // the second email and the form applicant are linked, not duplicated
+  assert.equal(env.rows('Applicants').filter((a) => a.Email === 'kai@example.com').length, 1);
+  assert.equal(env.rows('Outbox').filter((e) => e['Applicant ID'] === 'E-2').length, 0);
+  // Miguel approves the list
+  env.sheets.Settings.appendRow(['EMAIL_INTAKE', 'ON', '']);
+  env.ctx.tick();
+  kai = env.rows('Applicants').find((a) => a.Email === 'kai@example.com');
+  assert.equal(kai['Invite Hold'], '');
+  const out = env.rows('Outbox').filter((e) => e['Applicant ID'] === 'E-2');
+  assert.equal(out.length, 1);
+  assert.equal(out[0].Type, 'Invite');
+  // the application shows in their inbox thread
+  assert.equal(env.api({ action: 'applicant', id: 'E-2' }).data.thread.filter((t) => t.type === 'Application').length, 2);
 });
 
 test('Slack: the same alert is never sent twice, even across many quiet runs (repeat bug 2026-10-28)', () => {

@@ -7,7 +7,8 @@ const SECTIONS: Section[] = [
   {
     title: 'New applicants and screening',
     items: [
-      'New Google Form and OnlineJobs.ph applicants appear in the CRM by themselves.',
+      'New Google Form and OnlineJobs.ph applicants appear in the CRM by themselves. Applications emailed to CareersCW are read, summarized and added as Source Email once email intake is on (Settings EMAIL_INTAKE = ON).',
+      'Referrals (someone a team member referred, with no form, OLJ or email application) are added by hand as Source Referral with a Referral tag.',
       'Positions are standardized ("Appointment Setter" counts as ISA).',
       'Before any invite, each applicant is checked for an open position (Collections, ISA, TC/LC), the Rejected tab, and duplicates (same email or same name). Anyone held back shows why under Invite on their profile.',
       'Fit rating (Great, Good or Not Fit, with a one-line reason) is given every 2 hours from 6 AM to 8 PM PT. "Not rated yet" means the next run has not reached them, or the position has no screening rule.',
@@ -36,15 +37,16 @@ const SECTIONS: Section[] = [
     href: '/session',
     items: [
       'From 1:40 PM, arrival (minutes early or late) and Zoom minutes update live on This Week\'s Session, about every 5 minutes.',
+      'While the session runs, a green "In Zoom now" or grey "Left Zoom 2:13 PM" badge shows next to the stage on Candidates, the Board and the Session page. It disappears after the 3:30 wrap-up.',
       'The invite asks applicants to join 10 minutes early; green = on time, amber = under 10 minutes early, red = late.',
       'If someone renames themselves in Zoom, their time stops counting at the rename.',
-      'At 3:30 PM the stages are set: Interview Completed (30+ minutes), Did Not Complete (under 30), or No Show.'
+      'At 3:30 PM the stages are set: Interview Completed (stayed 1h+ in Zoom), Did Not Complete (under 1 hour), No Show (confirmed but did not join) or No Confirmation (invited, never confirmed, did not join).'
     ]
   },
   {
     title: 'Dashboard',
     href: '/',
-    items: ['Confirmation, show-up and completion rates, applicants per week, the pipeline by stage and by position. Click any bar to see the people.']
+    items: ['Confirmation, show-up and completion rates, applicants per week (Form, OLJ, Email, Referral), the pipeline by stage and by position. Click any bar to see the people.', 'Filter by session to see one Wednesday on its own (rates, pipeline and positions for that session\'s invitees), or change the applied period: last 30, 60 or 90 days, or all time.']
   },
   {
     title: 'Candidates',
@@ -61,14 +63,14 @@ const SECTIONS: Section[] = [
     title: 'Pipeline Board',
     href: '/board',
     items: [
-      'One column per stage: Applied, Invited, Confirmed, Interview Completed, Passed, Hired, Onboarded, then re-invite, Did Not Complete, No Show and Not Fit.',
+      'One column per stage: Applied, Invited, Confirmed, Interview Completed, Passed Pre-Interview, Passed Interview, Hired, Onboarded, then re-invite, Did Not Complete, No Show, No Confirmation and Not Fit.',
       'Drag a card to another column to move the applicant. Drag near the edge to scroll sideways, or use the "Move…" menu on the card.'
     ]
   },
   {
     title: 'Candidate profile',
     items: [
-      'Interview scorecard: rate Communication, English, Experience, Internet and Work setup (workspace & device) from 1 to 5. It shows 0 until rated; then the CRM suggests Passed (3.5 or higher with no 1s) or Not Fit, and one click applies it.',
+      'Interview scorecard: rate Communication, English, Experience, Internet and Work setup (workspace & device) from 1 to 5. It shows 0 until rated; then the CRM suggests Passed (3.5 or higher with no 1s) or Not Fit, and one click applies it. Passed moves someone to Passed Pre-Interview, then to Passed Interview; after both they are marked Hired.',
       'Inbox: the email conversation and, for OLJ applicants, the OLJ conversation, with a box to reply. Email replies go out from CareersCW with the sign-off and banner; OLJ replies go out on the next OLJ run. Unread OLJ conversations stay unread for you.',
       'Tags, notes, the timeline of everything that happened, application answers and links, and invite buttons.'
     ]

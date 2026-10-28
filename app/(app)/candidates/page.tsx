@@ -1,13 +1,13 @@
 import Link from 'next/link';
 import { Suspense } from 'react';
 import { getData, getDataWithHistory } from '@/lib/sheet';
-import { STAGES, s, fullName, ymd, formatDate, formatDateTime, positionCounts, weekOf, scoreSummary, splitTags, isTest } from '@/lib/pipeline';
+import { STAGES, s, fullName, ymd, formatDate, formatDateTime, positionCounts, weekOf, scoreSummary, splitTags, isTest, SOURCES, SOURCE_LABEL, zoomLive } from '@/lib/pipeline';
 import SavedViews from '@/components/SavedViews';
 import CandidatesTable, { type CandidateRow } from '@/components/CandidatesTable';
 import DataError from '@/components/DataError';
 
 const PAGE = 200;
-const CLOSED = ['Passed', 'Hired', 'Onboarded', 'Not Fit'];
+const CLOSED = ['Passed Interview', 'Hired', 'Onboarded', 'Not Fit'];
 
 type Q = { stage?: string; fit?: string; source?: string; position?: string; session?: string; q?: string; history?: string; page?: string; tag?: string; week?: string; score?: string };
 
@@ -50,13 +50,15 @@ export default async function Candidates({ searchParams }: { searchParams: Promi
   const positions = [...new Set(d.applicants.map((a) => s(a.Position)).filter(Boolean))].sort();
   const sessions = [...new Set(base.map((a) => ymd(a['Interview Date'])).filter(Boolean))].sort().reverse().slice(0, 12);
 
+  const live = zoomLive(d.zoom);
   const tableRows: CandidateRow[] = shown.map((a) => ({
     id: s(a['Applicant ID']), name: fullName(a), email: s(a.Email), stage: s(a.Stage), source: s(a.Source),
     position: s(a.Position), applied: formatDateTime(s(a['Applied At (PT)'])), interview: formatDate(ymd(a['Interview Date'])),
     confirmed: a['Confirmed At'] ? formatDate(ymd(a['Confirmed At'])) : '', minutes: s(a['Zoom Minutes']),
     invites: s(a['Invite Count']), historical: s(a.Historical) === 'Y', test: isTest(a),
     fit: s(a['Screen Tag']), fitTrack: s(a['Screen Track']), fitSummary: s(a['Screen Summary']), hold: s(a['Invite Hold']),
-    score: score(a).count ? score(a).average.toFixed(1) : '', scoreSuggestion: score(a).suggestion, tags: splitTags(a.Tags)
+    score: score(a).count ? score(a).average.toFixed(1) : '', scoreSuggestion: score(a).suggestion, tags: splitTags(a.Tags),
+    zoom: live.get(s(a['Applicant ID']))
   }));
 
   const link = (over: Partial<Q>) => {
@@ -79,7 +81,7 @@ export default async function Candidates({ searchParams }: { searchParams: Promi
         <input type="hidden" name="stage" value={stage} />
         <input name="q" defaultValue={p.q} placeholder="Search name, email or position" />
         <select name="fit" defaultValue={p.fit || ''}><option value="">All fits</option><option>Great</option><option>Good</option><option>Not Fit</option><option>Held back</option><option value="Not screened">Not rated yet</option></select>
-        <select name="source" defaultValue={p.source || ''}><option value="">All sources</option><option>Form</option><option>OLJ</option></select>
+        <select name="source" defaultValue={p.source || ''}><option value="">All sources</option>{SOURCES.map((x) => <option key={x} value={x}>{SOURCE_LABEL[x]}</option>)}</select>
         <select name="position" defaultValue={p.position || ''}><option value="">All positions</option>{positions.map((x) => <option key={x}>{x}</option>)}</select>
         <select name="score" defaultValue={p.score || ''}><option value="">Any score</option><option value="rated">Rated</option><option value="unrated">Not rated (0)</option><option value="Passed">Suggested Passed</option><option value="Not Fit">Suggested Not Fit</option></select>
         {allTags.length > 0 && <select name="tag" defaultValue={p.tag || ''}><option value="">All tags</option>{allTags.map((t) => <option key={t}>{t}</option>)}</select>}

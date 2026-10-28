@@ -17,7 +17,7 @@
 var SH = {
   APPLICANTS: 'Applicants', HISTORY: 'History', OUTBOX: 'Outbox', REPLIES: 'Replies',
   FLAGS: 'Needs Attention', ZOOM: 'Zoom Attendance', OLJ: 'OLJ', POSITIONS: 'Positions',
-  SETTINGS: 'Settings', LOG: 'Run Log', TEST_FORM: 'Test Form', CHAT: 'Chat', SCORES: 'Scorecards', VIEWS: 'Views'
+  SETTINGS: 'Settings', LOG: 'Run Log', TEST_FORM: 'Test Form', CHAT: 'Chat', SCORES: 'Scorecards', VIEWS: 'Views', EMAILAPPS: 'Email Applications'
 };
 
 // Form Responses 1 columns (0-based), read only.
@@ -563,6 +563,61 @@ function processOLJ_(st) {
   return n;
 }
 
+// ---------- 4b. applications emailed to CareersCW (copied in by the email routine) ----------
+
+var EMAIL_INTAKE_HOLD = 'Email intake invites are off until Miguel approves the list (Settings EMAIL_INTAKE = ON)';
+
+/**
+ * The hourly email routine copies each application emailed to the CareersCW Inbox into the "Email Applications" tab
+ * (Message ID, Received At, From Email, Applicant Name, Subject, Position (as typed), Summary, Referral). Here each new
+ * row becomes an applicant with Source "Email" (or is linked to the applicant who already has that email), screened and
+ * invited like a form applicant once Settings EMAIL_INTAKE = ON (Miguel, 2026-10-28). Referrals get the "Referral" tag.
+ */
+function processEmailApps_(st) {
+  if (!ss_().getSheetByName(SH.EMAILAPPS)) return 0;
+  var ea = table_(SH.EMAILAPPS);
+  var apps = table_(SH.APPLICANTS);
+  var overrides = positionOverrides_();
+  var on = st.get('EMAIL_INTAKE') === 'ON';
+  var n = 0;
+  ea.rows.forEach(function (r) {
+    if (r['Processed At']) return;
+    var email = String(r['From Email'] || '').trim().toLowerCase();
+    if (!/@/.test(email)) { update_(ea, r, { 'Processed At': nowStr_(), Note: 'No sender email' }); return; }
+    var same = apps.rows.filter(function (a) { return String(a.Email || '').trim().toLowerCase() === email && a.Historical !== 'Y'; })[0];
+    if (same) {
+      if (r.Referral && apps.headers.indexOf('Tags') !== -1) update_(apps, same, { Tags: cleanTags_((same.Tags ? same.Tags + ', ' : '') + 'Referral') });
+      update_(ea, r, { 'Applicant ID': same['Applicant ID'], 'Processed At': nowStr_(), Note: 'Already in the CRM' });
+      return;
+    }
+    var parts = String(r['Applicant Name'] || '').trim().split(/\s+/).filter(Boolean);
+    var a = append_(apps, {
+      'Applicant ID': 'E-' + r._row, Source: 'Email', 'Source Ref': r['Message ID'],
+      'Applied At (PT)': ptStamp_(r['Received At']) || nowStr_(),
+      'First Name': parts.length > 1 ? parts.slice(0, -1).join(' ') : (parts[0] || ''), 'Last Name': parts.length > 1 ? parts[parts.length - 1] : '',
+      Email: email, 'Position (as typed)': r['Position (as typed)'], Position: standardPosition(r['Position (as typed)'], overrides),
+      'Experience Overview': r.Summary, 'Screen Track': screenTrack(r['Position (as typed)']) || 'Not screened',
+      Tags: r.Referral ? 'Referral' : '', Notes: r.Referral ? nowStr_() + ' System: Referred by ' + String(r.Referral).slice(0, 100) : '',
+      Stage: 'Applied', 'Stage Updated At': nowStr_(), 'Stage Updated By': 'System', 'Invite Count': 0, 'Created At': nowStr_()
+    });
+    appendTo_(SH.HISTORY, {
+      'Timestamp (PT)': nowStr_(), 'Applicant ID': a['Applicant ID'], 'From Stage': '', 'To Stage': 'Applied',
+      'Changed By': 'System', Reason: 'Emailed application to CareersCW'
+    });
+    update_(ea, r, { 'Applicant ID': a['Applicant ID'], 'Processed At': nowStr_() });
+    if (on) screenAndInvite_(st, apps, a);
+    else update_(apps, a, { 'Invite Hold': EMAIL_INTAKE_HOLD });
+    n++;
+  });
+  if (on) {
+    // switched on after the QA list: invite the email applicants that were waiting for it
+    apps.rows.forEach(function (a) {
+      if (a.Source === 'Email' && a.Stage === 'Applied' && a['Invite Hold'] === EMAIL_INTAKE_HOLD) { screenAndInvite_(st, apps, a); n++; }
+    });
+  }
+  return n;
+}
+
 /**
  * Screens one new applicant and, if they pass, queues their invite for the session interviewDateFor gives
  * (Wednesday 12 PM PT cut-off): an email for form applicants, an OLJ message for OLJ applicants. A held-back
@@ -664,21 +719,22 @@ function processZoom_(st) {
 
   var fin = st.get('ZOOM_FINALIZE');
   if (fin && fin !== st.get('ZOOM_FINALIZED_LAST')) {
-    var minMin = Number(st.get('MIN_MINUTES_COMPLETED')) || 30;
+    var minMin = Number(st.get('MIN_MINUTES_COMPLETED')) || 60;
     var minutes = {};
     z.rows.forEach(function (r) {
       if (ymdOf_(r['Interview Date']) === fin && r['Matched Applicant ID']) {
         minutes[r['Matched Applicant ID']] = (minutes[r['Matched Applicant ID']] || 0) + (Number(r['Total Minutes']) || 0);
       }
     });
-    var counts = { completed: 0, dnc: 0, noshow: 0 };
+    var counts = { completed: 0, dnc: 0, noshow: 0, noconf: 0, min: minMin };
     apps.rows.forEach(function (a) {
       if (ymdOf_(a['Interview Date']) !== fin || PRE_INTERVIEW.indexOf(a.Stage) === -1) return;
       var m = minutes[a['Applicant ID']];
-      var res = m === undefined ? 'No Show' : zoomResult(m, minMin);
+      // Not seen in Zoom: No Show only for people who confirmed; invited but never confirmed is No Confirmation.
+      var res = m !== undefined ? zoomResult(m, minMin) : a.Stage === 'Confirmed' ? 'No Show' : 'No Confirmation';
       if (m !== undefined) update_(apps, a, { 'Zoom Minutes': Math.round(m) });
       setStage_(apps, a, res, 'System', m === undefined ? 'Not seen in Zoom' : Math.round(m) + ' minutes in Zoom');
-      if (!isTest_(a)) counts[res === 'No Show' ? 'noshow' : res === 'Did Not Complete' ? 'dnc' : 'completed']++;
+      if (!isTest_(a)) counts[{ 'No Show': 'noshow', 'No Confirmation': 'noconf', 'Did Not Complete': 'dnc' }[res] || 'completed']++;
     });
     z.rows.forEach(function (r) {
       if (ymdOf_(r['Interview Date']) === fin && r['Matched Applicant ID'] && !r.Result) {
@@ -800,7 +856,7 @@ function weeklyReport() {
   if (!days.length) return;
   var day = days[days.length - 1];
   var inv = apps.filter(function (a) { return ymdOf_(a['Interview Date']) === day && a.Stage !== 'Applied'; });
-  var done = function (a) { return ['Interview Completed', 'Passed', 'Hired', 'Onboarded'].indexOf(a.Stage) !== -1; };
+  var done = function (a) { return ['Interview Completed', 'Passed Pre-Interview', 'Passed Interview', 'Hired', 'Onboarded'].indexOf(a.Stage) !== -1; };
   var joined = function (a) { return Number(a['Zoom Minutes']) > 0 || done(a) || a.Stage === 'Did Not Complete'; };
   var group = function (key) {
     var m = {};
@@ -864,6 +920,7 @@ function tick() {
       sent: applySentEmails_(st),
       replies: processReplies_(st),
       olj: processOLJ_(st),
+      emailApps: processEmailApps_(st),
       zoom: processZoom_(st),
       reminders: queueReminders_(st)
     };
@@ -913,6 +970,11 @@ function setup() {
     sc.setFrozenRows(1);
   }
   scoreColumns_();
+  if (!ss.getSheetByName(SH.EMAILAPPS)) {
+    var em = ss.insertSheet(SH.EMAILAPPS);
+    em.getRange(1, 1, 1, 11).setValues([['Message ID', 'Received At', 'From Email', 'Applicant Name', 'Subject', 'Position (as typed)', 'Summary', 'Referral', 'Applicant ID', 'Processed At', 'Note']]).setFontWeight('bold');
+    em.setFrozenRows(1);
+  }
   if (!ss.getSheetByName(SH.VIEWS)) {
     var vw = ss.insertSheet(SH.VIEWS);
     vw.getRange(1, 1, 1, 4).setValues([['Name', 'Query', 'Created By', 'Created At']]).setFontWeight('bold');
@@ -1012,6 +1074,12 @@ function thread_(a) {
   }).map(function (r) {
     return { dir: 'in', at: r['Received At'], subject: r.Subject, text: stripQuoted(r['Reply Text']).slice(0, 2000), category: r.Category };
   });
+  if (ss_().getSheetByName(SH.EMAILAPPS) && email) {
+    plain_(table_(SH.EMAILAPPS).rows).forEach(function (r) {
+      if (String(r['From Email']).trim().toLowerCase() !== email) return;
+      inn.push({ dir: 'in', at: r['Received At'], subject: r.Subject, type: 'Application', text: 'Application email: ' + String(r.Summary || '').slice(0, 1500) });
+    });
+  }
   return out.concat(inn, oljThread_(a)).sort(function (x, y) { return String(x.at).localeCompare(String(y.at)); });
 }
 

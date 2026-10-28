@@ -2,24 +2,32 @@ import type { Row } from './sheet';
 
 export const STAGES = [
   'Applied', 'Invited', 'Confirmed', 'Open for re-invite', 'Interview Completed',
-  'Did Not Complete', 'No Show', 'Passed', 'Hired', 'Onboarded', 'Not Fit'
+  'Did Not Complete', 'No Show', 'No Confirmation', 'Passed Pre-Interview', 'Passed Interview', 'Hired', 'Onboarded', 'Not Fit'
 ] as const;
 
 /** Board column order: the main flow first, then the side outcomes. */
 export const BOARD_STAGES = [
-  'Applied', 'Invited', 'Confirmed', 'Interview Completed', 'Passed', 'Hired', 'Onboarded',
-  'Open for re-invite', 'Did Not Complete', 'No Show', 'Not Fit'
+  'Applied', 'Invited', 'Confirmed', 'Interview Completed', 'Passed Pre-Interview', 'Passed Interview', 'Hired', 'Onboarded',
+  'Open for re-invite', 'Did Not Complete', 'No Show', 'No Confirmation', 'Not Fit'
 ];
 
 /** Hired or further along (Onboarded counts as hired everywhere). */
 export const HIRED = ['Hired', 'Onboarded'];
+/** Where applications come from. Referral = added by hand for someone a team member referred (no form, OLJ or email). */
+export const SOURCES = ['Form', 'OLJ', 'Email', 'Referral'];
+export const SOURCE_LABEL: Record<string, string> = { Form: 'Application form', OLJ: 'OnlineJobs.ph', Email: 'Emailed to CareersCW', Referral: 'Referral' };
+
+/** Passed comes in two steps, Passed Pre-Interview then Passed Interview, and after both the person is Hired. */
+export const PASSED = ['Passed Pre-Interview', 'Passed Interview'];
+/** The next Passed step for someone at this stage (the scorecard's "Passed" suggestion applies this). */
+export const nextPassed = (stage: string) => (stage === 'Passed Pre-Interview' ? 'Passed Interview' : 'Passed Pre-Interview');
 export type Stage = (typeof STAGES)[number];
 
 /** Grey = not engaged yet, blue = in progress, amber = needs action, red = missed, green = success. */
 export const STAGE_TONE: Record<string, string> = {
   Applied: 'grey', Invited: 'blue', Confirmed: 'blue', 'Open for re-invite': 'amber',
-  'Interview Completed': 'amber', 'Did Not Complete': 'red', 'No Show': 'red',
-  Passed: 'green', Hired: 'green', Onboarded: 'green', 'Not Fit': 'grey'
+  'Interview Completed': 'amber', 'Did Not Complete': 'red', 'No Show': 'red', 'No Confirmation': 'grey',
+  'Passed Pre-Interview': 'green', 'Passed Interview': 'green', Hired: 'green', Onboarded: 'green', 'Not Fit': 'grey'
 };
 
 /** Screening tags (Claude): Great = clearly meets the rule (1+ year or highly relevant), Good = meets 6 months, Not Fit = does not or not enough info. */
@@ -100,13 +108,13 @@ function days(a: string, b: string): number {
   return (Date.parse(`${ymd(b)}T00:00:00Z`) - Date.parse(`${ymd(a)}T00:00:00Z`)) / 86_400_000;
 }
 
-export type SessionStats = { date: string; invited: number; confirmed: number; attended: number; completed: number; noShow: number };
+export type SessionStats = { date: string; invited: number; confirmed: number; attended: number; completed: number; noShow: number; noConfirmation: number };
 
 /**
  * Funnel numbers. Historical applicants (invited by hand before the system, no Zoom data) are left out of
  * every rate; they still count in "applicants per week".
  */
-export function metrics(allApplicants: Row[], history: Row[], flags: Row[], now = new Date()) {
+export function metrics(allApplicants: Row[], history: Row[], flags: Row[], now = new Date(), opts: { session?: string } = {}) {
   const applicants = allApplicants.filter((a) => !isTest(a));
   const reached = new Map<string, Set<string>>();
   for (const h of history) {
@@ -123,13 +131,17 @@ export function metrics(allApplicants: Row[], history: Row[], flags: Row[], now 
   const perWeek = weeks.map((w) => ({
     week: w,
     form: applicants.filter((a) => weekOf(s(a['Applied At (PT)'])) === w && s(a.Source) === 'Form').length,
-    olj: applicants.filter((a) => weekOf(s(a['Applied At (PT)'])) === w && s(a.Source) === 'OLJ').length
+    olj: applicants.filter((a) => weekOf(s(a['Applied At (PT)'])) === w && s(a.Source) === 'OLJ').length,
+    email: applicants.filter((a) => weekOf(s(a['Applied At (PT)'])) === w && s(a.Source) === 'Email').length,
+    referral: applicants.filter((a) => weekOf(s(a['Applied At (PT)'])) === w && s(a.Source) === 'Referral').length
   }));
 
   // Sessions: past Wednesdays (and today after the interview) with system-tracked invitees
   const today = todayPT(now);
   const tracked = applicants.filter((a) => s(a.Historical) !== 'Y' && ymd(a['Interview Date']));
-  const sessionDates = [...new Set(tracked.map((a) => ymd(a['Interview Date'])))].filter((d) => d <= today).sort().slice(-8);
+  const allDates = [...new Set(tracked.map((a) => ymd(a['Interview Date'])))].filter((d) => d <= today).sort();
+  // One session when the dashboard is filtered to it, otherwise the last 8
+  const sessionDates = opts.session ? allDates.filter((d) => d === opts.session) : allDates.slice(-8);
   const sessions: SessionStats[] = sessionDates.map((date) => {
     const inv = tracked.filter((a) => ymd(a['Interview Date']) === date && s(a.Stage) !== 'Applied');
     return {
@@ -138,22 +150,23 @@ export function metrics(allApplicants: Row[], history: Row[], flags: Row[], now 
       confirmed: inv.filter((a) => s(a['Confirmed At']) || did(a, 'Confirmed')).length,
       attended: inv.filter(attended).length,
       completed: inv.filter((a) => did(a, 'Interview Completed')).length,
-      noShow: inv.filter((a) => did(a, 'No Show')).length
+      noShow: inv.filter((a) => did(a, 'No Show')).length,
+      noConfirmation: inv.filter((a) => did(a, 'No Confirmation')).length
     };
   });
-  const finished = sessions.filter((x) => x.attended + x.noShow > 0);
+  const finished = sessions.filter((x) => x.attended + x.noShow + x.noConfirmation > 0);
   const sum = (k: keyof SessionStats) => finished.reduce((t, x) => t + (x[k] as number), 0);
 
   // Pass rate by position, among those who completed an interview and have a decision
-  const decided = tracked.filter((a) => did(a, 'Interview Completed') && ['Passed', 'Hired', 'Onboarded', 'Not Fit'].includes(s(a.Stage)));
+  const decided = tracked.filter((a) => (!opts.session || ymd(a['Interview Date']) === opts.session) && did(a, 'Interview Completed') && [...PASSED, ...HIRED, 'Not Fit'].includes(s(a.Stage)));
   const positions = [...new Set(decided.map((a) => s(a.Position) || 'Other'))].sort();
   const byPosition = positions.map((p) => {
     const rows = decided.filter((a) => (s(a.Position) || 'Other') === p);
-    const passed = rows.filter((a) => ['Passed', 'Hired', 'Onboarded'].includes(s(a.Stage))).length;
+    const passed = rows.filter((a) => [...PASSED, ...HIRED].includes(s(a.Stage))).length;
     return { position: p, decided: rows.length, passed, rate: rate(passed, rows.length) };
   });
 
-  const toInterview = tracked.filter(attended).map((a) => days(s(a['Applied At (PT)']), s(a['Interview Date'])));
+  const toInterview = tracked.filter((a) => (!opts.session || ymd(a['Interview Date']) === opts.session) && attended(a)).map((a) => days(s(a['Applied At (PT)']), s(a['Interview Date'])));
 
   return {
     perWeek,
@@ -161,12 +174,13 @@ export function metrics(allApplicants: Row[], history: Row[], flags: Row[], now 
     confirmationRate: rate(sum('confirmed'), sum('invited')),
     showUpRate: rate(sum('attended'), sum('confirmed')),
     completionRate: rate(sum('completed'), sum('attended')),
-    noShowRate: rate(sum('noShow'), sum('invited')),
+    noShowRate: rate(sum('noShow'), sum('confirmed')),
     medianDaysToInterview: median(toInterview),
     byPosition,
     openFlags: flags.filter((f) => s(f.Status) === 'Open').length,
     awaitingReview: applicants.filter((a) => s(a.Stage) === 'Interview Completed').length,
-    sessionCount: finished.length
+    sessionCount: finished.length,
+    sessionDates: allDates
   };
 }
 
@@ -203,3 +217,24 @@ export function scoreSummary(cards: Row[]): { average: number; count: number; su
 
 /** Comma-separated tags as a list. */
 export const splitTags = (v: unknown) => s(v).split(',').map((t) => t.trim()).filter(Boolean);
+
+/**
+ * Live Zoom status during today's session, from the Zoom Attendance rows the live sync rewrites every few minutes.
+ * Someone is "in Zoom now" when their Last Leave equals the latest Last Leave of any row today (the snapshot time);
+ * otherwise they left at their Last Leave. Rows get a Result at the 3:30 wrap-up, and then the status disappears.
+ */
+export type ZoomLive = { inNow: boolean; lastLeave: string; minutes: string };
+export function zoomLive(zoom: Row[], now = new Date()): Map<string, ZoomLive> {
+  const today = todayPT(now);
+  const hm = (v: unknown) => s(v).replace(/^(\d):/, '0$1:');
+  const rows = zoom.filter((z) => ymd(z['Interview Date']) === today && s(z['Matched Applicant ID']) && !s(z.Result));
+  const latest = rows.reduce((m, z) => (hm(z['Last Leave']) > m ? hm(z['Last Leave']) : m), '');
+  const out = new Map<string, ZoomLive>();
+  for (const z of rows) {
+    const id = s(z['Matched Applicant ID']);
+    const cur = { inNow: hm(z['Last Leave']) === latest, lastLeave: hm(z['Last Leave']), minutes: s(z['Total Minutes']) };
+    const prev = out.get(id);
+    if (!prev || cur.inNow || (!prev.inNow && cur.lastLeave > prev.lastLeave)) out.set(id, cur);
+  }
+  return out;
+}

@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation';
 
 /* Plain SVG charts. One y-scale per chart, thin marks, hover tooltips, nulls drawn as gaps (never as 0). */
 
-const SERIES = ['#2a78d6', '#eb6834', '#1baf7a'];
+const SERIES = ['#2a78d6', '#eb6834', '#1baf7a', '#8a5cd6'];
 const GRID = '#e3e7ee';
 const INK2 = '#667085';
 
@@ -19,12 +19,12 @@ function Tooltip({ tip }: { tip: Tip }) {
   );
 }
 
-/** Applicants per week, stacked Form + OLJ, with a 2px gap between segments. */
-export function WeeklyBars({ data }: { data: { label: string; form: number; olj: number; href?: string }[] }) {
+/** Applicants per week, stacked Form + OLJ + Email + Referral, with a 2px gap between segments. */
+export function WeeklyBars({ data }: { data: { label: string; form: number; olj: number; email?: number; referral?: number; href?: string }[] }) {
   const [tip, setTip] = useState<Tip>(null);
   const router = useRouter();
   const W = 760, H = 260, L = 40, B = 30, T = 22;
-  const max = Math.max(1, ...data.map((d) => d.form + d.olj));
+  const max = Math.max(1, ...data.map((d) => d.form + d.olj + (d.email || 0) + (d.referral || 0)));
   const step = (W - L) / data.length, bw = Math.min(46, step * 0.55);
   const y = (v: number) => T + (H - T - B) * (1 - v / max);
   const ticks = [0, Math.ceil(max / 2), max];
@@ -34,22 +34,26 @@ export function WeeklyBars({ data }: { data: { label: string; form: number; olj:
         {ticks.map((t) => <g key={t}><line x1={L} x2={W} y1={y(t)} y2={y(t)} stroke={GRID} /><text x={L - 6} y={y(t) + 4} textAnchor="end" className="axis">{t}</text></g>)}
         {data.map((d, i) => {
           const x = L + i * step + (step - bw) / 2;
-          const total = d.form + d.olj;
-          const hf = y(0) - y(d.form);
-          const ho = y(0) - y(d.olj);
+          const segs = [d.form, d.olj, d.email || 0, d.referral || 0];
+          const total = segs.reduce((t, v) => t + v, 0);
+          const top = segs.reduce((last, v, k) => (v > 0 ? k : last), -1);
           return (
             <g key={d.label} className={d.href ? 'clickable' : ''} onClick={() => d.href && router.push(d.href)}
-              onMouseMove={(e) => setTip({ x: e.nativeEvent.offsetX + 12, y: e.nativeEvent.offsetY - 10, lines: [`Week of ${d.label}`, `Form: ${d.form}`, `OnlineJobs.ph: ${d.olj}`, `Total: ${total}`, ...(d.href ? ['Click to see the people'] : [])] })}>
+              onMouseMove={(e) => setTip({ x: e.nativeEvent.offsetX + 12, y: e.nativeEvent.offsetY - 10, lines: [`Week of ${d.label}`, `Form: ${d.form}`, `OnlineJobs.ph: ${d.olj}`, `Email: ${d.email || 0}`, `Referral: ${d.referral || 0}`, `Total: ${total}`, ...(d.href ? ['Click to see the people'] : [])] })}>
               <rect x={L + i * step} y={T} width={step} height={H - T - B} fill="transparent" />
-              {d.form > 0 && <rect x={x} y={y(d.form)} width={bw} height={hf} rx={d.olj ? 0 : 4} fill={SERIES[0]} />}
-              {d.olj > 0 && <rect x={x} y={y(total)} width={bw} height={Math.max(0, ho - 2)} rx={4} fill={SERIES[1]} />}
+              {segs.map((v, k) => {
+                if (v <= 0) return null;
+                const below = segs.slice(0, k).reduce((t, u) => t + u, 0);
+                const h = y(below) - y(below + v);
+                return <rect key={k} x={x} y={y(below + v)} width={bw} height={Math.max(0, k > 0 ? h - 2 : h)} rx={k === top ? 4 : 0} fill={SERIES[k]} />;
+              })}
               <text x={x + bw / 2} y={y(total) - 5} textAnchor="middle" className="val">{total}</text>
               <text x={x + bw / 2} y={H - 8} textAnchor="middle" className="axis">{d.label}</text>
             </g>
           );
         })}
       </svg>
-      <div className="legend"><span className="key" style={{ background: SERIES[0] }} /> Form <span className="key" style={{ background: SERIES[1] }} /> OnlineJobs.ph</div>
+      <div className="legend"><span className="key" style={{ background: SERIES[0] }} /> Form <span className="key" style={{ background: SERIES[1] }} /> OnlineJobs.ph <span className="key" style={{ background: SERIES[2] }} /> Email <span className="key" style={{ background: SERIES[3] }} /> Referral</div>
       <Tooltip tip={tip} />
     </div>
   );

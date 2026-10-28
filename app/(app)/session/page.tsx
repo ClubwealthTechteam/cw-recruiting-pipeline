@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { getData } from '@/lib/sheet';
-import { s, fullName, ymd, formatDate, upcomingWednesday, isTest } from '@/lib/pipeline';
+import { s, fullName, ymd, formatDate, upcomingWednesday, isTest, zoomLive } from '@/lib/pipeline';
+import ZoomBadge from '@/components/ZoomBadge';
 import StageBadge from '@/components/StageBadge';
 import DataError from '@/components/DataError';
 
@@ -17,6 +18,7 @@ export default async function Session({ searchParams }: { searchParams: Promise<
   const reminded = counted.filter((a) => a['Reminder Sent At']).length;
   const prev = new Date(`${date}T12:00:00Z`); prev.setUTCDate(prev.getUTCDate() - 7);
   const next = new Date(`${date}T12:00:00Z`); next.setUTCDate(next.getUTCDate() + 7);
+  const live = zoomLive(d.zoom);
   const unmatchedZoom = d.zoom.filter((z) => ymd(z['Interview Date']) === date && !z['Matched Applicant ID']);
 
   return (
@@ -39,7 +41,7 @@ export default async function Session({ searchParams }: { searchParams: Promise<
             {roster.map((a) => (
               <tr key={s(a['Applicant ID'])}>
                 <td><Link href={`/candidates/${encodeURIComponent(s(a['Applicant ID']))}`}>{fullName(a)}</Link></td>
-                <td>{s(a.Position)}</td><td><StageBadge stage={s(a.Stage)} />{isTest(a) && <span className="tag">Test · not counted</span>}</td>
+                <td>{s(a.Position)}</td><td><StageBadge stage={s(a.Stage)} /><ZoomBadge z={live.get(s(a['Applicant ID']))} />{isTest(a) && <span className="tag">Test · not counted</span>}</td>
                 <td>{a['Confirmed At'] ? 'Yes' : 'No'}</td><td>{a['Reminder Sent At'] ? 'Sent' : '—'}</td><td><Arrival a={a} /></td><td>{s(a['Zoom Minutes']) || '—'}</td>
               </tr>
             ))}
