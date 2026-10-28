@@ -455,6 +455,9 @@ function processReplies_(st) {
       return;
     }
     var m = matchReply_(apps.rows, rep, today);
+    if (m.applicant && rep.Category === 'Other' && confirmsFor(rep['Reply Text'], m.applicant['First Name'], m.applicant['Last Name'])) {
+      update_(reps, rep, { Category: 'Confirmed' });
+    }
     var action;
     if (!m.applicant) {
       flag_('', 'Unmatched reply', m.why + ' | From: ' + rep['From Email'] + ' | ' + stripQuoted(rep['Reply Text']).slice(0, 300));

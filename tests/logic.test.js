@@ -164,3 +164,13 @@ test('only the approved email template may be sent', () => {
   assert.equal(L.approvedEmailBody(L.inviteEmail('2026-11-04', new Date('2026-10-29T16:00:00Z')).body), true);
   assert.equal(L.approvedEmailBody('<p>Cheers,<br>Am Marbella | Recruiter</p>'), false);
 });
+
+test('confirmations written in different ways still count once the sender is matched', () => {
+  assert.equal(L.confirmsFor('Hi Am,\n\nThank you for the invitation. I confirm my availability for the interview, Maria Santos.', 'Maria', 'Santos'), true);
+  assert.equal(L.confirmsFor("Hi there,\n\nI'm JUAN DELA CRUZ.\n\nI'm available on Wednesday at 2:00 PM.", 'Juan', 'Dela Cruz'), true);
+  assert.equal(L.confirmsFor('Hi,\n\nAna B. Reyes', 'Ana', 'Reyes'), true);
+  assert.equal(L.confirmsFor('Good day! I gladly accept your invitation.', 'Ana', 'Reyes'), true);
+  assert.equal(L.confirmsFor('Can we do the interview tomorrow?', 'Ana', 'Reyes'), false);
+  assert.equal(L.confirmsFor('Sorry, I cannot attend today.', 'Ana', 'Reyes'), false);
+  assert.equal(L.confirmsFor('Thanks', 'Ana', 'Reyes'), false);
+});
