@@ -33,3 +33,16 @@ test('OLJ invite date and zone follow the session', () => {
   assert.match(t, /pre-interview on Wednesday, November 4, 2026, at 2:00 PM PACIFIC STANDARD TIME/);
   assert.doesNotMatch(t, /Daylight/i);
 });
+
+test('invite only when the applicant is interested AND sent a summary, resume or cover message', () => {
+  const { applicationReady } = require('../routines/olj_send.js');
+  const longIntro = 'Hi! I am very interested in the Collections Virtual Assistant position. ' + 'I have three years of collections experience handling US accounts, skip tracing, payment arrangements and dispute calls for an auto lender, plus CRM work in Salesforce. '.repeat(2);
+  assert.equal(applicationReady([{ body: longIntro }]).ok, true);
+  assert.equal(applicationReady([{ body: 'Interested in this position. Resume: https://drive.google.com/file/d/abc' }]).ok, true);
+  assert.equal(applicationReady([{ body: 'I would like to apply for the role.', hasAttachment: true }]).ok, true);
+  assert.equal(applicationReady([{ body: 'Hi good day are you still hiring' }]).ok, false);
+  assert.match(applicationReady([{ body: 'Hi good day are you still hiring' }]).reason, /interested|summary/);
+  assert.match(applicationReady([{ body: 'I am interested!' }]).reason, /summary, resume or cover/);
+  assert.match(applicationReady([{ body: 'Here is my resume https://drive.google.com/x and 5 years experience as TC' }]).reason, /interested/);
+  assert.equal(applicationReady([]).ok, false);
+});
