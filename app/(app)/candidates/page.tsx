@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { getData } from '@/lib/sheet';
+import { getData, getDataWithHistory } from '@/lib/sheet';
 import { STAGES, s, fullName, ymd, formatDate, positionCounts } from '@/lib/pipeline';
 import CandidatesTable, { type CandidateRow } from '@/components/CandidatesTable';
 import DataError from '@/components/DataError';
@@ -11,9 +11,9 @@ type Q = { stage?: string; fit?: string; source?: string; position?: string; ses
 
 export default async function Candidates({ searchParams }: { searchParams: Promise<Q> }) {
   const p = await searchParams;
-  let d;
-  try { d = await getData(); } catch (e) { return <DataError error={e} />; }
   const showHistory = p.history === '1';
+  let d;
+  try { d = await (showHistory ? getDataWithHistory() : getData()); } catch (e) { return <DataError error={e} />; }
   const base = d.applicants.filter((a) => showHistory || s(a.Historical) !== 'Y');
   const stage = p.stage || 'Active';
   const counts: Record<string, number> = { Active: base.filter((a) => !CLOSED.includes(s(a.Stage))).length, All: base.length };

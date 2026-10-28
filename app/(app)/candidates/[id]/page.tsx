@@ -1,7 +1,7 @@
 import { Fragment } from 'react';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { getData, getApplicant } from '@/lib/sheet';
+import { getData, getDataWithHistory, getApplicant } from '@/lib/sheet';
 import { s, fullName, ymd, formatDate } from '@/lib/pipeline';
 import StageBadge from '@/components/StageBadge';
 import StageForm from '@/components/StageForm';
@@ -24,7 +24,11 @@ export default async function Candidate({ params }: { params: Promise<{ id: stri
   const { id } = await params;
   const appId = decodeURIComponent(id);
   let d, a;
-  try { [d, a] = await Promise.all([getData(), getApplicant(appId)]); } catch (e) { return <DataError error={e} />; }
+  try {
+    [d, a] = await Promise.all([getData(), getApplicant(appId)]);
+    // applicants from before the system: their history is only in the full data set
+    if (a && s(a.Historical) === 'Y') d = await getDataWithHistory();
+  } catch (e) { return <DataError error={e} />; }
   if (!a) notFound();
 
   type Ev = { at: string; text: string; who?: string };

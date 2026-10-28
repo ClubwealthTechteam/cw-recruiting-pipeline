@@ -258,6 +258,28 @@ test('Zoom backup path: zoomRows API appends rows and finalizes the day', () => 
   assert.equal(a.Jose.Stage, 'No Show');
 });
 
+test('site API: data leaves out the before-system applicants\' details and history unless asked', () => {
+  const env = load({
+    mode: 'LIVE', now: pdt('2026-10-27T12:00:00'),
+    formRows: [
+      formRow(pdt('2026-09-01T10:00:00'), 'Old', 'Invitee', 'old@example.com', 'ISA', 'Yes'),
+      formRow(pdt('2026-10-23T10:00:00'), 'Due', 'Tomorrow', 'due@example.com', 'Collections VA', 'Yes')
+    ]
+  });
+  env.ctx.importHistory();
+  const d = env.api({ action: 'data', slim: true }).data;
+  const old = d.applicants.find((a) => a['Applicant ID'] === 'F-2');
+  assert.equal(old.Historical, 'Y');
+  assert.equal(old.Stage, 'Invited');
+  assert.equal(old['First Name'], undefined);
+  assert.equal(d.applicants.find((a) => a['Applicant ID'] === 'F-3')['First Name'], 'Due');
+  assert.equal(d.history.some((h) => h['Applicant ID'] === 'F-2'), false);
+  const all = env.api({ action: 'data', slim: true, withHistory: true }).data;
+  assert.equal(all.withHistory, true);
+  assert.equal(all.applicants.find((a) => a['Applicant ID'] === 'F-2')['First Name'], 'Old');
+  assert.equal(all.history.length >= d.history.length, true);
+});
+
 test('site API: applicant action returns one full record by ID', () => {
   const env = invitedEnv();
   const r = env.api({ action: 'applicant', id: 'F-3' });
