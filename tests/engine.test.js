@@ -29,7 +29,7 @@ test('TEST mode: new form row -> Applied -> invite to test address -> Invited', 
   assert.equal(apps.length, 1);
   assert.equal(apps[0]['Applicant ID'], 'T-3');
   assert.equal(apps[0].Stage, 'Applied');
-  assert.equal(apps[0].Position, 'Appointment Setter');
+  assert.equal(apps[0].Position, 'Inside Sales Agent (ISA)');
   assert.equal(apps[0]['Interview Date'], '2026-10-28');
   const out = env.rows('Outbox');
   assert.equal(out.length, 1);
@@ -64,7 +64,7 @@ test('LIVE import of history: invited rows plus upcoming not-yet-invited, no ema
   assert.throws(() => env.ctx.importHistory(), /already imported/);
   env.ctx.tick();
   assert.equal(env.rows('Outbox').length, 0);
-  env.ctx.SpreadsheetApp.openById().getSheetByName().appendRow(formRow(pdt('2026-10-27T12:00:00'), 'New', 'Applicant', 'NEW@Example.com', 'TC'));
+  env.ctx.SpreadsheetApp.openById().getSheetByName().appendRow(formRow(pdt('2026-10-27T12:00:00'), 'New', 'Applicant', 'NEW@Example.com', 'Transaction Coordinator'));
   env.ctx.tick();
   const out = env.rows('Outbox');
   assert.equal(out.length, 1);
@@ -164,21 +164,36 @@ test('Zoom: 30+ minutes completed, under 30 did not complete, unseen no show, no
   assert.equal(env.rows('History').filter((h) => h['To Stage'] === 'No Show').length, 1);
 });
 
-test('OLJ: new conversation becomes Applied; once an email is found it gets an invite', () => {
+test('OLJ: new conversation for an open position is screened and gets one OLJ invite (never an email)', () => {
   const env = invitedEnv();
-  addRow(env, 'OLJ', { 'Conversation Key': 'c123', 'Job Post': 'Collections Virtual Assistant', 'Applicant Name': 'Lito Lapid', Summary: 'Interested; 3 yrs collections.' });
+  addRow(env, 'OLJ', { 'Conversation Key': 'c123', 'Job Post': 'Collections Virtual Assistant', 'Applicant Name': 'Lito Lapid', 'Email Found': 'lito@example.com', Summary: 'Interested; 3 yrs collections.' });
+  addRow(env, 'OLJ', { 'Conversation Key': 'c999', 'Job Post': 'AI-SAVVY MARKETING & ADS SPECIALIST', 'Applicant Name': 'Ads Person', Summary: 's' });
   env.ctx.tick();
-  let lito = env.rows('Applicants').find((x) => x['Applicant ID'] === 'O-c123');
+  env.ctx.tick();
+  const lito = env.rows('Applicants').find((x) => x['Applicant ID'] === 'O-c123');
   assert.equal(lito.Stage, 'Applied');
-  assert.equal(lito.Source, 'OLJ');
-  assert.equal(env.rows('Outbox').length, 0);
-  env.sheets.OLJ.data[1][env.sheets.OLJ.data[0].indexOf('Email Found')] = 'lito@example.com';
-  env.ctx.tick();
+  const out = env.rows('Outbox').filter((e) => e['Applicant ID'] === 'O-c123');
+  assert.equal(out.length, 1);
+  assert.equal(out[0].Type, 'OLJ Invite');
+  assert.equal(out[0].To, 'OLJ:c123');
+  const ads = env.rows('Applicants').find((x) => x['Applicant ID'] === 'O-c999');
+  assert.equal(ads['Invite Hold'], 'Position not open: Marketing & Ads Specialist');
+  assert.equal(env.rows('Outbox').filter((e) => e['Applicant ID'] === 'O-c999').length, 0);
+});
+
+test('form applicants are screened before the invite: held-back reasons are recorded, nothing is sent to them', () => {
+  const env = load({ mode: 'LIVE', now: pdt('2026-10-28T09:00:00'), formRows: [formRow(pdt('2026-10-20T10:00:00'), 'Old', 'One', 'old@example.com', 'ISA', 'Yes')] });
+  env.ctx.importHistory();
+  const src = env.ctx.SpreadsheetApp.openById().getSheetByName();
+  src.appendRow(formRow(pdt('2026-10-28T08:00:00'), 'Good', 'Fit', 'good@example.com', 'Collections VA', ''));
+  src.appendRow(formRow(pdt('2026-10-28T08:01:00'), 'Gen', 'Va', 'gen@example.com', 'General Virtual Assistant', ''));
+  src.appendRow(formRow(pdt('2026-10-28T08:02:00'), 'Good', 'Again', 'GOOD@example.com', 'Collections VA', ''));
   env.ctx.tick();
   const out = env.rows('Outbox');
-  assert.equal(out.length, 1);
-  assert.equal(out[0].To, 'lito@example.com');
-  assert.equal(env.rows('Applicants').filter((x) => x.Source === 'OLJ').length, 1);
+  assert.deepEqual(out.map((e) => e.To), ['good@example.com']);
+  assert.match(out[0].Body, /today, Wednesday, October 28, 2026/);
+  const holds = env.rows('Applicants').filter((a) => a.Stage === 'Applied').map((a) => [a['First Name'] + ' ' + a['Last Name'], a['Invite Hold']]);
+  assert.deepEqual(holds, [['Good Fit', ''], ['Gen Va', 'Position not open: General VA'], ['Good Again', 'Already invited (same email)']]);
 });
 
 test('site API: secret required, bulk stage change logs history, reason required for Not Fit', () => {
@@ -366,7 +381,7 @@ test('queued emails go to the Zapier hook only while EMAIL_SENDING is ON, and ne
   const env = invitedEnv({ AUTO_INVITES: 'OFF' });
   env.ctx.tick();
   ctxCalls.posts = []; ctxCalls.code = 200;
-  addRow(env, 'Outbox', { 'Email ID': 'E-1', 'Applicant ID': 'F-2', Type: 'Invite', To: 'jose@example.com', Subject: 'ClubWealth | Pre-Interview invite', Body: '<p>x</p>', 'Interview Date': '2026-10-28', Status: 'Queued' });
+  addRow(env, 'Outbox', { 'Email ID': 'E-1', 'Applicant ID': 'F-2', Type: 'Invite', To: 'jose@example.com', Subject: 'ClubWealth | Pre-Interview invite', Body: env.ctx.inviteEmail('2026-10-28', new Date()).body, 'Interview Date': '2026-10-28', Status: 'Queued' });
   addRow(env, 'Outbox', { 'Email ID': 'E-2', 'Applicant ID': 'F-3', Type: 'OLJ Invite', To: 'OLJ:k1', Subject: '(OnlineJobs.ph message)', Status: 'Queued' });
   env.ctx.tick();
   assert.equal(env.rows('Outbox').find((e) => e['Email ID'] === 'E-1').Status, 'Queued', 'nothing sent while EMAIL_SENDING is off');
@@ -381,7 +396,7 @@ test('queued emails go to the Zapier hook only while EMAIL_SENDING is ON, and ne
   assert.equal(env.rows('Applicants').find((a) => a['Applicant ID'] === 'F-2').Stage, 'Invited');
   // a Zapier error marks the row Failed (flagged), and it is not retried
   ctxCalls.code = 500;
-  addRow(env, 'Outbox', { 'Email ID': 'E-3', 'Applicant ID': 'F-1', Type: 'Reminder', To: 'maria@example.com', Subject: 'ClubWealth | Pre-reminder invite', Body: '<p>x</p>', Status: 'Queued' });
+  addRow(env, 'Outbox', { 'Email ID': 'E-3', 'Applicant ID': 'F-1', Type: 'Reminder', To: 'maria@example.com', Subject: 'ClubWealth | Pre-reminder invite', Body: env.ctx.reminderEmail('2026-10-28').body, Status: 'Queued' });
   env.ctx.tick(); env.ctx.tick();
   assert.equal(env.rows('Outbox').find((e) => e['Email ID'] === 'E-3').Status, 'Failed');
   assert.equal(ctxCalls.posts.filter((p) => /E-3/.test(p.body || '')).length, 1);

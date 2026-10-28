@@ -252,7 +252,7 @@ function importNewFormRows_(st) {
       'Timestamp (PT)': nowStr_(), 'Applicant ID': a['Applicant ID'], 'From Stage': '',
       'To Stage': 'Applied', 'Changed By': 'System', Reason: 'Form response'
     });
-    queueInvite_(st, a, a['Interview Date'], 'Invite');
+    screenAndInvite_(st, apps, a);
     st.set(src.marker, rowNum);
     n++;
   }
@@ -360,8 +360,14 @@ function dispatchEmails_(st) {
   var n = 0;
   out.rows.filter(function (e) {
     return e.Status === 'Queued' && EMAIL_TYPES.indexOf(e.Type) !== -1;
-  }).slice(0, 25).forEach(function (e) {
+  }).slice(0, 6).forEach(function (e, i) {
     var a = byId[e['Applicant ID']];
+    if (e.Type !== 'Confirmation' && !approvedEmailBody(e.Body)) {
+      update_(out, e, { Status: 'Failed', Error: 'Not the approved template (Club Wealth sign-off and banner). Update Logic.gs and re-queue.' });
+      return;
+    }
+    // Microsoft 365 refuses SMTP logins that overlap, so emails go one at a time, about 25 s apart (6 per 5-minute run).
+    if (i > 0) Utilities.sleep(25000);
     var blocked = a && (e.Type === 'Invite' || e.Type === 'Re-invite') ? doNotInvite_(st, a) : '';
     if (blocked) {
       update_(out, e, { Status: 'Cancelled', Error: 'Do not invite: ' + blocked });
@@ -538,19 +544,55 @@ function processOLJ_(st) {
       update_(apps, a, { 'OLJ Summary': o.Summary });
     }
     if (email && !a.Email) update_(apps, a, { Email: email });
-    if (a.Email && a.Stage === 'Applied' && !(Number(a['Invite Count']) > 0) &&
-        !(st.get('MODE') === 'LIVE' && st.get('AUTO_INVITES') === 'OFF') && !pendingInvite_(a['Applicant ID'])) {
-      var iv = interviewDateFor(new Date());
-      update_(apps, a, { 'Interview Date': iv });
-      queueInvite_(st, a, iv, 'Invite');
+    if (a.Stage === 'Applied' && !(Number(a['Invite Count']) > 0) && !a['Invite Hold'] && !pendingInvite_(a['Applicant ID'])) {
+      screenAndInvite_(st, apps, a);
     }
   });
   return n;
 }
 
+/**
+ * Screens one new applicant and, if they pass, queues their invite for the session interviewDateFor gives
+ * (Wednesday 12 PM PT cut-off): an email for form applicants, an OLJ message for OLJ applicants. A held-back
+ * applicant keeps Stage Applied with the reason in "Invite Hold", shown on the site. Nothing is queued while
+ * AUTO_INVITES is OFF.
+ */
+function screenAndInvite_(st, apps, a) {
+  if (st.get('MODE') === 'LIVE' && st.get('AUTO_INVITES') === 'OFF') return null;
+  var rejected = doNotInvite_(st, a);
+  var hold = inviteHoldReason(a) || rejected || sameEmailInvited_(a);
+  if (hold) {
+    update_(apps, a, { 'Invite Hold': hold });
+    if (rejected) flag_(a['Applicant ID'], 'Do not invite', 'Invite not queued: ' + rejected + '.');
+    return null;
+  }
+  var session = interviewDateFor(new Date());
+  update_(apps, a, { 'Interview Date': session, 'Invite Hold': '' });
+  if (a.Source === 'OLJ') {
+    return append_(table_(SH.OUTBOX), {
+      'Email ID': id_('E'), 'Applicant ID': a['Applicant ID'], Type: 'OLJ Invite', To: 'OLJ:' + a['Source Ref'],
+      Subject: '(OnlineJobs.ph message)', Body: '', 'Interview Date': session, 'Queued At': nowStr_(), Status: 'Queued',
+      'Queued By': 'System (screened)'
+    });
+  }
+  return queueInvite_(st, a, session, 'Invite');
+}
+
+/** "Already invited (same email)" when another applicant row with this email already has an invite queued or sent. */
+function sameEmailInvited_(a) {
+  var e = String(a.Email || '').trim().toLowerCase();
+  if (!e) return '';
+  var dup = table_(SH.OUTBOX).rows.some(function (x) {
+    return x['Applicant ID'] !== a['Applicant ID'] && String(x.To).trim().toLowerCase() === e &&
+      ['Invite', 'Re-invite'].indexOf(x.Type) !== -1 && (x.Status === 'Queued' || x.Status === 'Sent') &&
+      ymdOf_(x['Interview Date']) >= todayPT(new Date());
+  });
+  return dup ? 'Already invited (same email)' : '';
+}
+
 function pendingInvite_(applicantId) {
   return table_(SH.OUTBOX).rows.some(function (e) {
-    return e['Applicant ID'] === applicantId && (e.Type === 'Invite' || e.Type === 'Re-invite') &&
+    return e['Applicant ID'] === applicantId && (e.Type === 'Invite' || e.Type === 'Re-invite' || e.Type === 'OLJ Invite') &&
       (e.Status === 'Queued' || e.Status === 'Sent');
   });
 }
@@ -701,6 +743,9 @@ function setup() {
   var oh = out.getRange(1, 1, 1, out.getLastColumn()).getValues()[0];
   if (oh.indexOf('Applied') === -1) { out.getRange(1, oh.length + 1).setValue('Applied').setFontWeight('bold'); oh.push('Applied'); }
   if (oh.indexOf('Queued By') === -1) out.getRange(1, oh.length + 1).setValue('Queued By').setFontWeight('bold');
+  var ap = sheet_(SH.APPLICANTS);
+  var aph = ap.getRange(1, 1, 1, ap.getLastColumn()).getValues()[0];
+  if (aph.indexOf('Invite Hold') === -1) ap.getRange(1, aph.length + 1).setValue('Invite Hold').setFontWeight('bold');
   if (!ss.getSheetByName(SH.TEST_FORM)) {
     var tf = ss.insertSheet(SH.TEST_FORM);
     var src = SpreadsheetApp.openById(settings_().get('SOURCE_SHEET_ID')).getSheetByName('Form Responses 1');

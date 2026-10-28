@@ -83,7 +83,11 @@ test('Zoom names: underscore only, one underscore, never _Training', () => {
 });
 
 test('positions map free text to standard names', () => {
-  assert.equal(L.standardPosition('Real State Appointment Setter'), 'Appointment Setter');
+  assert.equal(L.standardPosition('Real State Appointment Setter'), 'Inside Sales Agent (ISA)');
+  assert.equal(L.standardPosition('Customer Support or Administrative VA'), 'Customer Service');
+  assert.equal(L.standardPosition('Customer Service Representative'), 'Customer Service');
+  assert.equal(L.standardPosition('Real Estate VA'), 'General VA');
+  assert.equal(L.standardPosition('TC'), 'Real Estate Admin VA (TC/LC)');
   assert.equal(L.standardPosition('Collections VA'), 'Collections VA');
   assert.equal(L.standardPosition('Real Estate Inside Sales Agent (ISA) – Work from Home (40hrs)'), 'Inside Sales Agent (ISA)');
   assert.equal(L.standardPosition('Real Estate Admin VA (Transaction/Listing Coordinator)'), 'Real Estate Admin VA (TC/LC)');
@@ -143,4 +147,20 @@ test('invite and reminder emails are signed Club Wealth with the banner, no pers
 test('a same-day invite (Wednesday before noon) says today', () => {
   const e = L.inviteEmail('2026-10-28', new Date('2026-10-28T16:00:00Z')); // Wed 9 AM PDT
   assert.match(e.body, /pre-interview today, Wednesday, October 28, 2026, at 2:00 PM PACIFIC DAYLIGHT TIME/);
+});
+
+test('screening: only open positions, form applicants need experience and 50+ Mbps', () => {
+  const ok = { Source: 'Form', Position: 'Collections VA', 'Has Experience': 'Yes', 'Internet Speed': 'Above 50 mbps' };
+  assert.equal(L.inviteHoldReason(ok), '');
+  assert.equal(L.inviteHoldReason({ ...ok, Position: 'General VA' }), 'Position not open: General VA');
+  assert.equal(L.inviteHoldReason({ ...ok, Position: 'Customer Service' }), 'Position not open: Customer Service');
+  assert.equal(L.inviteHoldReason({ ...ok, 'Has Experience': 'No' }), 'No experience');
+  assert.equal(L.inviteHoldReason({ ...ok, 'Internet Speed': 'Below 50 mbps' }), 'Internet below 50 Mbps');
+  assert.equal(L.inviteHoldReason({ Source: 'OLJ', Position: 'Inside Sales Agent (ISA)' }), '');
+  assert.equal(L.inviteHoldReason({ Source: 'OLJ', Position: 'Marketing & Ads Specialist' }), 'Position not open: Marketing & Ads Specialist');
+});
+
+test('only the approved email template may be sent', () => {
+  assert.equal(L.approvedEmailBody(L.inviteEmail('2026-11-04', new Date('2026-10-29T16:00:00Z')).body), true);
+  assert.equal(L.approvedEmailBody('<p>Cheers,<br>Am Marbella | Recruiter</p>'), false);
 });
