@@ -6,7 +6,7 @@ export type CommandItem = { id: string; name: string; position: string; stage: s
 const PAGES = [
   { label: 'Dashboard', href: '/' }, { label: 'Candidates', href: '/candidates' }, { label: 'Pipeline board', href: '/board' },
   { label: "This Week's Session", href: '/session' }, { label: 'Talent pool', href: '/talent' }, { label: 'Reports', href: '/reports' },
-  { label: 'Needs Attention', href: '/attention' }
+  { label: 'Needs Attention', href: '/attention' }, { label: 'Help: what the CRM does', href: '/help' }
 ];
 
 /** Ctrl+K (or ⌘K): type a name or a page and press Enter to jump there. */

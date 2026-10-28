@@ -292,3 +292,6 @@ html[data-sidebar="mini"] .sidebar-foot .link { font-size: 10px; }
 .bulk-right { display: flex; align-items: center; gap: 10px; }
 .undo-btn { white-space: nowrap; }
 .filters .spacer { flex: 1; }
+.help-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(420px, 1fr)); gap: 0 18px; align-items: start; }
+.help-list { margin: 0; padding-left: 18px; }
+.help-list li { margin-bottom: 6px; }
