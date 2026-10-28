@@ -1,6 +1,6 @@
-# Routine: Recruiting – CareersCW email replies (every 30 minutes, 6 AM–9 PM PT)
+# Routine: Recruiting – CareersCW email replies (hourly, 6 AM–8 PM PT)
 
-**Schedule (proposed):** `CRON_TZ=America/Los_Angeles 7,37 6-20 * * *` · **Connectors:** Microsoft 365 (CareersCW@clubwealth.com, read only), Google Sheets · **No scripts** (connectors only, so it is not blocked like the script routines)
+**Schedule:** `CRON_TZ=America/Los_Angeles 7 6-20 * * *` (routines run at most hourly) · **Routine:** trig_01Rf8xkzVZwFrmF3zNctdvMb · **Connectors:** Microsoft 365 (CareersCW@clubwealth.com, read only), Google Sheets · **No scripts** (connectors only, so it is not blocked like the script routines)
 
 Microsoft 365 refuses IMAP password logins, so replies are read through Claude's Microsoft 365 connector,
 signed in as CareersCW. Miguel, 2026-10-28: the mailbox is **read only** for Claude, and the routine is the one
