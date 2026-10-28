@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { getData, type Row } from '@/lib/sheet';
-import { s, ymd, pct, daysAgoPT, isTest } from '@/lib/pipeline';
+import { s, ymd, pct, daysAgoPT, isTest, SOURCE_LABEL } from '@/lib/pipeline';
 import DataError from '@/components/DataError';
 import { HBars } from '@/components/Charts';
 
@@ -56,7 +56,7 @@ export default async function Reports({ searchParams }: { searchParams: Promise<
     return keys.map((k) => group(fmt(k), `/candidates?stage=All&${param}=${encodeURIComponent(k)}`, apps.filter((a) => (s(a[key]) || 'Other') === k)))
       .sort((x, y) => y.applied - x.applied);
   };
-  const sources = by('Source', (v) => (v === 'OLJ' ? 'OnlineJobs.ph' : v === 'Form' ? 'Application form' : v === 'Email' ? 'Emailed to CareersCW' : v), 'source');
+  const sources = by('Source', (v) => SOURCE_LABEL[v] || v, 'source');
   const positions = by('Position', (v) => v, 'position');
   const total = group('All', '/candidates?stage=All', apps);
   const rate = (a: number, b: number) => (b ? a / b : null);

@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { Suspense } from 'react';
 import { getData, getDataWithHistory } from '@/lib/sheet';
-import { STAGES, s, fullName, ymd, formatDate, formatDateTime, positionCounts, weekOf, scoreSummary, splitTags, isTest } from '@/lib/pipeline';
+import { STAGES, s, fullName, ymd, formatDate, formatDateTime, positionCounts, weekOf, scoreSummary, splitTags, isTest, SOURCES, SOURCE_LABEL } from '@/lib/pipeline';
 import SavedViews from '@/components/SavedViews';
 import CandidatesTable, { type CandidateRow } from '@/components/CandidatesTable';
 import DataError from '@/components/DataError';
@@ -79,7 +79,7 @@ export default async function Candidates({ searchParams }: { searchParams: Promi
         <input type="hidden" name="stage" value={stage} />
         <input name="q" defaultValue={p.q} placeholder="Search name, email or position" />
         <select name="fit" defaultValue={p.fit || ''}><option value="">All fits</option><option>Great</option><option>Good</option><option>Not Fit</option><option>Held back</option><option value="Not screened">Not rated yet</option></select>
-        <select name="source" defaultValue={p.source || ''}><option value="">All sources</option><option>Form</option><option>OLJ</option><option>Email</option></select>
+        <select name="source" defaultValue={p.source || ''}><option value="">All sources</option>{SOURCES.map((x) => <option key={x} value={x}>{SOURCE_LABEL[x]}</option>)}</select>
         <select name="position" defaultValue={p.position || ''}><option value="">All positions</option>{positions.map((x) => <option key={x}>{x}</option>)}</select>
         <select name="score" defaultValue={p.score || ''}><option value="">Any score</option><option value="rated">Rated</option><option value="unrated">Not rated (0)</option><option value="Passed">Suggested Passed</option><option value="Not Fit">Suggested Not Fit</option></select>
         {allTags.length > 0 && <select name="tag" defaultValue={p.tag || ''}><option value="">All tags</option>{allTags.map((t) => <option key={t}>{t}</option>)}</select>}

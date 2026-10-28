@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { getData } from '@/lib/sheet';
-import { BOARD_STAGES, s, fullName, ymd, formatDate, scoreSummary, upcomingWednesday, isTest } from '@/lib/pipeline';
+import { BOARD_STAGES, s, fullName, ymd, formatDate, scoreSummary, upcomingWednesday, isTest, SOURCES, SOURCE_LABEL } from '@/lib/pipeline';
 import DataError from '@/components/DataError';
 import Board, { type BoardCard } from '@/components/Board';
 import UndoButton from '@/components/UndoButton';
@@ -38,7 +38,7 @@ export default async function BoardPage({ searchParams }: { searchParams: Promis
       </header>
       <form className="filters" action="/board">
         <select name="position" defaultValue={p.position || ''}><option value="">All positions</option>{positions.map((x) => <option key={x}>{x}</option>)}</select>
-        <select name="source" defaultValue={p.source || ''}><option value="">All sources</option><option>Form</option><option>OLJ</option><option>Email</option></select>
+        <select name="source" defaultValue={p.source || ''}><option value="">All sources</option>{SOURCES.map((x) => <option key={x} value={x}>{SOURCE_LABEL[x]}</option>)}</select>
         <select name="session" defaultValue={p.session || ''}><option value="">All sessions</option>{sessions.map((x) => <option key={x} value={x}>{formatDate(x)}{x === upcomingWednesday() ? ' (this week)' : ''}</option>)}</select>
         <button className="btn">Filter</button>
         <Link href="/board" className="btn ghost">Clear</Link>

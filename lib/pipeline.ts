@@ -13,6 +13,10 @@ export const BOARD_STAGES = [
 
 /** Hired or further along (Onboarded counts as hired everywhere). */
 export const HIRED = ['Hired', 'Onboarded'];
+/** Where applications come from. Referral = added by hand for someone a team member referred (no form, OLJ or email). */
+export const SOURCES = ['Form', 'OLJ', 'Email', 'Referral'];
+export const SOURCE_LABEL: Record<string, string> = { Form: 'Application form', OLJ: 'OnlineJobs.ph', Email: 'Emailed to CareersCW', Referral: 'Referral' };
+
 /** Passed comes in two steps, Passed Pre-Interview then Passed Interview, and after both the person is Hired. */
 export const PASSED = ['Passed Pre-Interview', 'Passed Interview'];
 /** The next Passed step for someone at this stage (the scorecard's "Passed" suggestion applies this). */
@@ -110,7 +114,7 @@ export type SessionStats = { date: string; invited: number; confirmed: number; a
  * Funnel numbers. Historical applicants (invited by hand before the system, no Zoom data) are left out of
  * every rate; they still count in "applicants per week".
  */
-export function metrics(allApplicants: Row[], history: Row[], flags: Row[], now = new Date()) {
+export function metrics(allApplicants: Row[], history: Row[], flags: Row[], now = new Date(), opts: { session?: string } = {}) {
   const applicants = allApplicants.filter((a) => !isTest(a));
   const reached = new Map<string, Set<string>>();
   for (const h of history) {
@@ -128,13 +132,16 @@ export function metrics(allApplicants: Row[], history: Row[], flags: Row[], now 
     week: w,
     form: applicants.filter((a) => weekOf(s(a['Applied At (PT)'])) === w && s(a.Source) === 'Form').length,
     olj: applicants.filter((a) => weekOf(s(a['Applied At (PT)'])) === w && s(a.Source) === 'OLJ').length,
-    email: applicants.filter((a) => weekOf(s(a['Applied At (PT)'])) === w && s(a.Source) === 'Email').length
+    email: applicants.filter((a) => weekOf(s(a['Applied At (PT)'])) === w && s(a.Source) === 'Email').length,
+    referral: applicants.filter((a) => weekOf(s(a['Applied At (PT)'])) === w && s(a.Source) === 'Referral').length
   }));
 
   // Sessions: past Wednesdays (and today after the interview) with system-tracked invitees
   const today = todayPT(now);
   const tracked = applicants.filter((a) => s(a.Historical) !== 'Y' && ymd(a['Interview Date']));
-  const sessionDates = [...new Set(tracked.map((a) => ymd(a['Interview Date'])))].filter((d) => d <= today).sort().slice(-8);
+  const allDates = [...new Set(tracked.map((a) => ymd(a['Interview Date'])))].filter((d) => d <= today).sort();
+  // One session when the dashboard is filtered to it, otherwise the last 8
+  const sessionDates = opts.session ? allDates.filter((d) => d === opts.session) : allDates.slice(-8);
   const sessions: SessionStats[] = sessionDates.map((date) => {
     const inv = tracked.filter((a) => ymd(a['Interview Date']) === date && s(a.Stage) !== 'Applied');
     return {
@@ -151,7 +158,7 @@ export function metrics(allApplicants: Row[], history: Row[], flags: Row[], now 
   const sum = (k: keyof SessionStats) => finished.reduce((t, x) => t + (x[k] as number), 0);
 
   // Pass rate by position, among those who completed an interview and have a decision
-  const decided = tracked.filter((a) => did(a, 'Interview Completed') && [...PASSED, ...HIRED, 'Not Fit'].includes(s(a.Stage)));
+  const decided = tracked.filter((a) => (!opts.session || ymd(a['Interview Date']) === opts.session) && did(a, 'Interview Completed') && [...PASSED, ...HIRED, 'Not Fit'].includes(s(a.Stage)));
   const positions = [...new Set(decided.map((a) => s(a.Position) || 'Other'))].sort();
   const byPosition = positions.map((p) => {
     const rows = decided.filter((a) => (s(a.Position) || 'Other') === p);
@@ -159,7 +166,7 @@ export function metrics(allApplicants: Row[], history: Row[], flags: Row[], now 
     return { position: p, decided: rows.length, passed, rate: rate(passed, rows.length) };
   });
 
-  const toInterview = tracked.filter(attended).map((a) => days(s(a['Applied At (PT)']), s(a['Interview Date'])));
+  const toInterview = tracked.filter((a) => (!opts.session || ymd(a['Interview Date']) === opts.session) && attended(a)).map((a) => days(s(a['Applied At (PT)']), s(a['Interview Date'])));
 
   return {
     perWeek,
@@ -172,7 +179,8 @@ export function metrics(allApplicants: Row[], history: Row[], flags: Row[], now 
     byPosition,
     openFlags: flags.filter((f) => s(f.Status) === 'Open').length,
     awaitingReview: applicants.filter((a) => s(a.Stage) === 'Interview Completed').length,
-    sessionCount: finished.length
+    sessionCount: finished.length,
+    sessionDates: allDates
   };
 }
 
