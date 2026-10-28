@@ -58,7 +58,7 @@ function fmt(date, tz, pattern) {
 }
 
 const ctxCalls = {};
-function load({ now, formRows = [], mode = 'TEST', settings = {} }) {
+function load({ now, formRows = [], mode = 'TEST', settings = {}, rejected = [] }) {
   const sheets = {};
   for (const [k, h] of Object.entries(HEADERS)) sheets[k] = makeSheet(k, [h]);
   sheets.Outbox.data[0].push('Applied', 'Queued By');
@@ -66,6 +66,7 @@ function load({ now, formRows = [], mode = 'TEST', settings = {} }) {
   for (const [k, v] of Object.entries(base)) sheets.Settings.data.push([k, v, '']);
   sheets['Test Form'] = makeSheet('Test Form', [FORM_HDR, ...(mode === 'TEST' ? formRows : [])]);
   const source = makeSheet('Form Responses 1', [FORM_HDR, ...(mode === 'LIVE' ? formRows : [])]);
+  const rejectedSheet = makeSheet('Rejected', rejected.map((e) => [e]));
   const RealDate = Date;
   class FakeDate extends RealDate {
     constructor(...a) { if (a.length) super(...a); else super(now.getTime()); }
@@ -75,7 +76,7 @@ function load({ now, formRows = [], mode = 'TEST', settings = {} }) {
     Date: FakeDate, Intl, Math, JSON, String, Number, Object, Array, Error, parseInt, isNaN,
     SpreadsheetApp: {
       getActiveSpreadsheet: () => ({ getId: () => 'PIPE', getSheetByName: (n) => sheets[n] || null, insertSheet: (n) => (sheets[n] = makeSheet(n, [])) }),
-      openById: () => ({ getSheetByName: () => source })
+      openById: () => ({ getSheetByName: (n) => (n === 'Rejected' ? rejectedSheet : source) })
     },
     Utilities: { formatDate: fmt },
     LockService: { getScriptLock: () => ({ tryLock: () => true, waitLock: () => {}, releaseLock: () => {} }) },

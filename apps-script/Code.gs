@@ -169,9 +169,39 @@ function queueEmail_(st, applicant, type, mail, interviewYmd) {
   });
 }
 
+// ---------- do-not-invite list ----------
+
+var rejectedCache_ = null;
+/** Emails on the form sheet's "Rejected" tab (column A, no header). Miguel, 2026-10-28: that tab is the do-not-invite list. */
+function rejectedEmails_(st) {
+  if (rejectedCache_) return rejectedCache_;
+  rejectedCache_ = {};
+  var sh = SpreadsheetApp.openById(st.get('SOURCE_SHEET_ID')).getSheetByName('Rejected');
+  if (!sh || sh.getLastRow() < 1) return rejectedCache_;
+  sh.getRange(1, 1, sh.getLastRow(), 1).getValues().forEach(function (r) {
+    var e = String(r[0] || '').trim().toLowerCase();
+    if (/@/.test(e)) rejectedCache_[e] = true;
+  });
+  return rejectedCache_;
+}
+
+/** A reason string when this applicant must not be invited, else ''. */
+function doNotInvite_(st, a) {
+  var e = String(a.Email || '').trim().toLowerCase();
+  return e && rejectedEmails_(st)[e] ? 'Email is on the Rejected tab of the form sheet' : '';
+}
+
 function queueInvite_(st, a, interviewYmd, type) {
   // Before Zapier is connected Am invites by hand; AUTO_INVITES = OFF keeps the system from queuing duplicates.
   if (st.get('MODE') === 'LIVE' && st.get('AUTO_INVITES') === 'OFF') return null;
+  var blocked = doNotInvite_(st, a);
+  if (blocked) {
+    var already = table_(SH.FLAGS).rows.some(function (f) {
+      return f['Applicant ID'] === a['Applicant ID'] && f.Type === 'Do not invite' && f.Status === 'Open';
+    });
+    if (!already) flag_(a['Applicant ID'], 'Do not invite', (type || 'Invite') + ' not queued: ' + blocked + '.');
+    return null;
+  }
   return queueEmail_(st, a, type || 'Invite', inviteEmail(interviewYmd, new Date()), interviewYmd);
 }
 
@@ -751,7 +781,9 @@ function api_(req) {
     var vals = sh.getRange(hit.getRow(), 1, 1, lastCol).getValues()[0];
     var o = { _row: hit.getRow() };
     hdr.forEach(function (h, j) { if (h) o[h] = vals[j]; });
-    return { applicant: plain_([o])[0] };
+    var out = plain_([o])[0];
+    out['Do Not Invite'] = doNotInvite_(settings_(), o);
+    return { applicant: out };
   }
   if (req.action === 'zoomRows') return zoomRowsApi_(req);
   if (req.action === 'chatGet') return chatGet_(req.id);
@@ -813,6 +845,8 @@ function api_(req) {
           ['Invite', 'Re-invite', 'OLJ Invite'].indexOf(e.Type) !== -1 && (e.Status === 'Queued' || e.Status === 'Sent');
       });
       if (dup) throw new Error('An invite for Wednesday ' + longDate(session) + ' is already queued or sent.');
+      var blockedWhy = doNotInvite_(st2, ai);
+      if (blockedWhy) throw new Error('Do not invite: ' + blockedWhy + '.');
       if (req.channel === 'email') {
         if (st2.get('EMAIL_SENDING') !== 'ON') throw new Error('Email sending is not connected yet (CareersCW in Zapier). Use OLJ, or invite by hand.');
         if (!ai.Email) throw new Error('This applicant has no email address.');
