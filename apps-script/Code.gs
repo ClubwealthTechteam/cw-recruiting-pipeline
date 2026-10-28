@@ -147,6 +147,15 @@ function positionOverrides_() {
   return o;
 }
 
+/** OLJ times can arrive as UTC ISO text ("2026-10-28T16:47:18.000000Z"); stored as Pacific time like form rows. */
+function ptStamp_(v) {
+  if (v instanceof Date) return Utilities.formatDate(v, TZ, 'yyyy-MM-dd HH:mm:ss');
+  var t = String(v || '').trim();
+  if (!/T.*(Z|[+-]\d\d:?\d\d)$/.test(t)) return t;
+  var d = new Date(t.replace(/\.(\d{3})\d*/, '.$1'));
+  return isNaN(d.getTime()) ? t : Utilities.formatDate(d, TZ, 'yyyy-MM-dd HH:mm:ss');
+}
+
 function ymdOf_(v) {
   if (v instanceof Date) return Utilities.formatDate(v, TZ, 'yyyy-MM-dd');
   return String(v || '').slice(0, 10);
@@ -529,7 +538,7 @@ function processOLJ_(st) {
       var parts = String(o['Applicant Name'] || '').trim().split(/\s+/);
       a = append_(apps, {
         'Applicant ID': 'O-' + o['Conversation Key'], Source: 'OLJ', 'Source Ref': o['Conversation Key'],
-        'Applied At (PT)': o['Last Message At'] || nowStr_(), 'First Name': parts.slice(0, -1).join(' ') || parts[0] || '',
+        'Applied At (PT)': ptStamp_(o['Last Message At']) || nowStr_(), 'First Name': parts.slice(0, -1).join(' ') || parts[0] || '',
         'Last Name': parts.length > 1 ? parts[parts.length - 1] : '', Email: email,
         'Position (as typed)': o['Job Post'], Position: standardPosition(o['Job Post'], overrides),
         'OLJ Job Post': o['Job Post'], 'OLJ Summary': o.Summary, 'OLJ Email Requested At': o['Email Requested At'] || '',

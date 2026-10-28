@@ -22,6 +22,29 @@ export const s = (v: unknown) => (v === undefined || v === null ? '' : String(v)
 export const fullName = (a: Row) => `${s(a['First Name'])} ${s(a['Last Name'])}`.trim();
 export const ymd = (v: unknown) => s(v).slice(0, 10);
 
+/**
+ * A timestamp as Pacific "YYYY-MM-DD HH:mm:ss", so times sort newest-first as text. OLJ rows can carry UTC ISO
+ * text ("2026-10-28T16:47:18.000000Z"), and sheet times can lack the leading zero on the hour ("9:46:32").
+ */
+export function ptStamp(v: unknown): string {
+  const t = s(v).trim();
+  if (!/T.*(Z|[+-]\d\d:?\d\d)$/.test(t)) return t.replace(/ (\d):/, ' 0$1:');
+  const d = new Date(t.replace(/\.(\d{3})\d*/, '.$1'));
+  if (isNaN(d.getTime())) return t;
+  return new Intl.DateTimeFormat('sv-SE', {
+    timeZone: 'America/Los_Angeles', year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23'
+  }).format(d);
+}
+
+/** "Oct 28, 2026, 9:47 AM" from a Pacific "YYYY-MM-DD HH:mm:ss". */
+export function formatDateTime(stamp: string): string {
+  const [, hh, mm] = /^\S+ (\d{2}):(\d{2})/.exec(stamp) || [];
+  if (!hh) return formatDate(stamp);
+  const h = Number(hh);
+  return `${formatDate(stamp)}, ${h % 12 || 12}:${mm} ${h < 12 ? 'AM' : 'PM'}`;
+}
+
 export function todayPT(now = new Date()): string {
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Los_Angeles' }).format(now);
 }
