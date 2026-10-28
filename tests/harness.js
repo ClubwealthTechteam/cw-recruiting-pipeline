@@ -4,7 +4,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 
 const HEADERS = {
-  Applicants: ['Applicant ID', 'Source', 'Source Ref', 'Applied At (PT)', 'First Name', 'Last Name', 'Email', 'Phone', 'Country', 'Position (as typed)', 'Position', 'Has Experience', 'Years Experience', 'Recent Client', 'US Clients VA', 'US Realtor VA', 'Experience Overview', 'Internet Speed', 'Speedtest Link', 'Voice Recording Link', 'Resume Link', 'Facebook Link', 'Stage', 'Stage Updated At', 'Stage Updated By', 'Interview Date', 'Invite Count', 'Last Invite At', 'Confirmed At', 'Reminder Sent At', 'Re-invite Reason', 'Zoom Name', 'Zoom Minutes', 'Decision Reason', 'Notes', 'OLJ Job Post', 'OLJ Summary', 'OLJ Email Requested At', 'Historical', 'Created At'],
+  Applicants: ['Applicant ID', 'Source', 'Source Ref', 'Applied At (PT)', 'First Name', 'Last Name', 'Email', 'Phone', 'Country', 'Position (as typed)', 'Position', 'Has Experience', 'Years Experience', 'Recent Client', 'US Clients VA', 'US Realtor VA', 'Experience Overview', 'Internet Speed', 'Speedtest Link', 'Voice Recording Link', 'Resume Link', 'Facebook Link', 'Stage', 'Stage Updated At', 'Stage Updated By', 'Interview Date', 'Invite Count', 'Last Invite At', 'Confirmed At', 'Reminder Sent At', 'Re-invite Reason', 'Zoom Name', 'Zoom Minutes', 'Decision Reason', 'Notes', 'OLJ Job Post', 'OLJ Summary', 'OLJ Email Requested At', 'Historical', 'Created At', 'Screen Track', 'Screen Tag', 'Screen Summary', 'Screened At'],
   History: ['Timestamp (PT)', 'Applicant ID', 'From Stage', 'To Stage', 'Changed By', 'Reason'],
   Outbox: ['Email ID', 'Applicant ID', 'Type', 'To', 'Subject', 'Body', 'Interview Date', 'Queued At', 'Status', 'Sent At', 'Error', 'Test'],
   Replies: ['Message ID', 'Received At', 'From Email', 'Subject', 'Reply Text', 'Matched Applicant ID', 'Match Method', 'Category', 'Action Taken', 'Processed At'],
@@ -61,7 +61,7 @@ const ctxCalls = {};
 function load({ now, formRows = [], mode = 'TEST', settings = {} }) {
   const sheets = {};
   for (const [k, h] of Object.entries(HEADERS)) sheets[k] = makeSheet(k, [h]);
-  sheets.Outbox.data[0].push('Applied');
+  sheets.Outbox.data[0].push('Applied', 'Queued By');
   const base = { MODE: mode, TEST_EMAIL: 'techteam@clubwealth.com', SOURCE_SHEET_ID: 'SRC', MIN_MINUTES_COMPLETED: '30', ...settings };
   for (const [k, v] of Object.entries(base)) sheets.Settings.data.push([k, v, '']);
   sheets['Test Form'] = makeSheet('Test Form', [FORM_HDR, ...(mode === 'TEST' ? formRows : [])]);

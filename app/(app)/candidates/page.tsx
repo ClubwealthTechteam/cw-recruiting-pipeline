@@ -7,7 +7,7 @@ import DataError from '@/components/DataError';
 const PAGE = 200;
 const CLOSED = ['Passed', 'Hired', 'Not Fit'];
 
-type Q = { stage?: string; source?: string; position?: string; session?: string; q?: string; history?: string; page?: string };
+type Q = { stage?: string; fit?: string; source?: string; position?: string; session?: string; q?: string; history?: string; page?: string };
 
 export default async function Candidates({ searchParams }: { searchParams: Promise<Q> }) {
   const p = await searchParams;
@@ -23,6 +23,7 @@ export default async function Candidates({ searchParams }: { searchParams: Promi
   let rows = base.filter((a) =>
     (stage === 'All' || (stage === 'Active' ? !CLOSED.includes(s(a.Stage)) : s(a.Stage) === stage)) &&
     (!p.source || s(a.Source) === p.source) &&
+    (!p.fit || (p.fit === 'Not screened' ? !s(a['Screen Tag']) : s(a['Screen Tag']) === p.fit)) &&
     (!p.position || s(a.Position) === p.position) &&
     (!p.session || ymd(a['Interview Date']) === p.session) &&
     (!q || `${fullName(a)} ${s(a.Email)} ${s(a['Position (as typed)'])}`.toLowerCase().includes(q))
@@ -37,7 +38,8 @@ export default async function Candidates({ searchParams }: { searchParams: Promi
     id: s(a['Applicant ID']), name: fullName(a), email: s(a.Email), stage: s(a.Stage), source: s(a.Source),
     position: s(a.Position), applied: formatDate(ymd(a['Applied At (PT)'])), interview: formatDate(ymd(a['Interview Date'])),
     confirmed: a['Confirmed At'] ? formatDate(ymd(a['Confirmed At'])) : '', minutes: s(a['Zoom Minutes']),
-    invites: s(a['Invite Count']), historical: s(a.Historical) === 'Y'
+    invites: s(a['Invite Count']), historical: s(a.Historical) === 'Y',
+    fit: s(a['Screen Tag']), fitTrack: s(a['Screen Track']), fitSummary: s(a['Screen Summary'])
   }));
 
   const link = (over: Partial<Q>) => {
@@ -58,6 +60,7 @@ export default async function Candidates({ searchParams }: { searchParams: Promi
       <form className="filters" action="/candidates">
         <input type="hidden" name="stage" value={stage} />
         <input name="q" defaultValue={p.q} placeholder="Search name, email or position" />
+        <select name="fit" defaultValue={p.fit || ''}><option value="">All fits</option><option>Great</option><option>Good</option><option>Not Fit</option><option>Not screened</option></select>
         <select name="source" defaultValue={p.source || ''}><option value="">All sources</option><option>Form</option><option>OLJ</option></select>
         <select name="position" defaultValue={p.position || ''}><option value="">All positions</option>{positions.map((x) => <option key={x}>{x}</option>)}</select>
         <select name="session" defaultValue={p.session || ''}><option value="">All sessions</option>{sessions.map((x) => <option key={x} value={x}>{formatDate(x)}</option>)}</select>

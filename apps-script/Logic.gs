@@ -272,6 +272,23 @@ function classifyReply(subject, text) {
   return 'Other';
 }
 
+/**
+ * Which screening rule applies to a typed position (approved by Miguel, 2026-10-28):
+ *  Transaction Coordinator: 6+ months as TC; ISA CW: 6+ months BPO; ISA Homexa: 6+ months as an ISA for a known
+ *  real estate agency; Collections: any collections experience. Other positions are not screened ('').
+ */
+function screenTrack(raw) {
+  var k = String(raw || '').toLowerCase();
+  if (/collection|accounts? receivable/.test(k)) return 'Collections';
+  if (/inside sales|\bisa\b/.test(k)) {
+    if (/club ?wealth/.test(k)) return 'ISA CW';
+    if (/real ?estate|realty|homexa/.test(k)) return 'ISA Homexa';
+    return 'ISA (unspecified)';
+  }
+  if (/transaction|listing coordinator|\btc\b|real estate admin/.test(k)) return 'Transaction Coordinator';
+  return '';
+}
+
 /** Zoom result from total minutes in the meeting. */
 function zoomResult(minutes, minMinutes) {
   return minutes >= (minMinutes || 30) ? 'Interview Completed' : 'Did Not Complete';
@@ -284,6 +301,6 @@ if (typeof module !== 'undefined') {
     inviteEmail: inviteEmail, reminderEmail: reminderEmail, confirmationEmail: confirmationEmail,
     normName: normName, nameMatches: nameMatches, parseZoomName: parseZoomName,
     standardPosition: standardPosition, zoomResult: zoomResult, STAGES: STAGES,
-    stripQuoted: stripQuoted, typedFullName: typedFullName, classifyReply: classifyReply
+    stripQuoted: stripQuoted, typedFullName: typedFullName, classifyReply: classifyReply, screenTrack: screenTrack
   };
 }

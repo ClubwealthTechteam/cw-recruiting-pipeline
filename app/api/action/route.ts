@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server';
 import { currentUser } from '@/lib/auth';
 import { act } from '@/lib/sheet';
+import { fireRoutine } from '@/lib/chat';
 
-const ALLOWED = ['setStage', 'addNote', 'setEmail', 'resolveFlag'];
+const ALLOWED = ['setStage', 'addNote', 'setEmail', 'resolveFlag', 'sendInvite'];
 
 export async function POST(req: Request) {
   const user = await currentUser();
@@ -12,6 +13,12 @@ export async function POST(req: Request) {
   const { action, ...payload } = body;
   try {
     const data = await act(action, user, payload);
+    if (action === 'sendInvite' && payload.channel === 'olj') {
+      // Start the OLJ sender now if it is connected; otherwise the next scheduled OLJ run sends it.
+      const started = await fireRoutine(process.env.OLJ_SEND_ROUTINE_ID, process.env.OLJ_SEND_ROUTINE_TOKEN, 'Send queued OLJ invites')
+        .then(() => true).catch(() => false);
+      return NextResponse.json({ ok: true, data: { ...data, started } });
+    }
     return NextResponse.json({ ok: true, data });
   } catch (e) {
     return NextResponse.json({ ok: false, error: e instanceof Error ? e.message : 'Error' }, { status: 400 });

@@ -312,3 +312,35 @@ test('OLJ applicants never get the reminder by email', () => {
   env.ctx.tick();
   assert.equal(env.rows('Outbox').filter((e) => e.Type === 'Reminder' && e['Applicant ID'] === 'O-k1').length, 0);
 });
+
+test('screen tracks are set on intake and backfilled; sendInvite queues OLJ or email invites once', () => {
+  const env = invitedEnv({ AUTO_INVITES: 'OFF' });
+  env.ctx.tick();
+  const a = Object.fromEntries(env.rows('Applicants').map((x) => [x['First Name'], x]));
+  assert.equal(a['Maria Clara']['Screen Track'], 'Collections');
+  assert.equal(a.Jose['Screen Track'], 'ISA (unspecified)');
+  addRow(env, 'OLJ', { 'Conversation Key': 'k9', 'Job Post': 'Club Wealth Inside Sales Agent', 'Applicant Name': 'Lito Lapid', 'Email Found': 'lito@example.com', Summary: 's' });
+  env.ctx.tick();
+  assert.equal(env.rows('Applicants').find((x) => x['Applicant ID'] === 'O-k9')['Screen Track'], 'ISA CW');
+  // OLJ invite from the site
+  const r = env.api({ action: 'sendInvite', by: 'Am', id: 'O-k9', channel: 'olj' });
+  assert.equal(r.ok, true, r.error);
+  assert.equal(r.data.session, '2026-10-28');
+  const q = env.rows('Outbox').filter((e) => e.Type === 'OLJ Invite');
+  assert.equal(q.length, 1);
+  assert.equal(q[0].To, 'OLJ:k9');
+  assert.equal(env.api({ action: 'sendInvite', by: 'Am', id: 'O-k9', channel: 'olj' }).ok, false, 'no duplicate invite');
+  // when the OLJ sender marks it Sent, the applicant becomes Invited, credited to Am
+  const ob = env.sheets.Outbox; const h = ob.data[0];
+  ob.data.find((x) => x[h.indexOf('Type')] === 'OLJ Invite')[h.indexOf('Status')] = 'Sent';
+  env.ctx.tick();
+  assert.equal(env.rows('Applicants').find((x) => x['Applicant ID'] === 'O-k9').Stage, 'Invited');
+  assert.equal(env.rows('History').filter((x) => x['Applicant ID'] === 'O-k9').pop()['Changed By'], 'Am');
+  // email channel refuses until EMAIL_SENDING is ON; OLJ refuses for form applicants
+  assert.match(env.api({ action: 'sendInvite', by: 'Am', id: 'F-2', channel: 'email' }).error, /not connected/);
+  assert.match(env.api({ action: 'sendInvite', by: 'Am', id: 'F-2', channel: 'olj' }).error, /OnlineJobs/);
+  env.sheets.Settings.appendRow(['EMAIL_SENDING', 'ON', '']);
+  const re = env.api({ action: 'sendInvite', by: 'Am', id: 'F-2', channel: 'email' });
+  assert.equal(re.ok, true, re.error);
+  assert.equal(env.rows('Outbox').filter((e) => e.Type === 'Invite' && e['Applicant ID'] === 'F-2').length, 1);
+});

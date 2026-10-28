@@ -9,6 +9,7 @@ export type PipelineData = {
   zoom: Row[];
   outbox: Row[];
   mode: string;
+  emailSending?: string;
   fetchedAt?: number;
 };
 
