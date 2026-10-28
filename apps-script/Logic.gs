@@ -52,15 +52,18 @@ function todayPT(now) {
   return ymd(p.y, p.m, p.d);
 }
 
+/** Wednesday invite cut-off (Pacific, 24h): before it, an applicant still joins that day's 2 PM session. */
+var SAME_DAY_CUTOFF_HOUR = 12;
+
 /**
- * The Wednesday an applicant is invited to.
- * Applied Sun–Tue: that week's Wednesday. Applied Wed (any time) through Sat: the following Wednesday.
- * Equivalent to "the first Wednesday strictly after the application's Pacific date".
+ * The Wednesday an applicant is invited to (Miguel, 2026-10-28).
+ * Applied Sun–Tue, or Wednesday before 12:00 PM PT: that week's Wednesday.
+ * Applied Wednesday from 12:00 PM PT through Saturday: the following Wednesday.
  */
 function interviewDateFor(appliedAt) {
   var p = ptParts(appliedAt);
   var ahead = (3 - p.dow + 7) % 7;
-  if (ahead === 0) ahead = 7;
+  if (ahead === 0 && p.hh >= SAME_DAY_CUTOFF_HOUR) ahead = 7;
   return addDays(ymd(p.y, p.m, p.d), ahead);
 }
 
@@ -108,8 +111,9 @@ function link() {
 function inviteEmail(interviewYmd, sentAt) {
   var zoneWord = isDaylight(interviewYmd) ? 'Daylight' : 'Standard';
   var zoneUpper = zoneWord.toUpperCase();
-  var tomorrow = addDays(todayPT(sentAt), 1) === interviewYmd;
-  var when = (tomorrow ? 'tomorrow, Wednesday, ' : 'on Wednesday, ') + longDate(interviewYmd);
+  var today = todayPT(sentAt);
+  var when = (today === interviewYmd ? 'today, Wednesday, ' : addDays(today, 1) === interviewYmd ? 'tomorrow, Wednesday, ' : 'on Wednesday, ') +
+    longDate(interviewYmd);
   var body =
     '<p>Greetings from Club Wealth!</p>' +
     '<p>Please join our virtual pre-interview ' + when + ', at 2:00 PM PACIFIC ' + zoneUpper +
