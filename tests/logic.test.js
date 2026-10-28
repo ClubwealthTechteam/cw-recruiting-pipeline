@@ -129,3 +129,11 @@ test('screening track from the typed position', () => {
   assert.equal(L.screenTrack('Real Estate Appointment Setter'), '');
   assert.equal(L.screenTrack('AI-SAVVY MARKETING & ADS SPECIALIST'), '');
 });
+
+test('invite and reminder emails are signed Club Wealth with the banner, no personal signature', () => {
+  for (const e of [L.inviteEmail('2026-11-04', new Date('2026-10-28T16:00:00Z')), L.reminderEmail('2026-11-04')]) {
+    assert.match(e.body, /Cheers,<br>Club Wealth<\/p>/);
+    assert.match(e.body, /<img src="https:\/\/cwrecruitmentpipeline\.vercel\.app\/email-banner\.png"/);
+    assert.doesNotMatch(e.body, /Am Marbella|Recruiter|SUCCESS in the WORLD/);
+  }
+});

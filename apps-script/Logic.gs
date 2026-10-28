@@ -93,9 +93,12 @@ function longDate(ymdStr) {
   return MONTHS[+p[1] - 1] + ' ' + (+p[2]) + ', ' + p[0];
 }
 
+// Miguel, 2026-10-28: sign as Club Wealth with the brand banner (served by the site from public/email-banner.png).
+var BANNER_URL = 'https://cwrecruitmentpipeline.vercel.app/email-banner.png';
 var SIGNATURE_HTML =
-  '<p>Cheers,<br>Am Marbella | Recruiter<br>' +
-  '&quot;No SUCCESS in the WORLD can compensate for failure in the HOME&quot;</p>';
+  '<p>Cheers,<br>Club Wealth</p>' +
+  '<p><img src="' + BANNER_URL + '" alt="Club Wealth | Perfect Fit Loans | Homexa" width="570" ' +
+  'style="display:block;width:570px;max-width:100%;height:auto;border:0"></p>';
 
 function link() {
   return '<a href="' + JOIN_URL + '">' + JOIN_LABEL + '</a>';
