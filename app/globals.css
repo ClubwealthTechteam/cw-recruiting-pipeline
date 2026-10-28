@@ -164,3 +164,5 @@ input:focus, select:focus, textarea:focus { outline: 2px solid #b9cff3; border-c
 .fit-tip .tip-head { font-weight: 600; margin-bottom: 4px; }
 .badge.fit { min-width: 56px; text-align: center; }
 .invite-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+
+.version-bar { position: fixed; top: 0; left: 0; right: 0; z-index: 60; background: var(--navy); color: #fff; display: flex; justify-content: center; align-items: center; gap: 14px; padding: 8px 16px; font-size: 14px; box-shadow: 0 2px 6px rgba(0,0,0,.2); }
