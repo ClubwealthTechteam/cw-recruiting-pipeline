@@ -123,7 +123,8 @@ export function metrics(allApplicants: Row[], history: Row[], flags: Row[], now 
   const perWeek = weeks.map((w) => ({
     week: w,
     form: applicants.filter((a) => weekOf(s(a['Applied At (PT)'])) === w && s(a.Source) === 'Form').length,
-    olj: applicants.filter((a) => weekOf(s(a['Applied At (PT)'])) === w && s(a.Source) === 'OLJ').length
+    olj: applicants.filter((a) => weekOf(s(a['Applied At (PT)'])) === w && s(a.Source) === 'OLJ').length,
+    email: applicants.filter((a) => weekOf(s(a['Applied At (PT)'])) === w && s(a.Source) === 'Email').length
   }));
 
   // Sessions: past Wednesdays (and today after the interview) with system-tracked invitees

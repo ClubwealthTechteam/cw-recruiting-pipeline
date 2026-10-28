@@ -17,7 +17,7 @@
 var SH = {
   APPLICANTS: 'Applicants', HISTORY: 'History', OUTBOX: 'Outbox', REPLIES: 'Replies',
   FLAGS: 'Needs Attention', ZOOM: 'Zoom Attendance', OLJ: 'OLJ', POSITIONS: 'Positions',
-  SETTINGS: 'Settings', LOG: 'Run Log', TEST_FORM: 'Test Form', CHAT: 'Chat', SCORES: 'Scorecards', VIEWS: 'Views'
+  SETTINGS: 'Settings', LOG: 'Run Log', TEST_FORM: 'Test Form', CHAT: 'Chat', SCORES: 'Scorecards', VIEWS: 'Views', EMAILAPPS: 'Email Applications'
 };
 
 // Form Responses 1 columns (0-based), read only.
@@ -563,6 +563,61 @@ function processOLJ_(st) {
   return n;
 }
 
+// ---------- 4b. applications emailed to CareersCW (copied in by the email routine) ----------
+
+var EMAIL_INTAKE_HOLD = 'Email intake invites are off until Miguel approves the list (Settings EMAIL_INTAKE = ON)';
+
+/**
+ * The hourly email routine copies each application emailed to the CareersCW Inbox into the "Email Applications" tab
+ * (Message ID, Received At, From Email, Applicant Name, Subject, Position (as typed), Summary, Referral). Here each new
+ * row becomes an applicant with Source "Email" (or is linked to the applicant who already has that email), screened and
+ * invited like a form applicant once Settings EMAIL_INTAKE = ON (Miguel, 2026-10-28). Referrals get the "Referral" tag.
+ */
+function processEmailApps_(st) {
+  if (!ss_().getSheetByName(SH.EMAILAPPS)) return 0;
+  var ea = table_(SH.EMAILAPPS);
+  var apps = table_(SH.APPLICANTS);
+  var overrides = positionOverrides_();
+  var on = st.get('EMAIL_INTAKE') === 'ON';
+  var n = 0;
+  ea.rows.forEach(function (r) {
+    if (r['Processed At']) return;
+    var email = String(r['From Email'] || '').trim().toLowerCase();
+    if (!/@/.test(email)) { update_(ea, r, { 'Processed At': nowStr_(), Note: 'No sender email' }); return; }
+    var same = apps.rows.filter(function (a) { return String(a.Email || '').trim().toLowerCase() === email && a.Historical !== 'Y'; })[0];
+    if (same) {
+      if (r.Referral && apps.headers.indexOf('Tags') !== -1) update_(apps, same, { Tags: cleanTags_((same.Tags ? same.Tags + ', ' : '') + 'Referral') });
+      update_(ea, r, { 'Applicant ID': same['Applicant ID'], 'Processed At': nowStr_(), Note: 'Already in the CRM' });
+      return;
+    }
+    var parts = String(r['Applicant Name'] || '').trim().split(/\s+/).filter(Boolean);
+    var a = append_(apps, {
+      'Applicant ID': 'E-' + r._row, Source: 'Email', 'Source Ref': r['Message ID'],
+      'Applied At (PT)': ptStamp_(r['Received At']) || nowStr_(),
+      'First Name': parts.length > 1 ? parts.slice(0, -1).join(' ') : (parts[0] || ''), 'Last Name': parts.length > 1 ? parts[parts.length - 1] : '',
+      Email: email, 'Position (as typed)': r['Position (as typed)'], Position: standardPosition(r['Position (as typed)'], overrides),
+      'Experience Overview': r.Summary, 'Screen Track': screenTrack(r['Position (as typed)']) || 'Not screened',
+      Tags: r.Referral ? 'Referral' : '', Notes: r.Referral ? nowStr_() + ' System: Referred by ' + String(r.Referral).slice(0, 100) : '',
+      Stage: 'Applied', 'Stage Updated At': nowStr_(), 'Stage Updated By': 'System', 'Invite Count': 0, 'Created At': nowStr_()
+    });
+    appendTo_(SH.HISTORY, {
+      'Timestamp (PT)': nowStr_(), 'Applicant ID': a['Applicant ID'], 'From Stage': '', 'To Stage': 'Applied',
+      'Changed By': 'System', Reason: 'Emailed application to CareersCW'
+    });
+    update_(ea, r, { 'Applicant ID': a['Applicant ID'], 'Processed At': nowStr_() });
+    if (on) screenAndInvite_(st, apps, a);
+    else update_(apps, a, { 'Invite Hold': EMAIL_INTAKE_HOLD });
+    n++;
+  });
+  if (on) {
+    // switched on after the QA list: invite the email applicants that were waiting for it
+    apps.rows.forEach(function (a) {
+      if (a.Source === 'Email' && a.Stage === 'Applied' && a['Invite Hold'] === EMAIL_INTAKE_HOLD) { screenAndInvite_(st, apps, a); n++; }
+    });
+  }
+  return n;
+}
+
 /**
  * Screens one new applicant and, if they pass, queues their invite for the session interviewDateFor gives
  * (Wednesday 12 PM PT cut-off): an email for form applicants, an OLJ message for OLJ applicants. A held-back
@@ -861,6 +916,7 @@ function tick() {
       sent: applySentEmails_(st),
       replies: processReplies_(st),
       olj: processOLJ_(st),
+      emailApps: processEmailApps_(st),
       zoom: processZoom_(st),
       reminders: queueReminders_(st)
     };
@@ -910,6 +966,11 @@ function setup() {
     sc.setFrozenRows(1);
   }
   scoreColumns_();
+  if (!ss.getSheetByName(SH.EMAILAPPS)) {
+    var em = ss.insertSheet(SH.EMAILAPPS);
+    em.getRange(1, 1, 1, 11).setValues([['Message ID', 'Received At', 'From Email', 'Applicant Name', 'Subject', 'Position (as typed)', 'Summary', 'Referral', 'Applicant ID', 'Processed At', 'Note']]).setFontWeight('bold');
+    em.setFrozenRows(1);
+  }
   if (!ss.getSheetByName(SH.VIEWS)) {
     var vw = ss.insertSheet(SH.VIEWS);
     vw.getRange(1, 1, 1, 4).setValues([['Name', 'Query', 'Created By', 'Created At']]).setFontWeight('bold');
@@ -1009,6 +1070,12 @@ function thread_(a) {
   }).map(function (r) {
     return { dir: 'in', at: r['Received At'], subject: r.Subject, text: stripQuoted(r['Reply Text']).slice(0, 2000), category: r.Category };
   });
+  if (ss_().getSheetByName(SH.EMAILAPPS) && email) {
+    plain_(table_(SH.EMAILAPPS).rows).forEach(function (r) {
+      if (String(r['From Email']).trim().toLowerCase() !== email) return;
+      inn.push({ dir: 'in', at: r['Received At'], subject: r.Subject, type: 'Application', text: 'Application email: ' + String(r.Summary || '').slice(0, 1500) });
+    });
+  }
   return out.concat(inn, oljThread_(a)).sort(function (x, y) { return String(x.at).localeCompare(String(y.at)); });
 }
 
