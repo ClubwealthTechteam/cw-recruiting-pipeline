@@ -70,7 +70,7 @@ export function formatDate(d: string): string {
 }
 
 /** Monday-start week label for a 'YYYY-MM-DD ...' timestamp. */
-function weekOf(ts: string): string {
+export function weekOf(ts: string): string {
   const d = ymd(ts);
   if (!d) return '';
   const dow = new Date(`${d}T12:00:00Z`).getUTCDay();
@@ -172,3 +172,20 @@ export function positionCounts(rows: Row[]): { position: string; count: number }
 
 /** Pacific date `days` before today, for "last N days" windows. */
 export const daysAgoPT = (days: number, now = new Date()) => addDays(todayPT(now), -days);
+
+// ---------- interview scorecards (same rule as scoreSummary in Logic.gs) ----------
+
+export const CRITERIA = ['Communication', 'English', 'Experience', 'Internet'] as const;
+
+/** 0 until someone rates all four; then the average of everyone's cards. Passed at 3.5+ with no 1s, otherwise Not Fit. */
+export function scoreSummary(cards: Row[]): { average: number; count: number; suggestion: '' | 'Passed' | 'Not Fit' } {
+  const rated = cards.filter((c) => CRITERIA.every((k) => Number(c[k]) >= 1 && Number(c[k]) <= 5));
+  if (!rated.length) return { average: 0, count: 0, suggestion: '' };
+  const per = CRITERIA.map((k) => rated.reduce((t, c) => t + Number(c[k]), 0) / rated.length);
+  const average = Math.round((per.reduce((t, x) => t + x, 0) / per.length) * 10) / 10;
+  const anyOne = rated.some((c) => CRITERIA.some((k) => Number(c[k]) === 1));
+  return { average, count: rated.length, suggestion: average >= 3.5 && !anyOne ? 'Passed' : 'Not Fit' };
+}
+
+/** Comma-separated tags as a list. */
+export const splitTags = (v: unknown) => s(v).split(',').map((t) => t.trim()).filter(Boolean);

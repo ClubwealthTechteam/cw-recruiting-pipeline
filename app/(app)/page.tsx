@@ -37,7 +37,7 @@ export default async function Dashboard() {
         <section className="panel">
           <h2>Applicants per week</h2>
           <p className="sub">Week starting Monday.</p>
-          <WeeklyBars data={m.perWeek.map((w) => ({ label: short(w.week), form: w.form, olj: w.olj }))} />
+          <WeeklyBars data={m.perWeek.map((w) => ({ label: short(w.week), form: w.form, olj: w.olj, href: `/candidates?stage=All&week=${w.week}` }))} />
         </section>
         <section className="panel">
           <h2>Session rates</h2>
@@ -55,20 +55,21 @@ export default async function Dashboard() {
         <section className="panel">
           <h2>Current pipeline</h2>
           <p className="sub">Applicants in each stage now, excluding those invited by hand before the system.</p>
-          <HBars format="count" ariaLabel="Applicants by stage" data={STAGES.map((st) => ({ label: st, value: active.filter((a) => str(a.Stage) === st).length }))} />
+          <HBars format="count" ariaLabel="Applicants by stage" data={STAGES.map((st) => ({ label: st, value: active.filter((a) => str(a.Stage) === st).length, href: `/candidates?stage=${encodeURIComponent(st)}` }))} />
         </section>
         <section className="panel">
           <h2>Pass rate by position</h2>
           <p className="sub">Of applicants who completed an interview and have a decision, the share Passed or Hired.</p>
-          <HBars format="pct" ariaLabel="Pass rate by position" data={m.byPosition.map((p) => ({ label: p.position, value: p.rate ?? 0, note: `of ${p.decided}` }))} />
+          <HBars format="pct" ariaLabel="Pass rate by position" data={m.byPosition.map((p) => ({ label: p.position, value: p.rate ?? 0, note: `of ${p.decided}`, href: `/candidates?stage=All&position=${encodeURIComponent(p.position)}` }))} />
         </section>
       </div>
 
       <section className="panel">
         <h2>Applicants by position</h2>
-        <p className="sub">{recent.length} applied in the last 30 days, Form and OLJ. The note shows how many are on the {formatDate(nextSession)} session. Click a position on the Candidates page to see the people.</p>
+        <p className="sub">{recent.length} applied in the last 30 days, Form and OLJ. The note shows how many are on the {formatDate(nextSession)} session. Click a bar to see the people.</p>
         <HBars format="count" ariaLabel="Applicants by position, last 30 days" data={positionCounts(recent).map((x) => ({
-          label: x.position, value: x.count, note: `${nextByPosition.get(x.position) || 0} for ${formatDate(nextSession).replace(/, \d{4}$/, '')}`
+          label: x.position, value: x.count, note: `${nextByPosition.get(x.position) || 0} for ${formatDate(nextSession).replace(/, \d{4}$/, '')}`,
+          href: `/candidates?stage=All&position=${encodeURIComponent(x.position)}`
         }))} />
       </section>
 
@@ -81,7 +82,7 @@ export default async function Dashboard() {
             <tbody>
               {m.sessions.map((x) => (
                 <tr key={x.date}>
-                  <td>{formatDate(x.date)}</td><td>{x.invited}</td><td>{x.confirmed}</td><td>{x.attended}</td><td>{x.completed}</td><td>{x.noShow}</td>
+                  <td><Link href={`/session?date=${x.date}`}>{formatDate(x.date)}</Link></td><td>{x.invited}</td><td>{x.confirmed}</td><td>{x.attended}</td><td>{x.completed}</td><td>{x.noShow}</td>
                   <td><div className="hbar"><div className="hbar-total" style={{ width: `${(x.invited / maxSession) * 100}%` }}><div className="hbar-done" style={{ width: `${x.invited ? (x.completed / x.invited) * 100 : 0}%` }} /></div></div></td>
                 </tr>
               ))}

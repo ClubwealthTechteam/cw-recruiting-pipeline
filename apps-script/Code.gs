@@ -17,7 +17,7 @@
 var SH = {
   APPLICANTS: 'Applicants', HISTORY: 'History', OUTBOX: 'Outbox', REPLIES: 'Replies',
   FLAGS: 'Needs Attention', ZOOM: 'Zoom Attendance', OLJ: 'OLJ', POSITIONS: 'Positions',
-  SETTINGS: 'Settings', LOG: 'Run Log', TEST_FORM: 'Test Form', CHAT: 'Chat'
+  SETTINGS: 'Settings', LOG: 'Run Log', TEST_FORM: 'Test Form', CHAT: 'Chat', SCORES: 'Scorecards', VIEWS: 'Views'
 };
 
 // Form Responses 1 columns (0-based), read only.
@@ -164,7 +164,7 @@ function ymdOf_(v) {
 // ---------- email queue ----------
 
 /** Queues one email. In TEST mode it always goes to TEST_EMAIL. */
-function queueEmail_(st, applicant, type, mail, interviewYmd) {
+function queueEmail_(st, applicant, type, mail, interviewYmd, by) {
   var test = st.get('MODE') !== 'LIVE';
   var to = test ? st.get('TEST_EMAIL') : String(applicant.Email || '').trim();
   if (!to) {
@@ -174,7 +174,7 @@ function queueEmail_(st, applicant, type, mail, interviewYmd) {
   return append_(table_(SH.OUTBOX), {
     'Email ID': id_('E'), 'Applicant ID': applicant['Applicant ID'], Type: type, To: to,
     Subject: (test ? '[TEST] ' : '') + mail.subject, Body: mail.body, 'Interview Date': interviewYmd,
-    'Queued At': nowStr_(), Status: 'Queued', Test: test ? 'Y' : ''
+    'Queued At': nowStr_(), Status: 'Queued', Test: test ? 'Y' : '', 'Queued By': by || ''
   });
 }
 
@@ -353,7 +353,7 @@ function backfillScreenTracks_() {
 
 // ---------- 2. sending (Zapier) and sent emails ----------
 
-var EMAIL_TYPES = ['Invite', 'Re-invite', 'Reminder', 'Confirmation'];
+var EMAIL_TYPES = ['Invite', 'Re-invite', 'Reminder', 'Confirmation', 'Reply'];
 
 /**
  * Hands each queued email to the Zapier "recruiting-pipeline-email-sender" hook, which sends it from
@@ -687,6 +687,7 @@ function processZoom_(st) {
     });
     st.set('ZOOM_FINALIZED_LAST', fin);
     log_('zoomFinalize', 'ok', counts, fin);
+    slack_(slackSessionResults(fin, counts, siteUrl_()));
   }
   return n;
 }
@@ -696,9 +697,14 @@ function processZoom_(st) {
  * against the 2 PM start; the invite asks for 10 minutes early) and minutes so far. Final stages are set at ZOOM_FINALIZE.
  * Returns true when something changed.
  */
+var lateArrivals_ = [];
+
 function liveZoom_(apps, a, r) {
   if (!a || PRE_INTERVIEW.indexOf(a.Stage) === -1) return false;
   var f = {};
+  if (r.Arrival && !a.Arrival && Number(r['Minutes Early']) < 0) {
+    lateArrivals_.push({ name: (a['First Name'] + ' ' + a['Last Name']).trim(), minutesLate: -Number(r['Minutes Early']) });
+  }
   var mins = Math.round(Number(r['Total Minutes']) || 0);
   if (mins && String(a['Zoom Minutes']) !== String(mins)) f['Zoom Minutes'] = mins;
   if (r.Arrival && apps.headers.indexOf('Arrival') !== -1 && String(a.Arrival) !== String(r.Arrival)) {
@@ -727,6 +733,82 @@ function queueReminders_(st) {
   });
   st.set('REMINDERS_QUEUED_FOR', today);
   return n;
+}
+
+// ---------- Slack DMs to Am and Camille (Zapier) ----------
+
+/**
+ * Posts one short message to the Zapier "recruiting-pipeline-slack-alerts" hook, which DMs Am and Camille.
+ * Script Property SLACK_HOOK holds the hook URL; without it nothing is sent. Settings SLACK_ALERTS = OFF pauses it.
+ */
+function slack_(text) {
+  if (!text) return false;
+  var hook = PropertiesService.getScriptProperties().getProperty('SLACK_HOOK');
+  if (!hook || settings_().get('SLACK_ALERTS') === 'OFF') return false;
+  try {
+    var res = UrlFetchApp.fetch(hook, { method: 'post', contentType: 'application/json', muteHttpExceptions: true, payload: JSON.stringify({ text: text }) });
+    return res.getResponseCode() < 300;
+  } catch (err) {
+    log_('slack', 'error', '', String(err && err.message || err).slice(0, 200));
+    return false;
+  }
+}
+
+function siteUrl_() {
+  return String(PropertiesService.getScriptProperties().getProperty('SITE_URL') || '').replace(/\/$/, '');
+}
+
+/**
+ * Batched each tick: new Great/Good-fit applicants (by Screened At) and new Needs Attention items (by Created At)
+ * since the last message, plus late joiners seen live during a Wednesday session. Starts from "now" the first time,
+ * so it never sends a backlog.
+ */
+function slackAlerts_(st) {
+  if (!PropertiesService.getScriptProperties().getProperty('SLACK_HOOK') || st.get('SLACK_ALERTS') === 'OFF') return 0;
+  var now = nowStr_();
+  var since = st.get('SLACK_SINCE');
+  if (!since) { st.set('SLACK_SINCE', now); return 0; }
+  var apps = table_(SH.APPLICANTS).rows;
+  var byId = indexBy_(apps, 'Applicant ID');
+  var name = function (a) { return a ? (a['First Name'] + ' ' + a['Last Name']).trim() : ''; };
+  var good = apps.filter(function (a) {
+    return (a['Screen Tag'] === 'Great' || a['Screen Tag'] === 'Good') && a.Historical !== 'Y' && ptStamp_(a['Screened At']) > since;
+  }).map(function (a) { return { name: name(a), position: a.Position || a['Position (as typed)'], tag: a['Screen Tag'] }; });
+  var flags = table_(SH.FLAGS).rows.filter(function (f) { return f.Status === 'Open' && ptStamp_(f['Created At']) > since; })
+    .map(function (f) { return { type: f.Type, name: name(byId[f['Applicant ID']]) }; });
+  var msgs = [slackNewApplicants(good, siteUrl_()), slackAttention(flags, siteUrl_()), slackLate(lateArrivals_)].filter(Boolean);
+  lateArrivals_ = [];
+  if (!msgs.length) return 0; // nothing new: no write, so a quiet tick stays quiet
+  var sent = msgs.filter(function (m) { return slack_(m); }).length;
+  st.set('SLACK_SINCE', now);
+  return sent;
+}
+
+/** Thursday morning (time trigger from setup): last session's numbers, by source and by position, as one DM. */
+function weeklyReport() {
+  var apps = table_(SH.APPLICANTS).rows.filter(function (a) { return a.Historical !== 'Y'; });
+  var today = todayPT();
+  var days = apps.map(function (a) { return ymdOf_(a['Interview Date']); }).filter(function (d) { return d && d < today; }).sort();
+  if (!days.length) return;
+  var day = days[days.length - 1];
+  var inv = apps.filter(function (a) { return ymdOf_(a['Interview Date']) === day && a.Stage !== 'Applied'; });
+  var done = function (a) { return ['Interview Completed', 'Passed', 'Hired'].indexOf(a.Stage) !== -1; };
+  var joined = function (a) { return Number(a['Zoom Minutes']) > 0 || done(a) || a.Stage === 'Did Not Complete'; };
+  var group = function (key) {
+    var m = {};
+    inv.forEach(function (a) {
+      var k = a[key] || 'Other';
+      m[k] = m[k] || { label: k === 'OLJ' ? 'OnlineJobs.ph' : k, invited: 0, completed: 0 };
+      m[k].invited++;
+      if (done(a)) m[k].completed++;
+    });
+    return Object.keys(m).map(function (k) { return m[k]; }).sort(function (x, y) { return y.invited - x.invited; });
+  };
+  slack_(slackWeekly({
+    day: day, invited: inv.length, confirmed: inv.filter(function (a) { return a['Confirmed At']; }).length,
+    joined: inv.filter(joined).length, completed: inv.filter(done).length,
+    bySource: group('Source'), byPosition: group('Position')
+  }, siteUrl_()));
 }
 
 // ---------- live updates to the site ----------
@@ -777,6 +859,7 @@ function tick() {
       zoom: processZoom_(st),
       reminders: queueReminders_(st)
     };
+    c.slack = slackAlerts_(st);
     if (Object.keys(c).some(function (k) { return c[k]; })) {
       log_('tick', 'ok', c);
       notifySite_();
@@ -798,9 +881,12 @@ function setup() {
   if (oh.indexOf('Queued By') === -1) out.getRange(1, oh.length + 1).setValue('Queued By').setFontWeight('bold');
   var ap = sheet_(SH.APPLICANTS);
   var aph = ap.getRange(1, 1, 1, ap.getLastColumn()).getValues()[0];
-  ['Invite Hold', 'Minutes Early', 'Arrival'].forEach(function (h) {
+  ['Invite Hold', 'Minutes Early', 'Arrival', 'Tags'].forEach(function (h) {
     if (aph.indexOf(h) === -1) { ap.getRange(1, aph.length + 1).setValue(h).setFontWeight('bold'); aph.push(h); }
   });
+  var oj = sheet_(SH.OLJ);
+  var ojh = oj.getRange(1, 1, 1, oj.getLastColumn()).getValues()[0];
+  if (ojh.indexOf('Thread') === -1) oj.getRange(1, ojh.length + 1).setValue('Thread').setFontWeight('bold');
   var zs = sheet_(SH.ZOOM);
   var zh = zs.getRange(1, 1, 1, zs.getLastColumn()).getValues()[0];
   ['Minutes Early', 'Arrival'].forEach(function (h) {
@@ -813,6 +899,16 @@ function setup() {
     tf.getRange(1, 1, 1, 20).setValues(hdr).setFontWeight('bold');
     tf.setFrozenRows(1);
   }
+  if (!ss.getSheetByName(SH.SCORES)) {
+    var sc = ss.insertSheet(SH.SCORES);
+    sc.getRange(1, 1, 1, 9).setValues([['Applicant ID', 'Scored By', 'Scored At', 'Communication', 'English', 'Experience', 'Internet', 'Average', 'Note']]).setFontWeight('bold');
+    sc.setFrozenRows(1);
+  }
+  if (!ss.getSheetByName(SH.VIEWS)) {
+    var vw = ss.insertSheet(SH.VIEWS);
+    vw.getRange(1, 1, 1, 4).setValues([['Name', 'Query', 'Created By', 'Created At']]).setFontWeight('bold');
+    vw.setFrozenRows(1);
+  }
   if (!ss.getSheetByName(SH.CHAT)) {
     var ch = ss.insertSheet(SH.CHAT);
     ch.getRange(1, 1, 1, 7).setValues([['Chat ID', 'Asked At', 'Asked By', 'Question', 'Status', 'Answer', 'Answered At']]).setFontWeight('bold');
@@ -820,11 +916,13 @@ function setup() {
   }
   startTestIntake();
   ScriptApp.getProjectTriggers().forEach(function (t) {
-    if (['tick', 'onFormSubmitIntake', 'onPipelineChange'].indexOf(t.getHandlerFunction()) !== -1) ScriptApp.deleteTrigger(t);
+    if (['tick', 'onFormSubmitIntake', 'onPipelineChange', 'weeklyReport'].indexOf(t.getHandlerFunction()) !== -1) ScriptApp.deleteTrigger(t);
   });
   ScriptApp.newTrigger('tick').timeBased().everyMinutes(5).create(); // 5 min keeps well inside Google's daily trigger-time quota
   ScriptApp.newTrigger('onFormSubmitIntake').forSpreadsheet(settings_().get('SOURCE_SHEET_ID')).onFormSubmit().create();
   ScriptApp.newTrigger('onPipelineChange').forSpreadsheet(ss.getId()).onChange().create();
+  // Thursday 9 AM in the script's time zone (set Project Settings > Time zone to America/Los_Angeles).
+  ScriptApp.newTrigger('weeklyReport').timeBased().onWeekDay(ScriptApp.WeekDay.THURSDAY).atHour(9).create();
 }
 
 // ---------- site API ----------
@@ -859,10 +957,75 @@ var MANUAL_BY = ['Miguel', 'Camille', 'Am'];
 var LIST_FIELDS = ['Applicant ID', 'Source', 'Applied At (PT)', 'First Name', 'Last Name', 'Email', 'Position (as typed)',
   'Position', 'Stage', 'Stage Updated At', 'Stage Updated By', 'Interview Date', 'Invite Count', 'Confirmed At',
   'Reminder Sent At', 'Zoom Minutes', 'Historical', 'Screen Track', 'Screen Tag', 'Screen Summary', 'Invite Hold',
-  'Minutes Early', 'Arrival'];
+  'Minutes Early', 'Arrival', 'Tags'];
 
 /** The few fields sent for applicants from before the system, enough for counts by week, source and stage. */
 var OLD_FIELDS = ['Applicant ID', 'Source', 'Applied At (PT)', 'Position', 'Stage', 'Historical'];
+
+/** Rows of a tab that may not exist yet (before setup is run again): [] instead of an error. */
+function optionalRows_(name) {
+  return ss_().getSheetByName(name) ? plain_(table_(name).rows) : [];
+}
+
+/** Comma-separated tags, trimmed, de-duplicated, case kept from the first time each was typed. */
+function cleanTags_(raw) {
+  var seen = {};
+  return String(raw || '').split(',').map(function (t) { return t.trim().slice(0, 40); }).filter(function (t) {
+    var k = t.toLowerCase();
+    if (!t || seen[k]) return false;
+    seen[k] = true;
+    return true;
+  }).slice(0, 12).join(', ');
+}
+
+/** One applicant's email conversation: what we sent (Outbox) and what they wrote back (Replies), oldest first. */
+function thread_(a) {
+  var id = a['Applicant ID'];
+  var email = String(a.Email || '').trim().toLowerCase();
+  var out = plain_(table_(SH.OUTBOX).rows).filter(function (e) {
+    return e['Applicant ID'] === id && e.Type !== 'OLJ Invite' && e.Type !== 'OLJ Message' && e.Test !== 'Y' && (e.Status === 'Sent' || e.Status === 'Queued');
+  }).map(function (e) {
+    return { dir: 'out', at: e['Sent At'] || e['Queued At'], type: e.Type, subject: e.Subject, status: e.Status, by: e['Queued By'] || 'System',
+      text: e.Type === 'Reply' ? stripTags_(e.Body) : '' };
+  });
+  var inn = plain_(table_(SH.REPLIES).rows).filter(function (r) {
+    return r['Matched Applicant ID'] === id || (email && String(r['From Email']).trim().toLowerCase() === email);
+  }).map(function (r) {
+    return { dir: 'in', at: r['Received At'], subject: r.Subject, text: stripQuoted(r['Reply Text']).slice(0, 2000), category: r.Category };
+  });
+  return out.concat(inn, oljThread_(a)).sort(function (x, y) { return String(x.at).localeCompare(String(y.at)); });
+}
+
+/**
+ * OnlineJobs.ph conversation for an OLJ applicant: the messages the OLJ reader saved (OLJ tab "Thread", JSON, only
+ * for conversations already read on OLJ; it never opens unread ones), plus CRM answers still waiting to be sent.
+ */
+function oljThread_(a) {
+  if (a.Source !== 'OLJ') return [];
+  var row = table_(SH.OLJ).rows.filter(function (o) { return o['Applicant ID'] === a['Applicant ID'] || o['Conversation Key'] === a['Source Ref']; })[0];
+  var saved = [];
+  try { saved = row && row.Thread ? JSON.parse(row.Thread) : []; } catch (err) { saved = []; }
+  var items = saved.map(function (m) {
+    return { dir: m.from === 'us' ? 'out' : 'in', channel: 'OLJ', at: ptStamp_(m.at), text: String(m.text || '').slice(0, 2000) };
+  });
+  if (row && /^Unread on OLJ/.test(String(row.Summary))) {
+    items.push({ dir: 'in', channel: 'OLJ', at: ptStamp_(row['Last Message At']), text: '', note: 'Unread on OLJ (not opened by the CRM, so it stays unread for you). Open OLJ to read it.' });
+  }
+  plain_(table_(SH.OUTBOX).rows).forEach(function (e) {
+    if (e['Applicant ID'] !== a['Applicant ID'] || e.Status !== 'Queued') return;
+    if (e.Type === 'OLJ Message') items.push({ dir: 'out', channel: 'OLJ', at: e['Queued At'], text: e.Body, status: 'Queued', by: e['Queued By'] });
+    if (e.Type === 'OLJ Invite') items.push({ dir: 'out', channel: 'OLJ', at: e['Queued At'], type: 'OLJ Invite', text: 'Pre-interview invite (OLJ)', status: 'Queued', by: e['Queued By'] });
+  });
+  return items;
+}
+
+function stripTags_(html) {
+  var s = String(html || '');
+  var i = s.indexOf('<p>Cheers,');
+  if (i !== -1) s = s.slice(0, i);
+  return s.replace(/<br\s*\/?>/g, '\n').replace(/<\/p>\s*<p>/g, '\n\n').replace(/<[^>]+>/g, '')
+    .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&amp;/g, '&').trim();
+}
 
 // ---------- chat bubble (answers come from a Claude routine, read-only) ----------
 
@@ -929,6 +1092,8 @@ function api_(req) {
       flags: plain_(table_(SH.FLAGS).rows),
       zoom: plain_(table_(SH.ZOOM).rows.filter(function (z) { return !old[z['Matched Applicant ID']]; })),
       outbox: plain_(table_(SH.OUTBOX).rows.filter(mine)).map(function (e) { delete e.Body; return e; }),
+      scores: optionalRows_(SH.SCORES),
+      views: optionalRows_(SH.VIEWS),
       withHistory: all,
       mode: st.get('MODE'),
       emailSending: st.get('EMAIL_SENDING')
@@ -946,7 +1111,10 @@ function api_(req) {
     hdr.forEach(function (h, j) { if (h) o[h] = vals[j]; });
     var out = plain_([o])[0];
     out['Do Not Invite'] = doNotInvite_(settings_(), o);
-    return { applicant: out };
+    return {
+      applicant: out, thread: thread_(o),
+      scores: optionalRows_(SH.SCORES).filter(function (s) { return s['Applicant ID'] === out['Applicant ID']; })
+    };
   }
   if (req.action === 'zoomRows') return zoomRowsApi_(req);
   if (req.action === 'chatGet') return chatGet_(req.id);
@@ -1022,6 +1190,70 @@ function api_(req) {
       } else throw new Error('bad channel');
       update_(apps, ai, { 'Interview Date': session });
       return { queued: true, session: session, channel: req.channel };
+    }
+    if (req.action === 'saveScore') {
+      var as = byId[req.id];
+      if (!as) throw new Error('not found');
+      var sc = table_(SH.SCORES);
+      var f2 = { 'Applicant ID': req.id, 'Scored By': req.by, 'Scored At': nowStr_(), Note: String(req.note || '').slice(0, 1000) };
+      SCORE_CRITERIA.forEach(function (k) {
+        var v = Math.round(Number((req.scores || {})[k]) || 0);
+        if (v < 0 || v > 5) throw new Error(k + ' must be 0 to 5');
+        f2[k] = v;
+      });
+      var one = scoreSummary([f2]);
+      f2.Average = one.average;
+      var mineRow = sc.rows.filter(function (r) { return r['Applicant ID'] === req.id && r['Scored By'] === req.by; })[0];
+      if (mineRow) update_(sc, mineRow, f2); else append_(sc, f2);
+      return scoreSummary(sc.rows.filter(function (r) { return r['Applicant ID'] === req.id; }));
+    }
+    if (req.action === 'setTags') {
+      var at = byId[req.id];
+      if (!at) throw new Error('not found');
+      if (apps.headers.indexOf('Tags') === -1) throw new Error('Run setup() once in Apps Script to add the Tags column.');
+      update_(apps, at, { Tags: cleanTags_(req.tags) });
+      return { tags: at.Tags };
+    }
+    if (req.action === 'saveView' || req.action === 'deleteView') {
+      var vt = table_(SH.VIEWS);
+      var vname = String(req.name || '').trim().slice(0, 60);
+      if (!vname) throw new Error('A view needs a name');
+      var existing = vt.rows.filter(function (r) { return String(r.Name).toLowerCase() === vname.toLowerCase(); })[0];
+      if (req.action === 'deleteView') {
+        if (existing) vt.sheet.deleteRow(existing._row);
+        return { ok: true };
+      }
+      var vq = String(req.query || '').replace(/^\?/, '').slice(0, 500);
+      if (existing) update_(vt, existing, { Query: vq, 'Created By': req.by, 'Created At': nowStr_() });
+      else append_(vt, { Name: vname, Query: vq, 'Created By': req.by, 'Created At': nowStr_() });
+      return { ok: true };
+    }
+    if (req.action === 'sendReply') {
+      var ar = byId[req.id];
+      var text = String(req.text || '').trim();
+      if (!ar) throw new Error('not found');
+      if (!text) throw new Error('Type a message first.');
+      if (text.length > 5000) throw new Error('Message is too long (5,000 characters max).');
+      if (st2.get('EMAIL_SENDING') !== 'ON') throw new Error('Email sending is off (Settings EMAIL_SENDING).');
+      if (!ar.Email) throw new Error('This applicant has no email address.');
+      var blockedR = doNotInvite_(st2, ar);
+      if (blockedR) throw new Error('Do not contact: ' + blockedR + '.');
+      var q = queueEmail_(st2, ar, 'Reply', replyEmail(text), ymdOf_(ar['Interview Date']), req.by);
+      return { queued: !!q };
+    }
+    if (req.action === 'sendOljMessage') {
+      var ao = byId[req.id];
+      var otext = String(req.text || '').trim();
+      if (!ao) throw new Error('not found');
+      if (ao.Source !== 'OLJ' || !ao['Source Ref']) throw new Error('This applicant did not come from OnlineJobs.ph.');
+      if (!otext) throw new Error('Type a message first.');
+      if (otext.length > 3000) throw new Error('Message is too long (3,000 characters max).');
+      append_(table_(SH.OUTBOX), {
+        'Email ID': id_('E'), 'Applicant ID': ao['Applicant ID'], Type: 'OLJ Message', To: 'OLJ:' + ao['Source Ref'],
+        Subject: '(OnlineJobs.ph message)', Body: otext, 'Interview Date': ymdOf_(ao['Interview Date']), 'Queued At': nowStr_(),
+        Status: 'Queued', 'Queued By': req.by
+      });
+      return { queued: true };
     }
     if (req.action === 'chatAsk') {
       var cid = id_('C');

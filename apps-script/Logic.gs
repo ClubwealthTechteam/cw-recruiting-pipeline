@@ -342,6 +342,91 @@ function zoomResult(minutes, minMinutes) {
   return minutes >= (minMinutes || 30) ? 'Interview Completed' : 'Did Not Complete';
 }
 
+
+/**
+ * Answer typed in the CRM to an applicant's email (plain text). Sent from CareersCW with the approved
+ * sign-off and banner, under the invite's subject so it reads as part of the same conversation.
+ */
+function replyEmail(text) {
+  var paras = String(text || '').trim().split(/\n\s*\n/).map(function (p) {
+    return '<p>' + escapeHtml(p.trim()).replace(/\n/g, '<br>') + '</p>';
+  }).join('');
+  return { subject: 'RE: ClubWealth | Pre-Interview invite', body: paras + SIGNATURE_HTML };
+}
+
+// ---------- interview scorecards ----------
+
+var SCORE_CRITERIA = ['Communication', 'English', 'Experience', 'Internet'];
+var SCORE_PASS = 3.5;
+
+/**
+ * Average of the saved scorecards (each criterion 1-5; 0 = not rated yet). Suggests Passed at 3.5 or higher
+ * with no criterion scored 1 by anyone, otherwise Not Fit. Nothing is suggested until someone rates all four.
+ */
+function scoreSummary(cards) {
+  var rated = (cards || []).filter(function (c) {
+    return SCORE_CRITERIA.every(function (k) { return Number(c[k]) >= 1 && Number(c[k]) <= 5; });
+  });
+  if (!rated.length) return { average: 0, count: 0, suggestion: '' };
+  var per = {};
+  SCORE_CRITERIA.forEach(function (k) {
+    per[k] = rated.reduce(function (t, c) { return t + Number(c[k]); }, 0) / rated.length;
+  });
+  var avg = SCORE_CRITERIA.reduce(function (t, k) { return t + per[k]; }, 0) / SCORE_CRITERIA.length;
+  var anyOne = rated.some(function (c) { return SCORE_CRITERIA.some(function (k) { return Number(c[k]) === 1; }); });
+  avg = Math.round(avg * 10) / 10;
+  return { average: avg, count: rated.length, perCriterion: per, suggestion: avg >= SCORE_PASS && !anyOne ? 'Passed' : 'Not Fit' };
+}
+
+// ---------- Slack messages (short, bulleted) ----------
+
+function bullets_(lines, max) {
+  var shown = lines.slice(0, max || 8).map(function (l) { return '\u2022 ' + l; });
+  if (lines.length > shown.length) shown.push('\u2022 +' + (lines.length - shown.length) + ' more');
+  return shown.join('\n');
+}
+
+/** New Great/Good-fit applicants: [{name, position, tag}] -> one short message. */
+function slackNewApplicants(list, siteUrl) {
+  if (!list.length) return '';
+  return '*' + list.length + ' new good applicant' + (list.length > 1 ? 's' : '') + '*\n' +
+    bullets_(list.map(function (a) { return a.name + ', ' + a.position + ' (' + a.tag + ')'; })) +
+    (siteUrl ? '\n<' + siteUrl + '/candidates|Open Candidates>' : '');
+}
+
+/** Needs Attention items: [{type, name}] -> one short message. */
+function slackAttention(list, siteUrl) {
+  if (!list.length) return '';
+  return '*' + list.length + ' new item' + (list.length > 1 ? 's' : '') + ' in Needs Attention*\n' +
+    bullets_(list.map(function (f) { return f.type + (f.name ? ': ' + f.name : ''); })) +
+    (siteUrl ? '\n<' + siteUrl + '/attention|Open Needs Attention>' : '');
+}
+
+/** Late joiners during the Wednesday session: [{name, minutesLate}]. */
+function slackLate(list) {
+  if (!list.length) return '';
+  return '*Late to the 2 PM session*\n' +
+    bullets_(list.map(function (a) { return a.name + ' joined ' + a.minutesLate + ' min late'; }), 15);
+}
+
+/** Session results after Zoom is finalized. */
+function slackSessionResults(day, c, siteUrl) {
+  return '*Session results, ' + longDate(day) + '*\n' + bullets_([
+    'Completed (30+ min): ' + c.completed, 'Did not complete: ' + c.dnc, 'No show: ' + c.noshow
+  ]) + (siteUrl ? '\n<' + siteUrl + '/session?date=' + day + '|Open the session>' : '');
+}
+
+/** Weekly report: last session and the split by source and position. r = {day, invited, confirmed, joined, completed, bySource, byPosition}. */
+function slackWeekly(r, siteUrl) {
+  var row = function (x) { return x.label + ': ' + x.completed + ' completed of ' + x.invited + ' invited'; };
+  return '*Weekly recruiting report*\n' +
+    'Last session (' + longDate(r.day) + ')\n' + bullets_([
+      'Invited: ' + r.invited, 'Confirmed: ' + r.confirmed, 'Joined Zoom: ' + r.joined, 'Completed: ' + r.completed
+    ]) + '\nBy source\n' + bullets_(r.bySource.map(row)) +
+    (r.byPosition.length ? '\nBy position\n' + bullets_(r.byPosition.map(row)) : '') +
+    (siteUrl ? '\n<' + siteUrl + '/reports|Open Reports>' : '');
+}
+
 if (typeof module !== 'undefined') {
   module.exports = {
     ptParts: ptParts, addDays: addDays, todayPT: todayPT, interviewDateFor: interviewDateFor,
@@ -350,6 +435,9 @@ if (typeof module !== 'undefined') {
     normName: normName, nameMatches: nameMatches, parseZoomName: parseZoomName,
     standardPosition: standardPosition, zoomResult: zoomResult, STAGES: STAGES,
     stripQuoted: stripQuoted, typedFullName: typedFullName, classifyReply: classifyReply, confirmsFor: confirmsFor, screenTrack: screenTrack,
-    inviteHoldReason: inviteHoldReason, approvedEmailBody: approvedEmailBody, OPEN_POSITIONS: OPEN_POSITIONS
+    inviteHoldReason: inviteHoldReason, approvedEmailBody: approvedEmailBody, OPEN_POSITIONS: OPEN_POSITIONS,
+    replyEmail: replyEmail, scoreSummary: scoreSummary, SCORE_CRITERIA: SCORE_CRITERIA,
+    slackNewApplicants: slackNewApplicants, slackAttention: slackAttention, slackLate: slackLate,
+    slackSessionResults: slackSessionResults, slackWeekly: slackWeekly
   };
 }

@@ -9,6 +9,8 @@ export type PipelineData = {
   flags: Row[];
   zoom: Row[];
   outbox: Row[];
+  scores?: Row[];
+  views?: Row[];
   mode: string;
   emailSending?: string;
   fetchedAt?: number;
@@ -58,20 +60,28 @@ export const getDataWithHistory = unstable_cache(
   { revalidate: 120, tags: [PIPELINE_TAG] }
 );
 
-/** One applicant with every column (application answers, links, notes), cached like the lists. */
-export const getApplicant = unstable_cache(
-  async (id: string): Promise<Row | null> => {
+/** One message in an applicant's email or OLJ conversation, oldest first. */
+export type ThreadItem = {
+  dir: 'in' | 'out'; at: string; channel?: 'OLJ'; type?: string; subject?: string; text?: string;
+  status?: string; by?: string; category?: string; note?: string;
+};
+export type ApplicantDetail = { applicant: Row | null; thread: ThreadItem[]; scores: Row[] };
+
+/** One applicant with every column (application answers, links, notes), their conversation and scorecards. */
+export const getApplicantDetail = unstable_cache(
+  async (id: string): Promise<ApplicantDetail> => {
     try {
-      const r = await call<{ applicant: Row | null }>({ action: 'applicant', id });
-      if (r.applicant?.['Applied At (PT)']) r.applicant['Applied At (PT)'] = ptStamp(r.applicant['Applied At (PT)']);
-      return r.applicant;
+      const r = await call<Partial<ApplicantDetail>>({ action: 'applicant', id });
+      const a = r.applicant || null;
+      if (a?.['Applied At (PT)']) a['Applied At (PT)'] = ptStamp(a['Applied At (PT)']);
+      return { applicant: a, thread: r.thread || [], scores: r.scores || [] };
     } catch {
       // Older Apps Script without the "applicant" action: fall back to the full data set.
       const full = await call<PipelineData>({ action: 'data' });
-      return full.applicants.find((a) => String(a['Applicant ID']) === id) || null;
+      return { applicant: full.applicants.find((a) => String(a['Applicant ID']) === id) || null, thread: [], scores: [] };
     }
   },
-  ['pipeline-applicant-v1'],
+  ['pipeline-applicant-v2'],
   { revalidate: 60, tags: [PIPELINE_TAG] }
 );
 

@@ -27,6 +27,7 @@ function makeSheet(name, rows) {
     getDataRange: () => ({ getValues: () => data.map((r) => Array.from({ length: width() }, (_, j) => (r[j] === undefined ? '' : r[j]))) }),
     getLastRow: () => data.length, getLastColumn: () => width(),
     appendRow: (r) => data.push(r.slice()),
+    deleteRow: (r) => data.splice(r - 1, 1),
     setFrozenRows: () => {},
     getRange: (r, c, nr = 1, nc = 1) => {
       if (typeof r === 'string') {
@@ -82,7 +83,7 @@ function load({ now, formRows = [], mode = 'TEST', settings = {}, rejected = [] 
     LockService: { getScriptLock: () => ({ tryLock: () => true, waitLock: () => {}, releaseLock: () => {} }) },
     PropertiesService: { getScriptProperties: () => ({ getProperty: () => 's3cret' }) },
     ContentService: { createTextOutput: (s) => ({ s, setMimeType() { return this; } }), MimeType: { JSON: 'json' } },
-    ScriptApp: { getProjectTriggers: () => [], deleteTrigger() {}, newTrigger: () => ({ timeBased: () => ({ everyMinutes: () => ({ create() {} }) }), forSpreadsheet: () => ({ onFormSubmit: () => ({ create() {} }), onChange: () => ({ create() {} }) }) }) },
+    ScriptApp: { WeekDay: { THURSDAY: 'THURSDAY' }, getProjectTriggers: () => [], deleteTrigger() {}, newTrigger: () => ({ timeBased: () => ({ everyMinutes: () => ({ create() {} }), onWeekDay: () => ({ atHour: () => ({ create() {} }) }) }), forSpreadsheet: () => ({ onFormSubmit: () => ({ create() {} }), onChange: () => ({ create() {} }) }) }) },
     UrlFetchApp: { fetch: (url, opts) => { (ctxCalls.fetches = ctxCalls.fetches || []).push(url); (ctxCalls.posts = ctxCalls.posts || []).push({ url, body: opts && opts.payload }); return { getResponseCode: () => ctxCalls.code || 200 }; } }
   };
   vm.createContext(ctx);

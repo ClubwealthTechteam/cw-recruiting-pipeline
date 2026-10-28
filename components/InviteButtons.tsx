@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { useAction } from './useAction';
 
 /** "Send invite via OLJ" / "Send invite via Email" for the applicant's next Wednesday session. */
-export default function InviteButtons({ id, isOlj, hasEmail, emailReady, blocked }: { id: string; isOlj: boolean; hasEmail: boolean; emailReady: boolean; blocked: boolean }) {
+export default function InviteButtons({ id, isOlj, hasEmail, emailReady, blocked, compact = false }: { id: string; isOlj: boolean; hasEmail: boolean; emailReady: boolean; blocked: boolean; compact?: boolean }) {
   const { run, busy, error } = useAction();
   const [done, setDone] = useState('');
   async function send(channel: 'olj' | 'email') {
@@ -19,10 +19,10 @@ export default function InviteButtons({ id, isOlj, hasEmail, emailReady, blocked
   }
   return (
     <div className="invite-actions">
-      <button className="btn primary" disabled={busy || blocked || !isOlj} onClick={() => send('olj')} title={isOlj ? '' : 'Only for applicants who came from OnlineJobs.ph'}>Send invite via OLJ</button>
+      {(!compact || isOlj) && <button className="btn primary" disabled={busy || blocked || !isOlj} onClick={() => send('olj')} title={isOlj ? '' : 'Only for applicants who came from OnlineJobs.ph'}>{compact ? 'Invite via OLJ' : 'Send invite via OLJ'}</button>}
       <button className="btn" disabled={busy || blocked || !hasEmail || !emailReady} onClick={() => send('email')}
-        title={!emailReady ? 'Email is not connected yet (CareersCW in Zapier)' : !hasEmail ? 'No email address' : ''}>Send invite via Email</button>
-      {!emailReady && <span className="hint">Email not connected yet.</span>}
+        title={!emailReady ? 'Email is not connected yet (CareersCW in Zapier)' : !hasEmail ? 'No email address' : ''}>{compact ? 'Invite via Email' : 'Send invite via Email'}</button>
+      {!emailReady && !compact && <span className="hint">Email not connected yet.</span>}
       {done && <span className="hint">{done}</span>}
       {error && <span className="error">{error}</span>}
     </div>
