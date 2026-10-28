@@ -36,7 +36,7 @@ export default async function Candidate({ params }: { params: Promise<{ id: stri
     events.push({ at: s(e['Sent At'] || e['Queued At']), text: `${e.Type} email ${s(e.Status).toLowerCase()}${e['Interview Date'] ? ` for ${formatDate(ymd(e['Interview Date']))}` : ''}${e.Test === 'Y' ? ' (test)' : ''}` });
   }
   for (const z of d.zoom.filter((x) => s(x['Matched Applicant ID']) === appId)) {
-    events.push({ at: s(z['Recorded At'] || z['Interview Date']), text: `Zoom: "${z['Zoom Display Name']}" · ${z['Total Minutes']} minutes` });
+    events.push({ at: s(z['Recorded At'] || z['Interview Date']), text: `Zoom: "${z['Zoom Display Name']}" · ${z['Total Minutes']} minutes${z.Arrival ? ` · ${z.Arrival}` : ''}` });
   }
   events.push({ at: s(a['Applied At (PT)']), text: `Applied via ${s(a.Source) === 'OLJ' ? 'OnlineJobs.ph' : 'the application form'}` });
   if (s(a['Stage Updated By']) === 'Import') events.push({ at: s(a['Stage Updated At']), text: 'Brought into the system as Invited (invited by hand before the system started)' });
@@ -78,6 +78,7 @@ export default async function Candidate({ params }: { params: Promise<{ id: stri
             <dt>Session</dt><dd>{a['Interview Date'] ? `Wednesday, ${formatDate(ymd(a['Interview Date']))}, 2:00 PM PT` : '—'}</dd>
             <dt>Invites sent</dt><dd>{s(a['Invite Count']) || '0'}</dd>
             <dt>Zoom minutes</dt><dd>{s(a['Zoom Minutes']) || '—'}</dd>
+            <dt>Arrival</dt><dd>{s(a.Arrival) || '—'}</dd>
             {a['Re-invite Reason'] && (<><dt>Re-invite reason</dt><dd>{s(a['Re-invite Reason'])}</dd></>)}
             {a['Decision Reason'] && (<><dt>Decision reason</dt><dd>{s(a['Decision Reason'])}</dd></>)}
             {FIELDS.map((f) => a[f] ? <Fragment key={f}><dt>{f}</dt><dd>{s(a[f])}</dd></Fragment> : null)}

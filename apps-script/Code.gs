@@ -636,6 +636,10 @@ function processZoom_(st) {
     }
     if (cands.length === 1) {
       update_(z, r, { 'Matched Applicant ID': cands[0]['Applicant ID'] });
+      // Early/late against the 2 PM start; the invite asks them to join 10 minutes early.
+      if (r.Arrival && apps.headers.indexOf('Arrival') !== -1) {
+        update_(apps, cands[0], { Arrival: r.Arrival, 'Minutes Early': r['Minutes Early'] });
+      }
     } else {
       update_(z, r, { Result: cands.length ? 'Ambiguous' : 'Not an invitee' });
       if (cands.length) flag_('', 'Zoom name matches several applicants', r['Zoom Display Name'] + ' on ' + day);
@@ -760,7 +764,14 @@ function setup() {
   if (oh.indexOf('Queued By') === -1) out.getRange(1, oh.length + 1).setValue('Queued By').setFontWeight('bold');
   var ap = sheet_(SH.APPLICANTS);
   var aph = ap.getRange(1, 1, 1, ap.getLastColumn()).getValues()[0];
-  if (aph.indexOf('Invite Hold') === -1) ap.getRange(1, aph.length + 1).setValue('Invite Hold').setFontWeight('bold');
+  ['Invite Hold', 'Minutes Early', 'Arrival'].forEach(function (h) {
+    if (aph.indexOf(h) === -1) { ap.getRange(1, aph.length + 1).setValue(h).setFontWeight('bold'); aph.push(h); }
+  });
+  var zs = sheet_(SH.ZOOM);
+  var zh = zs.getRange(1, 1, 1, zs.getLastColumn()).getValues()[0];
+  ['Minutes Early', 'Arrival'].forEach(function (h) {
+    if (zh.indexOf(h) === -1) { zs.getRange(1, zh.length + 1).setValue(h).setFontWeight('bold'); zh.push(h); }
+  });
   if (!ss.getSheetByName(SH.TEST_FORM)) {
     var tf = ss.insertSheet(SH.TEST_FORM);
     var src = SpreadsheetApp.openById(settings_().get('SOURCE_SHEET_ID')).getSheetByName('Form Responses 1');
@@ -813,7 +824,8 @@ var MANUAL_BY = ['Miguel', 'Camille', 'Am'];
 
 var LIST_FIELDS = ['Applicant ID', 'Source', 'Applied At (PT)', 'First Name', 'Last Name', 'Email', 'Position (as typed)',
   'Position', 'Stage', 'Stage Updated At', 'Stage Updated By', 'Interview Date', 'Invite Count', 'Confirmed At',
-  'Reminder Sent At', 'Zoom Minutes', 'Historical', 'Screen Track', 'Screen Tag', 'Screen Summary', 'Invite Hold'];
+  'Reminder Sent At', 'Zoom Minutes', 'Historical', 'Screen Track', 'Screen Tag', 'Screen Summary', 'Invite Hold',
+  'Minutes Early', 'Arrival'];
 
 // ---------- chat bubble (answers come from a Claude routine, read-only) ----------
 
@@ -843,6 +855,7 @@ function zoomRowsApi_(req) {
   try {
     var z = table_(SH.ZOOM);
     var cols = ['Interview Date', 'Zoom Display Name', 'Parsed Name', 'Parsed Position', 'Total Minutes', 'First Join', 'Last Leave', 'Segments'];
+    if (z.headers.indexOf('Arrival') !== -1) cols.push('Minutes Early', 'Arrival');
     (req.rows || []).slice(0, 500).forEach(function (r) {
       var o = {};
       cols.forEach(function (c) { o[c] = r[c] !== undefined ? r[c] : ''; });
@@ -936,9 +949,7 @@ function api_(req) {
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error('invalid email');
       update_(apps, a2, { Email: email });
       if (a2.Stage === 'Applied' && !(Number(a2['Invite Count']) > 0) && !pendingInvite_(a2['Applicant ID'])) {
-        var iv = interviewDateFor(new Date());
-        update_(apps, a2, { 'Interview Date': iv });
-        queueInvite_(st2, a2, iv, 'Invite');
+        screenAndInvite_(st2, apps, a2);
       }
       return { ok: true };
     }
