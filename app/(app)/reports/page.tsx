@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { getData, type Row } from '@/lib/sheet';
-import { s, ymd, pct, daysAgoPT } from '@/lib/pipeline';
+import { s, ymd, pct, daysAgoPT, isTest } from '@/lib/pipeline';
 import DataError from '@/components/DataError';
 import { HBars } from '@/components/Charts';
 
@@ -25,7 +25,7 @@ export default async function Reports({ searchParams }: { searchParams: Promise<
   let d;
   try { d = await getData(); } catch (e) { return <DataError error={e} />; }
   const since = PERIODS[period].days ? daysAgoPT(PERIODS[period].days!) : '';
-  const apps = d.applicants.filter((a) => s(a.Historical) !== 'Y' && (!since || ymd(a['Applied At (PT)']) >= since));
+  const apps = d.applicants.filter((a) => s(a.Historical) !== 'Y' && !isTest(a) && (!since || ymd(a['Applied At (PT)']) >= since));
 
   const reached = new Map<string, Map<string, string>>(); // applicant -> stage -> first time
   for (const h of d.history) {
@@ -39,15 +39,15 @@ export default async function Reports({ searchParams }: { searchParams: Promise<
 
   function group(label: string, href: string, rows: Row[]): Group {
     const invited = rows.filter((a) => Number(a['Invite Count']) > 0 || s(a.Stage) !== 'Applied');
-    const completed = rows.filter((a) => did(a, 'Interview Completed') || did(a, 'Passed') || did(a, 'Hired'));
-    const hired = rows.filter((a) => did(a, 'Hired'));
+    const completed = rows.filter((a) => did(a, 'Interview Completed') || did(a, 'Passed') || did(a, 'Hired') || did(a, 'Onboarded'));
+    const hired = rows.filter((a) => did(a, 'Hired') || did(a, 'Onboarded'));
     return {
       label, href, applied: rows.length, invited: invited.length,
       confirmed: rows.filter((a) => a['Confirmed At'] || did(a, 'Confirmed')).length,
       // everyone who completed also joined, even when their Zoom minutes were not recorded (e.g. moved to Passed by hand)
       joined: rows.filter((a) => Number(a['Zoom Minutes']) > 0 || did(a, 'Did Not Complete') || completed.includes(a)).length,
-      completed: completed.length, passed: rows.filter((a) => did(a, 'Passed') || did(a, 'Hired')).length, hired: hired.length,
-      toHire: median(hired.map((a) => daysBetween(s(a['Applied At (PT)']), when(a, 'Hired'))).filter((x) => x >= 0)),
+      completed: completed.length, passed: rows.filter((a) => did(a, 'Passed') || did(a, 'Hired') || did(a, 'Onboarded')).length, hired: hired.length,
+      toHire: median(hired.map((a) => daysBetween(s(a['Applied At (PT)']), (when(a, 'Hired') || when(a, 'Onboarded')))).filter((x) => x >= 0)),
       toInterview: median(completed.map((a) => daysBetween(s(a['Applied At (PT)']), s(a['Interview Date']))).filter((x) => x >= 0))
     };
   }
@@ -79,7 +79,7 @@ export default async function Reports({ searchParams }: { searchParams: Promise<
     <>
       <header className="page-head">
         <h1>Reports</h1>
-        <p className="sub">By source and by position, for applicants who applied in the period. Applicants invited by hand before the system started are not included. Click a row or a bar to see the people.</p>
+        <p className="sub">By source and by position, for applicants who applied in the period. Applicants invited by hand before the system started, and test applicants, are not included. Click a row or a bar to see the people.</p>
       </header>
       <nav className="tabs">
         {Object.entries(PERIODS).map(([k, v]) => <Link key={k} href={`/reports?period=${k}`} className={k === period ? 'active' : ''}>{v.label}</Link>)}

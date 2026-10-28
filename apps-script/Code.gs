@@ -678,7 +678,7 @@ function processZoom_(st) {
       var res = m === undefined ? 'No Show' : zoomResult(m, minMin);
       if (m !== undefined) update_(apps, a, { 'Zoom Minutes': Math.round(m) });
       setStage_(apps, a, res, 'System', m === undefined ? 'Not seen in Zoom' : Math.round(m) + ' minutes in Zoom');
-      counts[res === 'No Show' ? 'noshow' : res === 'Did Not Complete' ? 'dnc' : 'completed']++;
+      if (!isTest_(a)) counts[res === 'No Show' ? 'noshow' : res === 'Did Not Complete' ? 'dnc' : 'completed']++;
     });
     z.rows.forEach(function (r) {
       if (ymdOf_(r['Interview Date']) === fin && r['Matched Applicant ID'] && !r.Result) {
@@ -699,10 +699,15 @@ function processZoom_(st) {
  */
 var lateArrivals_ = [];
 
+/** Test applicants (Source "Test", e.g. T-MIGUEL) stay in the CRM but are never counted or alerted. */
+function isTest_(a) {
+  return !!a && a.Source === 'Test';
+}
+
 function liveZoom_(apps, a, r) {
   if (!a || PRE_INTERVIEW.indexOf(a.Stage) === -1) return false;
   var f = {};
-  if (r.Arrival && !a.Arrival && Number(r['Minutes Early']) < 0) {
+  if (r.Arrival && !a.Arrival && Number(r['Minutes Early']) < 0 && !isTest_(a)) {
     lateArrivals_.push({ name: (a['First Name'] + ' ' + a['Last Name']).trim(), minutesLate: -Number(r['Minutes Early']) });
   }
   var mins = Math.round(Number(r['Total Minutes']) || 0);
@@ -772,9 +777,9 @@ function slackAlerts_(st) {
   var byId = indexBy_(apps, 'Applicant ID');
   var name = function (a) { return a ? (a['First Name'] + ' ' + a['Last Name']).trim() : ''; };
   var good = apps.filter(function (a) {
-    return (a['Screen Tag'] === 'Great' || a['Screen Tag'] === 'Good') && a.Historical !== 'Y' && ptStamp_(a['Screened At']) > since;
+    return (a['Screen Tag'] === 'Great' || a['Screen Tag'] === 'Good') && a.Historical !== 'Y' && !isTest_(a) && ptStamp_(a['Screened At']) > since;
   }).map(function (a) { return { name: name(a), position: a.Position || a['Position (as typed)'], tag: a['Screen Tag'] }; });
-  var flags = table_(SH.FLAGS).rows.filter(function (f) { return f.Status === 'Open' && ptStamp_(f['Created At']) > since; })
+  var flags = table_(SH.FLAGS).rows.filter(function (f) { return f.Status === 'Open' && ptStamp_(f['Created At']) > since && !isTest_(byId[f['Applicant ID']]); })
     .map(function (f) { return { type: f.Type, name: name(byId[f['Applicant ID']]) }; });
   var msgs = [slackNewApplicants(good, siteUrl_()), slackAttention(flags, siteUrl_()), slackLate(lateArrivals_)].filter(Boolean);
   lateArrivals_ = [];
@@ -786,13 +791,13 @@ function slackAlerts_(st) {
 
 /** Thursday morning (time trigger from setup): last session's numbers, by source and by position, as one DM. */
 function weeklyReport() {
-  var apps = table_(SH.APPLICANTS).rows.filter(function (a) { return a.Historical !== 'Y'; });
+  var apps = table_(SH.APPLICANTS).rows.filter(function (a) { return a.Historical !== 'Y' && !isTest_(a); });
   var today = todayPT();
   var days = apps.map(function (a) { return ymdOf_(a['Interview Date']); }).filter(function (d) { return d && d < today; }).sort();
   if (!days.length) return;
   var day = days[days.length - 1];
   var inv = apps.filter(function (a) { return ymdOf_(a['Interview Date']) === day && a.Stage !== 'Applied'; });
-  var done = function (a) { return ['Interview Completed', 'Passed', 'Hired'].indexOf(a.Stage) !== -1; };
+  var done = function (a) { return ['Interview Completed', 'Passed', 'Hired', 'Onboarded'].indexOf(a.Stage) !== -1; };
   var joined = function (a) { return Number(a['Zoom Minutes']) > 0 || done(a) || a.Stage === 'Did Not Complete'; };
   var group = function (key) {
     var m = {};

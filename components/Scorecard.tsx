@@ -16,7 +16,7 @@ export default function Scorecard({ id, me, stage, cards }: { id: string; me: st
   const { run, busy, error } = useAction();
   const s = scoreSummary(cards);
   const complete = CRITERIA.every((k) => scores[k] >= 1);
-  const decided = ['Passed', 'Hired', 'Not Fit'].includes(stage);
+  const decided = ['Passed', 'Hired', 'Onboarded', 'Not Fit'].includes(stage);
 
   return (
     <div className="scorecard">

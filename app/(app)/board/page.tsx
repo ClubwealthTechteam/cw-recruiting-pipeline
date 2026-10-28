@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { getData } from '@/lib/sheet';
-import { STAGES, s, fullName, ymd, formatDate, scoreSummary, upcomingWednesday } from '@/lib/pipeline';
+import { BOARD_STAGES, s, fullName, ymd, formatDate, scoreSummary, upcomingWednesday, isTest } from '@/lib/pipeline';
 import DataError from '@/components/DataError';
 import Board, { type BoardCard } from '@/components/Board';
 
@@ -24,7 +24,7 @@ export default async function BoardPage({ searchParams }: { searchParams: Promis
       return {
         id: s(a['Applicant ID']), name: fullName(a) || '(no name)', stage: s(a.Stage), position: s(a.Position), source: s(a.Source),
         fit: s(a['Screen Tag']), session: a['Interview Date'] ? formatDate(ymd(a['Interview Date'])).replace(/, \d{4}$/, '') : '',
-        score: sc.count ? sc.average.toFixed(1) : '', arrival: s(a.Arrival)
+        score: sc.count ? sc.average.toFixed(1) : '', arrival: s(a.Arrival), test: isTest(a)
       };
     });
   const positions = [...new Set(current.map((a) => s(a.Position)).filter(Boolean))].sort();
@@ -33,7 +33,7 @@ export default async function BoardPage({ searchParams }: { searchParams: Promis
     <>
       <header className="page-head">
         <h1>Pipeline Board</h1>
-        <p className="sub">Drag a card to another column to move the applicant. Stages that need a reason ask for one. Applicants from before the system are not shown. Scroll sideways for more stages.</p>
+        <p className="sub">Drag a card to another column to move the applicant. Stages that need a reason ask for one. Applicants from before the system are not shown. Scroll sideways for the other outcomes (re-invite, did not complete, no show, not fit).</p>
       </header>
       <form className="filters" action="/board">
         <select name="position" defaultValue={p.position || ''}><option value="">All positions</option>{positions.map((x) => <option key={x}>{x}</option>)}</select>
@@ -42,7 +42,7 @@ export default async function BoardPage({ searchParams }: { searchParams: Promis
         <button className="btn">Filter</button>
         <Link href="/board" className="btn ghost">Clear</Link>
       </form>
-      <Board stages={[...STAGES]} cards={list} />
+      <Board stages={BOARD_STAGES} cards={list} />
     </>
   );
 }
