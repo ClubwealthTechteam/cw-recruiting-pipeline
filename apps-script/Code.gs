@@ -909,6 +909,7 @@ function setup() {
     sc.getRange(1, 1, 1, 9).setValues([['Applicant ID', 'Scored By', 'Scored At', 'Communication', 'English', 'Experience', 'Internet', 'Average', 'Note']]).setFontWeight('bold');
     sc.setFrozenRows(1);
   }
+  scoreColumns_();
   if (!ss.getSheetByName(SH.VIEWS)) {
     var vw = ss.insertSheet(SH.VIEWS);
     vw.getRange(1, 1, 1, 4).setValues([['Name', 'Query', 'Created By', 'Created At']]).setFontWeight('bold');
@@ -966,6 +967,16 @@ var LIST_FIELDS = ['Applicant ID', 'Source', 'Applied At (PT)', 'First Name', 'L
 
 /** The few fields sent for applicants from before the system, enough for counts by week, source and stage. */
 var OLD_FIELDS = ['Applicant ID', 'Source', 'Applied At (PT)', 'Position', 'Stage', 'Historical'];
+
+/** Adds any scorecard criterion column the Scorecards tab does not have yet (e.g. Work Setup, added 2026-10-28). */
+function scoreColumns_() {
+  var sh = ss_().getSheetByName(SH.SCORES);
+  if (!sh) return;
+  var hdr = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0];
+  SCORE_CRITERIA.forEach(function (k) {
+    if (hdr.indexOf(k) === -1) { sh.getRange(1, hdr.length + 1).setValue(k).setFontWeight('bold'); hdr.push(k); }
+  });
+}
 
 /** Rows of a tab that may not exist yet (before setup is run again): [] instead of an error. */
 function optionalRows_(name) {
@@ -1199,6 +1210,7 @@ function api_(req) {
     if (req.action === 'saveScore') {
       var as = byId[req.id];
       if (!as) throw new Error('not found');
+      scoreColumns_();
       var sc = table_(SH.SCORES);
       var f2 = { 'Applicant ID': req.id, 'Scored By': req.by, 'Scored At': nowStr_(), Note: String(req.note || '').slice(0, 1000) };
       SCORE_CRITERIA.forEach(function (k) {
