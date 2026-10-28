@@ -936,9 +936,7 @@ function api_(req) {
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error('invalid email');
       update_(apps, a2, { Email: email });
       if (a2.Stage === 'Applied' && !(Number(a2['Invite Count']) > 0) && !pendingInvite_(a2['Applicant ID'])) {
-        var iv = interviewDateFor(new Date());
-        update_(apps, a2, { 'Interview Date': iv });
-        queueInvite_(st2, a2, iv, 'Invite');
+        screenAndInvite_(st2, apps, a2);
       }
       return { ok: true };
     }
