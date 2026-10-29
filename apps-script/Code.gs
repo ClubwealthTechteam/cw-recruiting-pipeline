@@ -654,7 +654,7 @@ function saveResume_(a, file) {
     method: 'post', contentType: 'multipart/related; boundary=' + boundary, payload: meta.concat(bytes, tail),
     headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() }, muteHttpExceptions: true
   });
-  if (res.getResponseCode() >= 300) throw new Error('Could not save the resume to Drive (' + res.getResponseCode() + ').');
+  if (res.getResponseCode() >= 300) throw new Error('Could not save the resume to Drive (' + res.getResponseCode() + '): ' + driveReason_(res));
   var f = JSON.parse(res.getContentText());
   // anyone at Club Wealth with the link can view it; stays private if the domain does not allow that
   try { driveApi_('post', 'files/' + f.id + '/permissions', { type: 'domain', domain: 'clubwealth.com', role: 'reader', allowFileDiscovery: false }); } catch (e) { /* private */ }
@@ -666,6 +666,11 @@ function saveResume_(a, file) {
  * created), which DriveApp cannot do: DriveApp needs full Drive access even to create a folder.
  * GET returns null when the file is not found or not visible.
  */
+/** Google's own reason from a failed Drive call (e.g. "Google Drive API has not been used in project … or it is disabled"). */
+function driveReason_(res) {
+  try { return String(JSON.parse(res.getContentText()).error.message).slice(0, 200); } catch (e) { return 'no details'; }
+}
+
 function driveApi_(method, path, body) {
   var res = UrlFetchApp.fetch('https://www.googleapis.com/drive/v3/' + path, {
     method: method, contentType: 'application/json', payload: body ? JSON.stringify(body) : undefined,
@@ -673,7 +678,7 @@ function driveApi_(method, path, body) {
   });
   var code = res.getResponseCode();
   if (method === 'get' && code === 404) return null;
-  if (code >= 300) throw new Error('Drive returned ' + code + ' for ' + path.split('?')[0]);
+  if (code >= 300) throw new Error('Drive returned ' + code + ': ' + driveReason_(res));
   var o = JSON.parse(res.getContentText() || '{}');
   return method === 'get' && o.trashed ? null : o;
 }
