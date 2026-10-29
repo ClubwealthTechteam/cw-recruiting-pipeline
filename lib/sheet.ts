@@ -3,6 +3,8 @@ import { unstable_cache, revalidateTag } from 'next/cache';
 import { ptStamp } from '@/lib/pipeline';
 
 export type Row = Record<string, string | number>;
+/** One Active Team Members row: the Onboarding copy with site edits on top; edited = { field: value in the Onboarding sheet }. */
+export type TeamMember = Record<string, string> & { edited?: Record<string, string> };
 export type PipelineData = {
   applicants: Row[];
   history: Row[];
@@ -11,6 +13,7 @@ export type PipelineData = {
   outbox: Row[];
   scores?: Row[];
   views?: Row[];
+  team?: TeamMember[];
   mode: string;
   emailSending?: string;
   fetchedAt?: number;

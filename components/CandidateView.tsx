@@ -1,10 +1,11 @@
 import { Fragment } from 'react';
 import EditProfile from './EditProfile';
+import { PendingStatusEmail, StatusEmailLog } from './StatusEmails';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getData, getDataWithHistory, getApplicantDetail } from '@/lib/sheet';
 import { currentUser } from '@/lib/auth';
-import { s, fullName, ymd, formatDate, formatDateTime } from '@/lib/pipeline';
+import { s, fullName, ymd, formatDate, formatDateTime, statusEmails } from '@/lib/pipeline';
 import StageBadge from '@/components/StageBadge';
 import StageForm from '@/components/StageForm';
 import { NoteForm, EmailForm } from '@/components/SmallForms';
@@ -54,6 +55,7 @@ export default async function CandidateView({ appId, panel = false }: { appId: s
   if (a['Confirmed At']) events.push({ at: s(a['Confirmed At']), text: 'Replied with full name (confirmed)' });
   events.sort((x, y) => y.at.localeCompare(x.at));
   const flags = d.flags.filter((f) => s(f['Applicant ID']) === appId && s(f.Status) === 'Open');
+  const mail = statusEmails(d.outbox, appId);
   const cards = detail.scores.length ? detail.scores : (d.scores || []).filter((x) => s(x['Applicant ID']) === appId);
 
   return (
@@ -70,6 +72,7 @@ export default async function CandidateView({ appId, panel = false }: { appId: s
       </header>
       {/* a plain link (full page load), so it is not caught by the side panel again */}
       {panel && <p><a href={`/candidates/${encodeURIComponent(appId)}`} className="small">Open full page →</a></p>}
+      {mail.filter((e) => e.status === 'Pending approval').map((e) => <PendingStatusEmail key={e.id} e={e} />)}
       {flags.length > 0 && <div className="panel warn">{flags.length} open item{flags.length > 1 ? 's' : ''} in <Link href="/attention">Needs Attention</Link> for this applicant.</div>}
       <div className={panel ? '' : 'two-col'}>
         <section className="panel">
@@ -125,6 +128,8 @@ export default async function CandidateView({ appId, panel = false }: { appId: s
           <ul className="timeline">
             {events.map((e, i) => <li key={i}><span className="when">{e.at.slice(0, 16)}</span> {e.text}{e.who ? <span className="muted"> · {e.who}</span> : null}</li>)}
           </ul>
+          <h2>Status emails</h2>
+          <StatusEmailLog emails={mail} />
           <h2>Notes</h2>
           {a.Notes ? <p className="prewrap">{s(a.Notes)}</p> : <p className="muted">No notes yet.</p>}
           <NoteForm id={appId} />

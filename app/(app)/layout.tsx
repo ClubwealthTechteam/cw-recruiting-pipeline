@@ -16,12 +16,14 @@ export const dynamic = 'force-dynamic';
 export default async function AppLayout({ children, panel }: { children: React.ReactNode; panel?: React.ReactNode }) {
   const user = await requireUser();
   let open = 0;
+  let approvals = 0;
   let mode = '';
   let fetchedAt: number | undefined;
   let people: CommandItem[] = [];
   try {
     const d = await getData();
     open = d.flags.filter((f) => s(f.Status) === 'Open').length;
+    approvals = d.outbox.filter((e) => s(e.Status) === 'Pending approval').length;
     mode = d.mode;
     fetchedAt = d.fetchedAt;
     people = d.applicants.filter((a) => s(a.Historical) !== 'Y')
@@ -35,7 +37,7 @@ export default async function AppLayout({ children, panel }: { children: React.R
       <aside className="sidebar">
         <div className="brand">Club Wealth</div>
         <div className="product">Recruiting Pipeline</div>
-        <NavLinks open={open} />
+        <NavLinks open={open} approvals={approvals} />
         <div className="kbd-hint">Press <kbd>Ctrl</kbd> + <kbd>K</kbd> to find anyone</div>
         <div className="sidebar-foot">
           {mode !== 'LIVE' && <div className="test-mode">TEST MODE</div>}
