@@ -16,6 +16,7 @@ function doneMessage(body: Record<string, unknown>): string {
     case 'replyToEmail': return 'Email reply queued ✓ (sends within 5 minutes)';
     case 'linkReply': return 'Linked ✓';
     case 'updateApplicant': return 'Profile saved ✓';
+    case 'updateTeam': return 'Team member updated ✓';
     case 'addApplicant': return `${body.firstName} ${body.lastName} added ✓`;
     case 'resolveFlag': return 'Marked resolved ✓';
     case 'sendInvite': return 'Invite queued ✓';

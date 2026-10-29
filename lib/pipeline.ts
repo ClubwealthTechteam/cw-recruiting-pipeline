@@ -2,13 +2,13 @@ import type { Row } from './sheet';
 
 export const STAGES = [
   'Applied', 'Invited', 'Confirmed', 'Open for re-invite', 'Interview Completed',
-  'Did Not Complete', 'Uninterested | Left Zoom', 'No Show', 'No Confirmation', 'Passed Pre-Interview', 'Passed Interview', 'Hired', 'Onboarded', 'Not Fit'
+  'Did Not Complete', 'Uninterested | Left Zoom', 'No Show', 'No Confirmation', 'Passed Pre-Interview', 'Passed Interview', 'Benched', 'Hired', 'Onboarded', 'Not Fit', 'Banned'
 ] as const;
 
 /** Board column order: the main flow first, then the side outcomes. */
 export const BOARD_STAGES = [
-  'Applied', 'Invited', 'Confirmed', 'Interview Completed', 'Passed Pre-Interview', 'Passed Interview', 'Hired', 'Onboarded',
-  'Open for re-invite', 'Did Not Complete', 'Uninterested | Left Zoom', 'No Show', 'No Confirmation', 'Not Fit'
+  'Applied', 'Invited', 'Confirmed', 'Interview Completed', 'Passed Pre-Interview', 'Passed Interview', 'Benched', 'Hired', 'Onboarded',
+  'Open for re-invite', 'Did Not Complete', 'Uninterested | Left Zoom', 'No Show', 'No Confirmation', 'Not Fit', 'Banned'
 ];
 
 /** Hired or further along (Onboarded counts as hired everywhere). */
@@ -18,7 +18,9 @@ export const SOURCES = ['Form', 'OLJ', 'Email', 'Referral'];
 export const SOURCE_LABEL: Record<string, string> = { Form: 'Application form', OLJ: 'OnlineJobs.ph', Email: 'Emailed to CareersCW', Referral: 'Referral' };
 
 /** Passed comes in two steps, Passed Pre-Interview then Passed Interview, and after both the person is Hired. */
-export const PASSED = ['Passed Pre-Interview', 'Passed Interview'];
+export const PASSED = ['Passed Pre-Interview', 'Passed Interview', 'Benched'];
+/** Stages whose move queues an email that must be approved before it is sent (Miguel, 2026-10-29). */
+export const STATUS_EMAIL_FOR_STAGE: Record<string, string> = { Hired: 'Hired', Onboarded: 'Hired', 'Not Fit': 'Rejected', Benched: 'Benched' };
 /** The next Passed step for someone at this stage (the scorecard's "Passed" suggestion applies this). */
 export const nextPassed = (stage: string) => (stage === 'Passed Pre-Interview' ? 'Passed Interview' : 'Passed Pre-Interview');
 export type Stage = (typeof STAGES)[number];
@@ -27,7 +29,7 @@ export type Stage = (typeof STAGES)[number];
 export const STAGE_TONE: Record<string, string> = {
   Applied: 'grey', Invited: 'blue', Confirmed: 'blue', 'Open for re-invite': 'amber',
   'Interview Completed': 'amber', 'Did Not Complete': 'red', 'Uninterested | Left Zoom': 'grey', 'No Show': 'red', 'No Confirmation': 'grey',
-  'Passed Pre-Interview': 'green', 'Passed Interview': 'green', Hired: 'green', Onboarded: 'green', 'Not Fit': 'grey'
+  'Passed Pre-Interview': 'green', 'Passed Interview': 'green', Benched: 'blue', Hired: 'green', Onboarded: 'green', 'Not Fit': 'grey', Banned: 'red'
 };
 
 /** Screening tags (Claude): Great = clearly meets the rule (1+ year or highly relevant), Good = meets 6 months, Not Fit = does not or not enough info. */
@@ -237,4 +239,16 @@ export function zoomLive(zoom: Row[], now = new Date()): Map<string, ZoomLive> {
     if (!prev || cur.inNow || (!prev.inNow && cur.lastLeave > prev.lastLeave)) out.set(id, cur);
   }
   return out;
+}
+
+/** Hired / Rejected / Benched emails from the Outbox, newest first (Body only on those waiting for approval). */
+export function statusEmails(outbox: Row[], applicantId?: string) {
+  return outbox
+    .filter((e) => ['Hired', 'Rejected', 'Benched'].includes(s(e.Type)) && (!applicantId || s(e['Applicant ID']) === applicantId))
+    .map((e) => ({
+      id: s(e['Email ID']), applicantId: s(e['Applicant ID']), type: s(e.Type), to: s(e.To), subject: s(e.Subject), body: s(e.Body),
+      status: s(e.Status), queuedAt: s(e['Queued At']), queuedBy: s(e['Queued By']), decidedBy: s(e['Decided By']),
+      decidedAt: s(e['Decided At']), sentAt: s(e['Sent At']), error: s(e.Error)
+    }))
+    .sort((x, y) => y.queuedAt.localeCompare(x.queuedAt));
 }

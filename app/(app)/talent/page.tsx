@@ -21,7 +21,7 @@ export default async function Talent({ searchParams }: { searchParams: Promise<Q
   try { d = await getData(); } catch (e) { return <DataError error={e} />; }
   const tagged = (a: Record<string, unknown>) => splitTags(a.Tags).some((t) => t.toLowerCase() === POOL_TAG);
   const pool = d.applicants.filter((a) => s(a.Historical) !== 'Y' && !isTest(a) && (tagged(a) ||
-    (['Great', 'Good'].includes(s(a['Screen Tag'])) && !IN_PROGRESS.includes(s(a.Stage)) && s(a.Stage) !== 'Not Fit')));
+    (['Great', 'Good'].includes(s(a['Screen Tag'])) && !IN_PROGRESS.includes(s(a.Stage)) && s(a.Stage) !== 'Not Fit' && s(a.Stage) !== 'Banned')));
   const q = (p.q || '').trim().toLowerCase();
   const matchQ = pool.filter((a) => !q || `${fullName(a)} ${s(a.Email)} ${s(a['Position (as typed)'])}`.toLowerCase().includes(q));
   const rows = matchQ.filter((a) => !p.position || s(a.Position) === p.position)

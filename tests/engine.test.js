@@ -386,7 +386,7 @@ test('screen tracks are set on intake and backfilled; sendInvite queues OLJ or e
   assert.equal(env.rows('Outbox').filter((e) => e.Type === 'Invite' && e['Applicant ID'] === 'F-2').length, 1);
 });
 
-test('applicants whose email is on the Rejected tab are never invited, by OLJ or email, and are flagged once', () => {
+test('applicants whose email is on the Rejected tab are never invited, by OLJ or email, and go to Banned once', () => {
   const env = invitedEnv({ AUTO_INVITES: 'OFF', EMAIL_SENDING: 'ON' }, [' Lito@Example.com ', 'can reapply beginning july 2026']);
   addRow(env, 'OLJ', { 'Conversation Key': 'k9', 'Job Post': 'Club Wealth Inside Sales Agent', 'Applicant Name': 'Lito Lapid', 'Email Found': 'lito@example.com', Summary: 's' });
   env.ctx.tick();
@@ -395,12 +395,13 @@ test('applicants whose email is on the Rejected tab are never invited, by OLJ or
   assert.equal(env.rows('Outbox').filter((e) => e['Applicant ID'] === 'O-k9').length, 0);
   assert.match(env.api({ action: 'applicant', id: 'O-k9' }).data.applicant['Do Not Invite'], /Rejected tab/);
   assert.equal(env.api({ action: 'applicant', id: 'F-2' }).data.applicant['Do Not Invite'], '');
-  // automatic invites skip and flag once, however many runs
+  // automatic invites skip; the applicant goes to Banned once, however many runs (Miguel, 2026-10-29)
   const st = env.sheets.Settings; const sh = st.data[0];
   st.data.find((r) => r[0] === 'AUTO_INVITES')[sh.indexOf('Value')] = 'ON';
   env.ctx.tick(); env.ctx.tick();
   assert.equal(env.rows('Outbox').filter((e) => e['Applicant ID'] === 'O-k9').length, 0);
-  assert.equal(env.rows('Needs Attention').filter((f) => f['Applicant ID'] === 'O-k9' && f.Type === 'Do not invite').length, 1);
+  assert.equal(env.rows('Applicants').find((a) => a['Applicant ID'] === 'O-k9').Stage, 'Banned');
+  assert.equal(env.rows('History').filter((h) => h['Applicant ID'] === 'O-k9' && h['To Stage'] === 'Banned').length, 1);
 });
 
 test('queued emails go to the Zapier hook only while EMAIL_SENDING is ON, and never OLJ invites', () => {
@@ -761,4 +762,95 @@ test('updateApplicant: Edit profile changes allowed fields only, notes each chan
   assert.equal(env.api({ action: 'updateApplicant', by: 'Camille', id: 'F-2', fields: { Email: 'nope' } }).ok, false);
   assert.equal(env.api({ action: 'updateApplicant', by: 'Camille', id: 'F-2', fields: { 'Resume Link': 'javascript:x' } }).ok, false);
   assert.equal(env.api({ action: 'updateApplicant', by: 'Camille', id: 'F-2', fields: { Phone: '0917' } }).data.updated, 0);
+});
+
+test('status emails wait for approval: moving queues one, moving again replaces it, approve sends once, never twice', () => {
+  const env = invitedEnv({ EMAIL_SENDING: 'ON' });
+  env.ctx.setup();
+  const pending = () => env.rows('Outbox').filter((e) => e['Applicant ID'] === 'F-2' && e.Status === 'Pending approval');
+  // Hired queues a Hired email for approval; nothing is sent
+  const r = env.api({ action: 'setStage', by: 'Am', ids: ['F-2'], stage: 'Hired' });
+  assert.equal(r.ok, true, r.error);
+  assert.equal(pending().length, 1);
+  assert.equal(pending()[0].Type, 'Hired');
+  assert.match(pending()[0].Subject, /PLACEHOLDER/);
+  assert.equal(pending()[0]['Queued By'], 'Am');
+  ctxCalls.posts = []; env.ctx.tick();
+  assert.equal(ctxCalls.posts.filter((p) => /zapier/.test(p.url)).length, 0, 'nothing goes out before approval');
+  // moved again before approval: the old one is cancelled, the new one queued (never two)
+  env.api({ action: 'setStage', by: 'Camille', ids: ['F-2'], stage: 'Benched' });
+  assert.equal(pending().length, 1);
+  assert.equal(pending()[0].Type, 'Benched');
+  const old = env.rows('Outbox').find((e) => e['Applicant ID'] === 'F-2' && e.Type === 'Hired');
+  assert.equal(old.Status, 'Cancelled');
+  assert.equal(old['Decided By'], 'Camille');
+  // Don't send
+  assert.equal(env.api({ action: 'skipEmail', by: 'Am', emailId: pending()[0]['Email ID'] }).ok, true);
+  assert.equal(pending().length, 0);
+  // Onboarded uses the Hired template; approve sends it
+  env.api({ action: 'setStage', by: 'Am', ids: ['F-2'], stage: 'Onboarded' });
+  const h = pending()[0];
+  assert.equal(h.Type, 'Hired');
+  assert.equal(env.api({ action: 'approveEmail', by: 'Camille', emailId: h['Email ID'] }).ok, true);
+  const approved = env.rows('Outbox').find((e) => e['Email ID'] === h['Email ID']);
+  assert.equal(approved.Status, 'Queued');
+  assert.equal(approved['Decided By'], 'Camille');
+  assert.equal(env.api({ action: 'approveEmail', by: 'Camille', emailId: h['Email ID'] }).ok, false, 'cannot approve twice');
+  // the same type is never queued again for this applicant
+  env.api({ action: 'setStage', by: 'Am', ids: ['F-2'], stage: 'Passed Interview' });
+  env.api({ action: 'setStage', by: 'Am', ids: ['F-2'], stage: 'Hired' });
+  assert.equal(pending().length, 0);
+  assert.match(env.rows('Applicants').find((a) => a['Applicant ID'] === 'F-2').Notes, /Hired email not queued again/);
+  // a stage with no email queues nothing; undo cancels what the move queued
+  const u = env.api({ action: 'setStage', by: 'Am', ids: ['F-3'], stage: 'Not Fit', reason: 'Internet below 50 Mbps' });
+  assert.equal(env.rows('Outbox').filter((e) => e['Applicant ID'] === 'F-3' && e.Status === 'Pending approval' && e.Type === 'Rejected').length, 1);
+  env.api({ action: 'undoStage', by: 'Am', ...u.data.undo });
+  assert.equal(env.rows('Outbox').filter((e) => e['Applicant ID'] === 'F-3' && e.Status === 'Pending approval').length, 0);
+});
+
+test('Banned: applicants whose email is on the Rejected tab move to Banned once; a team member is flagged to check', () => {
+  const header = ['Lenght of stay (Days)', 'Remarks', 'Timestamp', 'Email Address', 'First and Last Name', 'Mobile Number', 'Full Address', 'Date of Birth', 'Position Hired For', 'Start date (Friday Date)'];
+  const env = load({ mode: 'LIVE', now: pdt('2026-10-29T08:00:00'), rejected: ['maria@example.com'],
+    onboarding: { CW: [header, ['10', 'Working', 'x', 'maria@example.com', 'Maria Santos', '0917', 'SECRET ADDRESS', '1/1/1990', 'ISA', '10/16/2026']] },
+    formRows: [formRow(pdt('2026-10-23T10:00:00'), 'Maria Clara', 'Santos', 'maria@example.com', 'Collections VA', 'Yes')] });
+  env.ctx.importHistory();
+  env.ctx.setup();
+  env.ctx.tick(); env.ctx.tick();
+  const a = env.rows('Applicants')[0];
+  assert.equal(a.Stage, 'Banned');
+  assert.equal(env.rows('History').filter((h) => h['To Stage'] === 'Banned').length, 1);
+  assert.equal(env.rows('Needs Attention').filter((f) => f.Type === 'Banned team member?').length, 1);
+  assert.equal(env.rows('Outbox').filter((e) => /Invite/.test(e.Type)).length, 0);
+});
+
+test('Active Team Members: the Onboarding sheet is copied without private fields, and a site edit wins until cleared', () => {
+  const cw = ['Lenght of stay (Days)', 'Remarks', 'Timestamp', 'Email Address', 'First and Last Name', 'Mobile Number', 'Full Address', 'Date of Birth', 'Position Hired For', 'Start date (Friday Date)', 'How did you hear about us?', 'Government Issued ID'];
+  const hx = ['Column 27', 'Column 26', 'Timestamp', 'Email Address', 'First and Last Name', 'Mobile Number', 'Full Address', 'Date of Birth', 'Company Hired For', 'Position Hired For', 'Start date (Friday Date)'];
+  const env = load({ mode: 'LIVE', now: pdt('2026-10-29T08:00:00'), onboarding: {
+    CW: [cw, ['230.6', 'Working', 't', 'Ana@x.com', 'Ana Cruz', '0917', '123 Street', '1/1/1990', 'CW ISA', '3/13/2026', 'OLJ', 'id.jpg'],
+      ['20', 'Terminated', 't', 'bo@x.com', 'Bo Lim', '0918', '9 Road', '2/2/1991', 'HX TC / LC', '9/1/2026', 'FB', 'id2.jpg']],
+    HOMEXA: [hx, ['13.1', '', 't', 'cy@x.com', 'Cy Go', '0919', '7 Ave', '3/3/1992', '', 'Transaction/Listing Coordinator', '10/15/2026']],
+    PFL: [['Timestamp', 'Email Address']] } });
+  env.ctx.setup();
+  env.ctx.tick();
+  const team = env.rows('Team (Onboarding)');
+  assert.equal(team.length, 3);
+  assert.deepEqual(team.map((m) => [m.Email, m.Company, m.Department, m.Status, m.Days]), [
+    ['ana@x.com', 'Club Wealth', 'ISA', 'Working', '230'], ['bo@x.com', 'Club Wealth', 'TC/LC', 'Terminated', '20'], ['cy@x.com', 'Homexa', 'TC/LC', '', '13']]);
+  assert.equal(JSON.stringify(team).includes('123 Street'), false, 'address is not copied');
+  assert.equal(JSON.stringify(team).includes('1/1/1990'), false, 'birthday is not copied');
+  // site edit wins; the sheet value is kept to show next to it; clearing goes back to the sheet value
+  assert.equal(env.api({ action: 'updateTeam', by: 'Camille', email: 'ana@x.com', field: 'Department', value: 'Client Care' }).ok, true);
+  let ana = env.api({ action: 'data' }).data.team.find((m) => m.Email === 'ana@x.com');
+  assert.equal(ana.Department, 'Client Care');
+  assert.equal(ana.edited.Department, 'ISA');
+  assert.equal(ana.Active, 'Y');
+  assert.equal(env.api({ action: 'data' }).data.team.find((m) => m.Email === 'bo@x.com').Active, '');
+  assert.equal(env.api({ action: 'data' }).data.team.find((m) => m.Email === 'cy@x.com').Active, 'Y', 'blank status counts as active');
+  env.api({ action: 'updateTeam', by: 'Camille', email: 'ana@x.com', field: 'Department', value: '', clear: true });
+  ana = env.api({ action: 'data' }).data.team.find((m) => m.Email === 'ana@x.com');
+  assert.equal(ana.Department, 'ISA');
+  assert.equal(env.api({ action: 'updateTeam', by: 'Camille', email: 'ana@x.com', field: 'Email', value: 'z' }).ok, false);
+  // the Onboarding sheet is never written
+  assert.equal(env.ctx.SpreadsheetApp.openById('ONB').getSheetByName('CW').data.length, 3);
 });

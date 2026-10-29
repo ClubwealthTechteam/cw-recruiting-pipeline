@@ -12,6 +12,8 @@ const ICON: Record<string, string> = {
   '/talent': 'M12 3l2.6 5.6 6 .7-4.5 4.1 1.2 6L12 16.5 6.7 19.4l1.2-6L3.4 9.3l6-.7z',
   '/reports': 'M4 20V10m6 10V4m6 16v-7m4 7H2',
   '/attention': 'M12 3l10 18H2zm0 7v5m0 3v.5',
+  '/approvals': 'M4 6h16v12H4zm0 0l8 7 8-7',
+  '/team': 'M9 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6zm8 0a3 3 0 1 0 0-6M3 20a6 6 0 0 1 12 0m2-6a6 6 0 0 1 4 6',
   '/help': 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zm-2.5-11a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6v.6M12 17v.5'
 };
 const LINKS = [
@@ -22,11 +24,13 @@ const LINKS = [
   { href: '/talent', label: 'Talent Pool' },
   { href: '/reports', label: 'Reports' },
   { href: '/attention', label: 'Needs Attention' },
+  { href: '/approvals', label: 'Needs Approval' },
+  { href: '/team', label: 'Active Team Members' },
   { href: '/help', label: 'Help' }
 ];
 const KEY = 'cw-sidebar';
 
-export default function NavLinks({ open }: { open: number }) {
+export default function NavLinks({ open, approvals = 0 }: { open: number; approvals?: number }) {
   const path = usePathname();
   const [mini, setMini] = useState(false);
   useEffect(() => {
@@ -51,6 +55,7 @@ export default function NavLinks({ open }: { open: number }) {
               <svg className="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d={ICON[l.href]} /></svg>
               <span className="nav-label">{l.label}</span>
               {l.href === '/attention' && open > 0 && <span className="count">{open}</span>}
+              {l.href === '/approvals' && approvals > 0 && <span className="count">{approvals}</span>}
             </Link>
           );
         })}

@@ -19,9 +19,11 @@ var STAGES = [
   'No Confirmation',
   'Passed Pre-Interview',
   'Passed Interview',
+  'Benched',
   'Hired',
   'Onboarded',
-  'Not Fit'
+  'Not Fit',
+  'Banned'
 ];
 
 var MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July',
@@ -358,6 +360,49 @@ function replyEmail(text) {
   return { subject: 'RE: ClubWealth | Pre-Interview invite', body: paras + SIGNATURE_HTML };
 }
 
+// ---------- status emails (Hired / Rejected / Benched): queued for approval, never sent on their own ----------
+
+/** Which approval email a stage move queues (Miguel, 2026-10-29). Onboarded uses the Hired template. */
+var STATUS_EMAIL_FOR_STAGE = { 'Hired': 'Hired', 'Onboarded': 'Hired', 'Not Fit': 'Rejected', 'Benched': 'Benched' };
+var STATUS_EMAIL_TYPES = ['Hired', 'Rejected', 'Benched'];
+
+/**
+ * The status email for one applicant. PLACEHOLDER text until Miguel sends the final templates: the subject and body
+ * say so plainly, so a placeholder can never pass as the real email. Same Club Wealth sign-off and banner as every email.
+ */
+function statusEmail(type, firstName) {
+  var hi = '<p>Hi ' + escapeHtml(String(firstName || '').trim() || 'there') + ',</p>';
+  var text = {
+    Hired: '[PLACEHOLDER - Hired email. Miguel will send the final text.]',
+    Rejected: '[PLACEHOLDER - Rejected email. Miguel will send the final text.]',
+    Benched: '[PLACEHOLDER - Benched email (passed the interview, no job offer yet). Miguel will send the final text.]'
+  }[type];
+  if (!text) throw new Error('No status email for ' + type);
+  var subject = { Hired: 'ClubWealth | Welcome to the team', Rejected: 'ClubWealth | Your application', Benched: 'ClubWealth | Your application update' }[type];
+  return { subject: subject + ' [PLACEHOLDER]', body: hi + '<p>' + text + '</p>' + SIGNATURE_HTML };
+}
+
+// ---------- Active Team Members (from the Onboarding sheet) ----------
+
+/** Department from the free-typed "Position Hired For" (Miguel, 2026-10-29: role family; can be corrected on the site). */
+function departmentOf(position) {
+  var p = String(position || '').toLowerCase();
+  if (/collection|accounts? receivable/.test(p)) return 'Collections';
+  if (/transaction|listing|\btc\b|\blc\b/.test(p)) return 'TC/LC';
+  if (/\bisa\b|inside sales|appointment|cold call|sales agent/.test(p)) return 'ISA';
+  if (/client care|customer/.test(p)) return 'Client Care';
+  if (/marketing|ads\b|social media/.test(p)) return 'Marketing';
+  if (/\bai\b|tech|developer|automation/.test(p)) return 'AI & Tech';
+  if (/admin|assistant|\bva\b/.test(p)) return 'Admin';
+  return 'Other';
+}
+
+/** Active = Remarks "Working" or blank (recent hires are often blank). */
+function teamActive(status) {
+  var s = String(status || '').trim().toLowerCase();
+  return s === '' || s === 'working';
+}
+
 // ---------- interview scorecards ----------
 
 // Miguel, 2026-10-28: Work Setup = the applicant's workspace and device (headset, mic, camera, LAN).
@@ -435,6 +480,7 @@ function slackWeekly(r, siteUrl) {
 
 if (typeof module !== 'undefined') {
   module.exports = {
+    statusEmail: statusEmail, STATUS_EMAIL_FOR_STAGE: STATUS_EMAIL_FOR_STAGE, departmentOf: departmentOf, teamActive: teamActive,
     ptParts: ptParts, addDays: addDays, todayPT: todayPT, interviewDateFor: interviewDateFor,
     reinviteDateFor: reinviteDateFor, isDaylight: isDaylight, longDate: longDate,
     inviteEmail: inviteEmail, reminderEmail: reminderEmail, confirmationEmail: confirmationEmail,

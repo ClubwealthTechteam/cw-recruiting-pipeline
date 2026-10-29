@@ -17,7 +17,8 @@
 var SH = {
   APPLICANTS: 'Applicants', HISTORY: 'History', OUTBOX: 'Outbox', REPLIES: 'Replies',
   FLAGS: 'Needs Attention', ZOOM: 'Zoom Attendance', OLJ: 'OLJ', POSITIONS: 'Positions',
-  SETTINGS: 'Settings', LOG: 'Run Log', TEST_FORM: 'Test Form', CHAT: 'Chat', SCORES: 'Scorecards', VIEWS: 'Views', EMAILAPPS: 'Email Applications'
+  SETTINGS: 'Settings', LOG: 'Run Log', TEST_FORM: 'Test Form', CHAT: 'Chat', SCORES: 'Scorecards', VIEWS: 'Views', EMAILAPPS: 'Email Applications',
+  TEAM: 'Team (Onboarding)', TEAM_UPDATES: 'Team Updates'
 };
 
 // Form Responses 1 columns (0-based), read only.
@@ -353,7 +354,7 @@ function backfillScreenTracks_() {
 
 // ---------- 2. sending (Zapier) and sent emails ----------
 
-var EMAIL_TYPES = ['Invite', 'Re-invite', 'Reminder', 'Confirmation', 'Reply'];
+var EMAIL_TYPES = ['Invite', 'Re-invite', 'Reminder', 'Confirmation', 'Reply', 'Hired', 'Rejected', 'Benched'];
 
 /**
  * Hands each queued email to the Zapier "recruiting-pipeline-email-sender" hook, which sends it from
@@ -695,10 +696,15 @@ function driveApi_(method, path, body) {
 function screenAndInvite_(st, apps, a) {
   if (st.get('MODE') === 'LIVE' && st.get('AUTO_INVITES') === 'OFF') return null;
   var rejected = doNotInvite_(st, a);
-  var hold = inviteHoldReason(a) || rejected || sameEmailInvited_(a);
+  if (rejected) {
+    // Miguel, 2026-10-29: emails on the Rejected tab go straight to Banned; they are never invited.
+    update_(apps, a, { 'Invite Hold': rejected });
+    if (a.Stage !== 'Banned') setStage_(apps, a, 'Banned', 'System', rejected);
+    return null;
+  }
+  var hold = inviteHoldReason(a) || sameEmailInvited_(a);
   if (hold) {
     update_(apps, a, { 'Invite Hold': hold });
-    if (rejected) flag_(a['Applicant ID'], 'Do not invite', 'Invite not queued: ' + rejected + '.');
     return null;
   }
   var session = interviewDateFor(new Date());
@@ -989,6 +995,8 @@ function tick() {
       replies: processReplies_(st),
       olj: processOLJ_(st),
       emailApps: processEmailApps_(st),
+      team: safeTeamSync_(st),
+      banned: bannedSweep_(st),
       zoom: processZoom_(st),
       reminders: queueReminders_(st)
     };
@@ -1012,6 +1020,9 @@ function setup() {
   var oh = out.getRange(1, 1, 1, out.getLastColumn()).getValues()[0];
   if (oh.indexOf('Applied') === -1) { out.getRange(1, oh.length + 1).setValue('Applied').setFontWeight('bold'); oh.push('Applied'); }
   if (oh.indexOf('Queued By') === -1) out.getRange(1, oh.length + 1).setValue('Queued By').setFontWeight('bold');
+  ensureCols_(SH.OUTBOX, DECIDED_COLS);
+  ensureTab_(SH.TEAM, TEAM_COLS);
+  ensureTab_(SH.TEAM_UPDATES, TEAM_UPDATE_COLS);
   var ap = sheet_(SH.APPLICANTS);
   var aph = ap.getRange(1, 1, 1, ap.getLastColumn()).getValues()[0];
   ['Invite Hold', 'Minutes Early', 'Arrival', 'Tags'].forEach(function (h) {
@@ -1062,6 +1073,184 @@ function setup() {
   ScriptApp.newTrigger('onPipelineChange').forSpreadsheet(ss.getId()).onChange().create();
   // Thursday 9 AM in the script's time zone (set Project Settings > Time zone to America/Los_Angeles).
   ScriptApp.newTrigger('weeklyReport').timeBased().onWeekDay(ScriptApp.WeekDay.THURSDAY).atHour(9).create();
+}
+
+// ---------- status emails that need approval (Hired / Rejected / Benched) ----------
+
+var DECIDED_COLS = ['Decided By', 'Decided At'];
+
+/** Adds any missing header cells to a tab (so a new column works before setup() is run again). */
+function ensureTab_(name, cols) {
+  var ss = ss_();
+  if (ss.getSheetByName(name)) return;
+  var t = ss.insertSheet(name);
+  t.getRange(1, 1, 1, cols.length).setValues([cols]).setFontWeight('bold');
+  t.setFrozenRows(1);
+}
+
+function ensureCols_(name, cols) {
+  var sh = sheet_(name);
+  var h = sh.getRange(1, 1, 1, Math.max(1, sh.getLastColumn())).getValues()[0];
+  cols.forEach(function (k) { if (h.indexOf(k) === -1) { sh.getRange(1, h.length + 1).setValue(k).setFontWeight('bold'); h.push(k); } });
+}
+
+/**
+ * After someone moves an applicant on the site: cancel any status email still waiting for approval, and queue the
+ * one for the new stage as "Pending approval" (Miguel, 2026-10-29: never sent until Am or Camille approve it).
+ * Returns the new email's id, or null. A type already sent (or approved) to this applicant is never queued again.
+ */
+function statusEmailOnMove_(st, apps, a, stage, by) {
+  ensureCols_(SH.OUTBOX, DECIDED_COLS);
+  var out = table_(SH.OUTBOX);
+  var id = a['Applicant ID'];
+  out.rows.forEach(function (e) {
+    if (e['Applicant ID'] === id && e.Status === 'Pending approval') {
+      update_(out, e, { Status: 'Cancelled', Error: 'Replaced: moved to ' + stage + ' by ' + by, 'Decided By': by, 'Decided At': nowStr_() });
+    }
+  });
+  var type = STATUS_EMAIL_FOR_STAGE[stage];
+  if (!type) return null;
+  var done = out.rows.filter(function (e) { return e['Applicant ID'] === id && e.Type === type && (e.Status === 'Sent' || e.Status === 'Queued'); })[0];
+  if (done) {
+    update_(apps, a, { Notes: (a.Notes ? a.Notes + '\n' : '') + nowStr_() + ' System: ' + type + ' email not queued again (already ' + String(done.Status).toLowerCase() + ' ' + ymdOf_(done['Sent At'] || done['Queued At']) + ')' });
+    return null;
+  }
+  var test = st.get('MODE') !== 'LIVE';
+  var to = test ? st.get('TEST_EMAIL') : String(a.Email || '').trim();
+  if (!to) { flag_(id, 'No email address', type + ' email could not be prepared: no email address.'); return null; }
+  var mail = statusEmail(type, a['First Name']);
+  return append_(out, {
+    'Email ID': id_('E'), 'Applicant ID': id, Type: type, To: to, Subject: (test ? '[TEST] ' : '') + mail.subject, Body: mail.body,
+    'Interview Date': ymdOf_(a['Interview Date']), 'Queued At': nowStr_(), Status: 'Pending approval', Test: test ? 'Y' : '', 'Queued By': by
+  })['Email ID'];
+}
+
+/** Approve & send, or Don't send, one status email waiting for approval. */
+function decideStatusEmail_(st, req, approve) {
+  ensureCols_(SH.OUTBOX, DECIDED_COLS);
+  var out = table_(SH.OUTBOX);
+  var e = out.rows.filter(function (r) { return r['Email ID'] === req.emailId; })[0];
+  if (!e) throw new Error('Email not found.');
+  if (e.Status !== 'Pending approval') throw new Error('This email is no longer waiting for approval (it is ' + e.Status + ').');
+  if (!approve) {
+    update_(out, e, { Status: 'Cancelled', Error: "Don't send: " + req.by, 'Decided By': req.by, 'Decided At': nowStr_() });
+    return { cancelled: true };
+  }
+  if (st.get('EMAIL_SENDING') !== 'ON') throw new Error('Email sending is off (Settings EMAIL_SENDING).');
+  var twice = out.rows.some(function (r) {
+    return r !== e && r['Applicant ID'] === e['Applicant ID'] && r.Type === e.Type && (r.Status === 'Sent' || r.Status === 'Queued');
+  });
+  if (twice) throw new Error('A ' + e.Type + ' email was already sent to this applicant.');
+  update_(out, e, { Status: 'Queued', 'Decided By': req.by, 'Decided At': nowStr_() });
+  return { queued: true };
+}
+
+// ---------- Banned (emails on the form sheet's Rejected tab) ----------
+
+/**
+ * Every applicant whose email is on the Rejected tab goes to Banned (Miguel, 2026-10-29), once. If the same email is
+ * also an Active Team Member, a Needs Attention item asks Recruitment to check.
+ */
+function bannedSweep_(st) {
+  var bad = rejectedEmails_(st);
+  if (!Object.keys(bad).length) return 0;
+  var apps = table_(SH.APPLICANTS);
+  var team = {};
+  if (ss_().getSheetByName(SH.TEAM)) table_(SH.TEAM).rows.forEach(function (m) { team[String(m.Email || '').trim().toLowerCase()] = m; });
+  var n = 0;
+  apps.rows.forEach(function (a) {
+    var e = String(a.Email || '').trim().toLowerCase();
+    if (!e || !bad[e] || a.Stage === 'Banned' || a.Source === 'Test') return;
+    setStage_(apps, a, 'Banned', 'System', 'Email is on the Rejected tab of the form sheet');
+    if (team[e]) flag_(a['Applicant ID'], 'Banned team member?', 'Moved to Banned (email on the Rejected tab), but this email is also on the Onboarding sheet (' + (team[e].Company || '') + ', ' + (team[e].Status || 'no status') + '). Please check.');
+    n++;
+  });
+  return n;
+}
+
+// ---------- Active Team Members: copy of the Onboarding sheet + edits made on the site ----------
+
+var ONBOARDING_SHEET_ID_DEFAULT = '1cZ8RXgdvQ32CzXQlLMwojNe16cm3jQuwllTWBWaQHqI';
+var TEAM_COLS = ['Email', 'Name', 'Company', 'Position', 'Department', 'Status', 'Start Date', 'Days', 'Heard About Us', 'Mobile', 'Facebook', 'Source Tab', 'Synced At'];
+var TEAM_UPDATE_COLS = ['Timestamp', 'Email', 'Field', 'Value', 'Action', 'By'];
+var TEAM_EDITABLE = ['Department', 'Status', 'Position', 'Notes'];
+var TEAM_TABS = { CW: 'Club Wealth', HOMEXA: 'Homexa', PFL: 'Perfect Fit Loans' };
+
+/**
+ * Copies the Onboarding sheet (read only; never written) into "Team (Onboarding)", at most once an hour
+ * (force = true from the editor). Only the fields the page needs: no address, birthday, ID, payment or emergency details.
+ */
+function syncTeam_(st, force) {
+  var props = PropertiesService.getScriptProperties();
+  var last = Number(props.getProperty('TEAM_SYNC_MS') || 0);
+  if (!force && Date.now() - last < 55 * 60000) return 0;
+  var src = SpreadsheetApp.openById(st.get('ONBOARDING_SHEET_ID') || ONBOARDING_SHEET_ID_DEFAULT);
+  var out = [];
+  var fmt = function (v) { return v instanceof Date ? Utilities.formatDate(v, TZ, 'yyyy-MM-dd') : String(v == null ? '' : v).trim(); };
+  Object.keys(TEAM_TABS).forEach(function (tab) {
+    var sh = src.getSheetByName(tab);
+    if (!sh || sh.getLastRow() < 2) return;
+    var v = sh.getDataRange().getValues();
+    var h = v[0].map(function (x) { return String(x).trim().toLowerCase(); });
+    var col = function (re) { for (var i = 0; i < h.length; i++) if (re.test(h[i])) return i; return -1; };
+    var iRemarks = col(/^remarks$/) !== -1 ? col(/^remarks$/) : (/^column \d+$/.test(h[1] || '') ? 1 : -1);
+    var iDays = col(/^lenght of stay|^length of stay/) !== -1 ? col(/^lenght of stay|^length of stay/) : (/^column \d+$/.test(h[0] || '') ? 0 : -1);
+    var c = { email: col(/^email address$/), name: col(/^first and last name$/), mobile: col(/^mobile number$/), pos: col(/^position hired for$/),
+      start: col(/^start date/), heard: col(/^how did you hear/), fb: col(/^facebook profile link$/), company: col(/^company hired for$/) };
+    v.slice(1).forEach(function (r) {
+      var email = fmt(r[c.email]).toLowerCase();
+      if (!email && !fmt(r[c.name])) return;
+      var pos = fmt(r[c.pos]);
+      out.push([email, fmt(r[c.name]), (c.company !== -1 && fmt(r[c.company])) || TEAM_TABS[tab], pos, departmentOf(pos),
+        iRemarks !== -1 ? fmt(r[iRemarks]) : '', fmt(r[c.start]), iDays !== -1 ? String(Math.floor(Number(r[iDays]) || 0)) : '',
+        fmt(r[c.heard]), fmt(r[c.mobile]), fmt(r[c.fb]), tab, nowStr_()]);
+    });
+  });
+  var ss = ss_();
+  var t = ss.getSheetByName(SH.TEAM) || ss.insertSheet(SH.TEAM);
+  var oldRows = t.getLastRow();
+  t.getRange(1, 1, 1, TEAM_COLS.length).setValues([TEAM_COLS]).setFontWeight('bold');
+  if (out.length) t.getRange(2, 1, out.length, TEAM_COLS.length).setValues(out);
+  if (oldRows > out.length + 1) {
+    var blanks = [];
+    for (var i = out.length + 2; i <= oldRows; i++) blanks.push(TEAM_COLS.map(function () { return ''; }));
+    t.getRange(out.length + 2, 1, blanks.length, TEAM_COLS.length).setValues(blanks);
+  }
+  props.setProperty('TEAM_SYNC_MS', String(Date.now()));
+  return out.length;
+}
+
+/** The hourly team copy must never stop the rest of the 5-minute run (e.g. if the Onboarding sheet is not shared). */
+function safeTeamSync_(st) {
+  try { return syncTeam_(st); } catch (err) { log_('teamSync', 'error', '', String(err && err.message || err)); return 0; }
+}
+
+/** Run from the editor to copy the Onboarding sheet now (otherwise it happens once an hour). */
+function syncTeamNow() { return syncTeam_(settings_(), true); }
+
+/**
+ * Team list for the site: the Onboarding copy with the site's edits on top (Miguel, 2026-10-29: a site edit wins for
+ * that field until someone clicks "Use sheet value"). Each member carries edited = { field: sheet value }.
+ */
+function teamForSite_() {
+  if (!ss_().getSheetByName(SH.TEAM)) return [];
+  var upd = {};
+  if (ss_().getSheetByName(SH.TEAM_UPDATES)) {
+    table_(SH.TEAM_UPDATES).rows.forEach(function (u) {
+      var k = String(u.Email).trim().toLowerCase() + '|' + u.Field;
+      upd[k] = u; // rows are in time order, so the last one wins
+    });
+  }
+  return plain_(table_(SH.TEAM).rows).filter(function (m) { return m.Email || m.Name; }).map(function (m) {
+    m.edited = {};
+    m.Notes = '';
+    TEAM_EDITABLE.forEach(function (f) {
+      var u = upd[String(m.Email).trim().toLowerCase() + '|' + f];
+      if (u && u.Action === 'Set') { m.edited[f] = m[f] || ''; m[f] = u.Value; m.editedBy = u.By; }
+    });
+    m.Active = teamActive(m.Status) ? 'Y' : '';
+    return m;
+  });
 }
 
 // ---------- site API ----------
@@ -1253,7 +1442,8 @@ function api_(req) {
       history: plain_(table_(SH.HISTORY).rows.filter(mine)),
       flags: plain_(table_(SH.FLAGS).rows),
       zoom: plain_(table_(SH.ZOOM).rows.filter(function (z) { return !old[z['Matched Applicant ID']]; })),
-      outbox: plain_(table_(SH.OUTBOX).rows.filter(mine)).map(function (e) { delete e.Body; return e; }),
+      outbox: plain_(table_(SH.OUTBOX).rows.filter(mine)).map(function (e) { if (e.Status !== 'Pending approval') delete e.Body; return e; }),
+      team: teamForSite_(),
       scores: optionalRows_(SH.SCORES),
       views: optionalRows_(SH.VIEWS),
       withHistory: all,
@@ -1306,6 +1496,8 @@ function api_(req) {
         if (!a || a.Stage === req.stage) return;
         undo.moves.push({ id: id, from: a.Stage, decision: String(a['Decision Reason'] || ''), reinvite: String(a['Re-invite Reason'] || '') });
         setStage_(apps, a, req.stage, req.by, req.reason);
+        var pending = statusEmailOnMove_(st2, apps, a, req.stage, req.by);
+        if (pending) undo.queued.push(pending);
         if (req.stage === 'Not Fit' || req.stage === 'Did Not Complete') update_(apps, a, { 'Decision Reason': req.reason });
         if (req.stage === 'Open for re-invite') {
           update_(apps, a, { 'Re-invite Reason': req.reason });
@@ -1325,7 +1517,7 @@ function api_(req) {
       (req.queued || []).forEach(function (eid) {
         var e = outU.rows.filter(function (r) { return r['Email ID'] === eid; })[0];
         if (!e) return;
-        if (e.Status === 'Queued') { update_(outU, e, { Status: 'Cancelled', Error: 'Undone by ' + req.by }); cancelled++; }
+        if (e.Status === 'Queued' || e.Status === 'Pending approval') { update_(outU, e, { Status: 'Cancelled', Error: 'Undone by ' + req.by }); cancelled++; }
         else if (e.Status === 'Sent') alreadySent++;
       });
       var back = 0;
@@ -1333,6 +1525,7 @@ function api_(req) {
         var a = byId[m.id];
         if (!a || STAGES.indexOf(m.from) === -1 || a.Stage === m.from) return;
         setStage_(apps, a, m.from, req.by, 'Undo');
+        statusEmailOnMove_(st2, apps, a, '(undo)', req.by); // cancels anything still waiting; an undo never queues a new email
         var f = {};
         if (String(a['Decision Reason'] || '') !== String(m.decision || '')) f['Decision Reason'] = m.decision || '';
         if (String(a['Re-invite Reason'] || '') !== String(m.reinvite || '')) f['Re-invite Reason'] = m.reinvite || '';
@@ -1437,6 +1630,17 @@ function api_(req) {
       f2.Notes = (ap.Notes ? ap.Notes + '\n' : '') + nowStr_() + ' ' + req.by + ': Profile edited (' + said.join('; ').slice(0, 900) + ')';
       update_(apps, ap, f2);
       return { updated: said.length, resume: f2['Resume Link'] || '' };
+    }
+    if (req.action === 'approveEmail') return decideStatusEmail_(st2, req, true);
+    if (req.action === 'skipEmail') return decideStatusEmail_(st2, req, false);
+    if (req.action === 'updateTeam') {
+      var tf = String(req.field || '');
+      if (TEAM_EDITABLE.indexOf(tf) === -1) throw new Error('That field cannot be edited.');
+      var tm = String(req.email || '').trim().toLowerCase();
+      if (!tm || !table_(SH.TEAM).rows.some(function (m) { return String(m.Email).trim().toLowerCase() === tm; })) throw new Error('Team member not found.');
+      ensureTab_(SH.TEAM_UPDATES, TEAM_UPDATE_COLS);
+      appendTo_(SH.TEAM_UPDATES, { Timestamp: nowStr_(), Email: tm, Field: tf, Value: String(req.value == null ? '' : req.value).trim().slice(0, 500), Action: req.clear ? 'Clear' : 'Set', By: req.by });
+      return { ok: true };
     }
     if (req.action === 'sendInvite') {
       var ai = byId[req.id];
