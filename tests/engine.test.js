@@ -740,3 +740,25 @@ test('Needs Attention inbox: read and answer an unmatched email, then link it to
   assert.match(f3.Notes, /Email changed to other.address@gmail.com/);
   assert.equal(env.api({ action: 'linkReply', by: 'Am', email: 'other.address@gmail.com', applicantId: 'NOPE' }).ok, false);
 });
+
+test('updateApplicant: Edit profile changes allowed fields only, notes each change, and can upload a resume', () => {
+  const { ctxCalls } = require('./harness');
+  ctxCalls.drive = null;
+  const env = invitedEnv();
+  env.ctx.setup();
+  const r = env.api({ action: 'updateApplicant', by: 'Camille', id: 'F-2', fields: { Email: 'New@Mail.com', Phone: '0917', 'Position (as typed)': 'Inside Sales Agent' },
+    resume: { name: 'cv.pdf', type: 'application/pdf', data: Buffer.from('%PDF-1.4 x').toString('base64') } });
+  assert.equal(r.ok, true, r.error);
+  const a = env.rows('Applicants').find((x) => x['Applicant ID'] === 'F-2');
+  assert.equal(a.Email, 'new@mail.com');
+  assert.equal(a.Phone, '0917');
+  assert.equal(a.Position, 'Inside Sales Agent (ISA)');
+  assert.match(a['Resume Link'], /drive\.google\.com/);
+  assert.match(a.Notes, /Camille: Profile edited \(Email: maria@example\.com → new@mail\.com; Phone: empty → 0917; .*Resume uploaded\)/);
+  assert.equal(a.Stage, 'Invited'); // nothing else changes
+  // stage, IDs and other system columns cannot be edited; bad values are refused
+  assert.equal(env.api({ action: 'updateApplicant', by: 'Camille', id: 'F-2', fields: { Stage: 'Hired' } }).ok, false);
+  assert.equal(env.api({ action: 'updateApplicant', by: 'Camille', id: 'F-2', fields: { Email: 'nope' } }).ok, false);
+  assert.equal(env.api({ action: 'updateApplicant', by: 'Camille', id: 'F-2', fields: { 'Resume Link': 'javascript:x' } }).ok, false);
+  assert.equal(env.api({ action: 'updateApplicant', by: 'Camille', id: 'F-2', fields: { Phone: '0917' } }).data.updated, 0);
+});
