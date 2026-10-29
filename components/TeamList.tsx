@@ -13,13 +13,16 @@ export default function TeamList({ team }: { team: TeamMember[] }) {
   const [dept, setDept] = useState('');
   const [company, setCompany] = useState('');
   const [status, setStatus] = useState('Active');
+  const [sheet, setSheet] = useState('');
+  const sheetOf = (m: TeamMember) => String(m['Source Tab'] || '').split(' · ')[0];
+  const sheets = [...new Set(team.map(sheetOf).filter(Boolean))].sort().reverse();
   const companies = [...new Set(team.map((m) => m.Company).filter(Boolean))].sort();
   const statuses = [...new Set(team.map((m) => m.Status || '(blank)'))].sort();
   const rows = useMemo(() => team.filter((m) =>
-    (!dept || m.Department === dept) && (!company || m.Company === company) &&
+    (!dept || m.Department === dept) && (!company || m.Company === company) && (!sheet || sheetOf(m) === sheet) &&
     (status === 'All' || (status === 'Active' ? isActive(m) : (m.Status || '(blank)') === status)) &&
     (!q || `${m.Name} ${m.Email} ${m.Position}`.toLowerCase().includes(q.toLowerCase()))
-  ).sort((a, b) => Number(isActive(b)) - Number(isActive(a)) || String(b['Start Date']).localeCompare(String(a['Start Date']))), [team, dept, company, status, q]);
+  ).sort((a, b) => Number(isActive(b)) - Number(isActive(a)) || String(b['Start Date']).localeCompare(String(a['Start Date']))), [team, dept, company, status, q, sheet]);
   const depts = [...DEPARTMENTS, ...new Set(team.map((m) => m.Department).filter((x) => x && !DEPARTMENTS.includes(x)))];
   const active = team.filter(isActive).length;
 
@@ -35,6 +38,7 @@ export default function TeamList({ team }: { team: TeamMember[] }) {
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search name, email or position" />
         <select value={dept} onChange={(e) => setDept(e.target.value)}><option value="">All departments</option>{depts.map((x) => <option key={x}>{x}</option>)}</select>
         <select value={company} onChange={(e) => setCompany(e.target.value)}><option value="">All companies</option>{companies.map((x) => <option key={x}>{x}</option>)}</select>
+        <select value={sheet} onChange={(e) => setSheet(e.target.value)} aria-label="Onboarding sheet"><option value="">All sheets</option>{sheets.map((x) => <option key={x} value={x}>{x} sheet</option>)}</select>
         <select value={status} onChange={(e) => setStatus(e.target.value)} aria-label="Status">
           <option value="Active">Active (Working or no status)</option><option value="All">All statuses</option>
           {statuses.map((x) => <option key={x} value={x}>{x}</option>)}

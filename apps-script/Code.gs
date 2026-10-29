@@ -1175,37 +1175,65 @@ var TEAM_COLS = ['Email', 'Name', 'Company', 'Position', 'Department', 'Status',
 var TEAM_UPDATE_COLS = ['Timestamp', 'Email', 'Field', 'Value', 'Action', 'By'];
 var TEAM_EDITABLE = ['Department', 'Status', 'Position', 'Notes'];
 var TEAM_TABS = { CW: 'Club Wealth', HOMEXA: 'Homexa', PFL: 'Perfect Fit Loans' };
+/**
+ * Older onboarding sheets (Miguel, 2026-10-29), read only. Only the tabs Miguel linked: the 2025 file's other tabs
+ * ("2026", "*2026 Updated") repeat the same people with different statuses, so they are left out.
+ */
+var TEAM_OLDER_SOURCES = [
+  { id: '1-gltrA1qQekPpYik49VL_lgc0PvqkxsipRz4d1l89F4', label: '2025', tabs: { '2025': 'Club Wealth' } },
+  { id: '1ql473Qhn0mJHkHrvuINZAkHSRClr3ClYbPkyPzMLJ8g', label: '2023-2024', tabs: { 'Form Responses 1': 'Club Wealth' } }
+];
 
 /**
- * Copies the Onboarding sheet (read only; never written) into "Team (Onboarding)", at most once an hour
+ * Copies the Onboarding sheets (2026, 2025 and 2023-2024; read only, never written) into "Team (Onboarding)", at most once an hour
  * (force = true from the editor). Only the fields the page needs: no address, birthday, ID, payment or emergency details.
  */
 function syncTeam_(st, force) {
   var props = PropertiesService.getScriptProperties();
   var last = Number(props.getProperty('TEAM_SYNC_MS') || 0);
   if (!force && Date.now() - last < 55 * 60000) return 0;
-  var src = SpreadsheetApp.openById(st.get('ONBOARDING_SHEET_ID') || ONBOARDING_SHEET_ID_DEFAULT);
-  var out = [];
   var fmt = function (v) { return v instanceof Date ? Utilities.formatDate(v, TZ, 'yyyy-MM-dd') : String(v == null ? '' : v).trim(); };
-  Object.keys(TEAM_TABS).forEach(function (tab) {
-    var sh = src.getSheetByName(tab);
-    if (!sh || sh.getLastRow() < 2) return;
-    var v = sh.getDataRange().getValues();
-    var h = v[0].map(function (x) { return String(x).trim().toLowerCase(); });
-    var col = function (re) { for (var i = 0; i < h.length; i++) if (re.test(h[i])) return i; return -1; };
-    var iRemarks = col(/^remarks$/) !== -1 ? col(/^remarks$/) : (/^column \d+$/.test(h[1] || '') ? 1 : -1);
-    var iDays = col(/^lenght of stay|^length of stay/) !== -1 ? col(/^lenght of stay|^length of stay/) : (/^column \d+$/.test(h[0] || '') ? 0 : -1);
-    var c = { email: col(/^email address$/), name: col(/^first and last name$/), mobile: col(/^mobile number$/), pos: col(/^position hired for$/),
-      start: col(/^start date/), heard: col(/^how did you hear/), fb: col(/^facebook profile link$/), company: col(/^company hired for$/) };
-    v.slice(1).forEach(function (r) {
-      var email = fmt(r[c.email]).toLowerCase();
-      if (!email && !fmt(r[c.name])) return;
-      var pos = fmt(r[c.pos]);
-      out.push([email, fmt(r[c.name]), (c.company !== -1 && fmt(r[c.company])) || TEAM_TABS[tab], pos, departmentOf(pos),
-        iRemarks !== -1 ? fmt(r[iRemarks]) : '', fmt(r[c.start]), iDays !== -1 ? String(Math.floor(Number(r[iDays]) || 0)) : '',
-        fmt(r[c.heard]), fmt(r[c.mobile]), fmt(r[c.fb]), tab, nowStr_()]);
+  var today = todayPT();
+  var byKey = {};
+  var sources = [{ id: st.get('ONBOARDING_SHEET_ID') || ONBOARDING_SHEET_ID_DEFAULT, label: '2026', tabs: TEAM_TABS }].concat(TEAM_OLDER_SOURCES);
+  sources.forEach(function (s, order) {
+    var src = SpreadsheetApp.openById(s.id);
+    Object.keys(s.tabs).forEach(function (tab) {
+      var sh = src.getSheetByName(tab);
+      if (!sh || sh.getLastRow() < 2) return;
+      var v = sh.getDataRange().getValues();
+      var h = v[0].map(function (x) { return String(x).trim().toLowerCase(); });
+      var col = function (re) { for (var i = 0; i < h.length; i++) if (re.test(h[i])) return i; return -1; };
+      var iRemarks = col(/^(remarks|status)$/) !== -1 ? col(/^(remarks|status)$/) : (/^column \d+$/.test(h[1] || '') ? 1 : -1);
+      var iDays = col(/^lenght of stay|^length of stay/) !== -1 ? col(/^lenght of stay|^length of stay/) : (/^column \d+$/.test(h[0] || '') ? 0 : -1);
+      var c = { email: col(/^email address$/), name: col(/^first and last name$/), mobile: col(/^mobile number$/), pos: col(/^position hired for$/),
+        start: col(/^start date/), heard: col(/^how did you hear/), fb: col(/^facebook profile link$/), company: col(/^company hired for$/) };
+      v.slice(1).forEach(function (r) {
+        var email = fmt(r[c.email]).toLowerCase();
+        var name = fmt(r[c.name]);
+        if (!email && !name) return;
+        var pos = fmt(r[c.pos]);
+        var start = c.start !== -1 ? fmt(r[c.start]) : '';
+        var md = /^(\d{1,2})\/(\d{1,2})\/(\d{4})/.exec(start);
+        var startYmd = /^\d{4}-\d{2}-\d{2}/.test(start) ? start.slice(0, 10)
+          : md ? md[3] + '-' + ('0' + md[1]).slice(-2) + '-' + ('0' + md[2]).slice(-2) : '';
+        // Days: the sheet's own count when it has one, else counted from the start date
+        var days = iDays !== -1 && fmt(r[iDays]) !== '' ? String(Math.floor(Number(r[iDays]) || 0))
+          : (startYmd ? String(Math.round((Date.parse(today) - Date.parse(startYmd)) / 86400000)) : '');
+        var status = iRemarks !== -1 ? fmt(r[iRemarks]) : '';
+        if (/^term$/i.test(status)) status = 'Terminated';
+        var row = [email, name, (c.company !== -1 && fmt(r[c.company])) || s.tabs[tab], pos, departmentOf(pos), status, startYmd || start, days,
+          c.heard !== -1 ? fmt(r[c.heard]) : '', c.mobile !== -1 ? fmt(r[c.mobile]) : '', c.fb !== -1 ? fmt(r[c.fb]) : '',
+          s.label + (s.label === tab ? '' : ' · ' + tab), nowStr_()];
+        // the same person in several sheets or tabs (rehires): keep the most recent start; ties keep the newer sheet
+        var key = email || normName(name);
+        var prev = byKey[key];
+        if (!prev || String(row[6]) > String(prev.row[6]) || (String(row[6]) === String(prev.row[6]) && order < prev.order)) byKey[key] = { row: row, order: order };
+      });
     });
   });
+  var out = Object.keys(byKey).map(function (k) { return byKey[k].row; })
+    .sort(function (a, b) { return String(b[6]).localeCompare(String(a[6])); });
   var ss = ss_();
   var t = ss.getSheetByName(SH.TEAM) || ss.insertSheet(SH.TEAM);
   var oldRows = t.getLastRow();

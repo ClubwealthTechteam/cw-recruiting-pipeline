@@ -11,7 +11,7 @@ export default async function Team() {
     <>
       <header className="page-head">
         <h1>Active Team Members</h1>
-        <p className="sub">From the Onboarding sheet (read only, copied every hour). Changes made here are saved in the pipeline sheet&apos;s &quot;Team Updates&quot; tab and win over the Onboarding sheet until you click &quot;Use sheet value&quot;.</p>
+        <p className="sub">From the 2026, 2025 and 2023-2024 Onboarding sheets (read only, copied every hour; a rehire shows once, with the latest hire). Changes made here are saved in the pipeline sheet&apos;s &quot;Team Updates&quot; tab and win over the Onboarding sheet until you click &quot;Use sheet value&quot;.</p>
       </header>
       {team.length === 0 ? <section className="panel"><p className="empty">No team members yet. They appear after the first hourly copy of the Onboarding sheet.</p></section> : <TeamList team={team} />}
     </>
