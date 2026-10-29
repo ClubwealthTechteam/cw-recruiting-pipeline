@@ -703,3 +703,31 @@ test('addApplicant: an uploaded resume is saved to the Resumes folder in Drive a
   assert.equal(env.api({ action: 'addApplicant', by: 'Camille', firstName: 'Ed', lastName: 'Go', position: 'Collections VA', resume: { name: 'x.exe', type: 'application/x-msdownload', data: 'AAAA' } }).ok, false);
   assert.equal(env.rows('Applicants').some((a) => a['First Name'] === 'Ed'), false); // nothing half-added
 });
+
+test('Needs Attention inbox: read and answer an unmatched email, then link it to the applicant', () => {
+  const env = invitedEnv({ EMAIL_SENDING: 'ON' });
+  env.ctx.setup();
+  addRow(env, 'Replies', { 'Message ID': 'u1', 'Received At': '2026-10-28 18:09:00', 'From Email': 'Other.Address@gmail.com', Subject: 'RE: ClubWealth | Pre-Interview invite', 'Reply Text': 'I missed the interview, is there another schedule?', Category: 'Other' });
+  env.ctx.tick();
+  const flag = env.rows('Needs Attention').find((f) => f.Type === 'Unmatched reply');
+  assert.ok(flag);
+  // the thread shows their email; an address that never wrote to CareersCW shows nothing and cannot be emailed
+  const t = env.api({ action: 'emailThread', email: 'other.address@gmail.com' });
+  assert.equal(t.data.thread.filter((m) => m.dir === 'in').length, 1);
+  assert.deepEqual(env.api({ action: 'emailThread', email: 'stranger@x.com' }).data.thread, []);
+  assert.equal(env.api({ action: 'replyToEmail', by: 'Am', email: 'stranger@x.com', text: 'hi' }).ok, false);
+  // reply goes out from CareersCW and appears in the thread
+  assert.equal(env.api({ action: 'replyToEmail', by: 'Am', email: 'other.address@gmail.com', text: 'Yes, join us next Wednesday at 2 PM PT.' }).ok, true);
+  const out = env.rows('Outbox').filter((e) => e.To === 'other.address@gmail.com');
+  assert.equal(out.length, 1);
+  assert.equal(out[0].Type, 'Reply');
+  assert.equal(env.api({ action: 'emailThread', email: 'other.address@gmail.com' }).data.thread.filter((m) => m.dir === 'out').length, 1);
+  // link it to the applicant and save the new address on them
+  assert.equal(env.api({ action: 'linkReply', by: 'Am', email: 'other.address@gmail.com', flagId: flag['Flag ID'], applicantId: 'F-3', saveEmail: true }).ok, true);
+  assert.equal(env.rows('Replies').find((r) => r['Message ID'] === 'u1')['Matched Applicant ID'], 'F-3');
+  assert.equal(env.rows('Needs Attention').find((f) => f['Flag ID'] === flag['Flag ID'])['Applicant ID'], 'F-3');
+  const f3 = env.rows('Applicants').find((a) => a['Applicant ID'] === 'F-3');
+  assert.equal(f3.Email, 'other.address@gmail.com');
+  assert.match(f3.Notes, /Email changed to other.address@gmail.com/);
+  assert.equal(env.api({ action: 'linkReply', by: 'Am', email: 'other.address@gmail.com', applicantId: 'NOPE' }).ok, false);
+});

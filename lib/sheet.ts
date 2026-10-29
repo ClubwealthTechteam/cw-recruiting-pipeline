@@ -95,3 +95,9 @@ export async function act(action: string, by: string, payload: Record<string, un
   revalidateTag(PIPELINE_TAG);
   return res;
 }
+
+/** Needs Attention: emails from an address that matched no applicant, and our replies to it (not cached; always fresh). */
+export async function getEmailThread(email: string): Promise<ThreadItem[]> {
+  const r = await call<{ thread?: ThreadItem[] }>({ action: 'emailThread', email });
+  return r.thread || [];
+}

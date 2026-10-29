@@ -3,6 +3,9 @@ import { getData } from '@/lib/sheet';
 import { s, fullName } from '@/lib/pipeline';
 import { ResolveButton } from '@/components/SmallForms';
 import DataError from '@/components/DataError';
+import EmailConversation from '@/components/EmailConversation';
+
+const fromEmail = (detail: string) => (/From: ([^\s|]+@[^\s|]+)/.exec(detail) || [])[1] || '';
 
 export default async function Attention() {
   let d;
@@ -26,7 +29,7 @@ export default async function Attention() {
                   <td>{s(f['Created At']).slice(0, 16)}</td>
                   <td>{s(f.Type)}</td>
                   <td>{a ? <Link href={`/candidates/${encodeURIComponent(s(a['Applicant ID']))}`}>{fullName(a)}</Link> : <span className="muted">Not matched</span>}</td>
-                  <td className="prewrap">{s(f.Detail)}</td>
+                  <td><div className="prewrap">{s(f.Detail)}</div>{fromEmail(s(f.Detail)) && <EmailConversation email={fromEmail(s(f.Detail)).toLowerCase()} flagId={s(f['Flag ID'])} emailReady={d.emailSending === 'ON'} />}</td>
                   <td><ResolveButton flagId={s(f['Flag ID'])} /></td>
                 </tr>
               );

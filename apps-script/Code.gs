@@ -1086,18 +1086,25 @@ function cleanTags_(raw) {
   }).slice(0, 12).join(', ');
 }
 
+/** True when this address has written to CareersCW (it is in the Replies tab), so the CRM may show or answer its emails. */
+function knownSender_(email) {
+  if (!email) return false;
+  return table_(SH.REPLIES).rows.some(function (r) { return String(r['From Email'] || '').trim().toLowerCase() === email; });
+}
+
 /** One applicant's email conversation: what we sent (Outbox) and what they wrote back (Replies), oldest first. */
 function thread_(a) {
   var id = a['Applicant ID'];
   var email = String(a.Email || '').trim().toLowerCase();
   var out = plain_(table_(SH.OUTBOX).rows).filter(function (e) {
-    return e['Applicant ID'] === id && e.Type !== 'OLJ Invite' && e.Type !== 'OLJ Message' && e.Test !== 'Y' && (e.Status === 'Sent' || e.Status === 'Queued');
+    var mineE = id ? e['Applicant ID'] === id : (!e['Applicant ID'] && email && String(e.To).trim().toLowerCase() === email);
+    return mineE && e.Type !== 'OLJ Invite' && e.Type !== 'OLJ Message' && e.Test !== 'Y' && (e.Status === 'Sent' || e.Status === 'Queued');
   }).map(function (e) {
     return { dir: 'out', at: e['Sent At'] || e['Queued At'], type: e.Type, subject: e.Subject, status: e.Status, by: e['Queued By'] || 'System',
       text: e.Type === 'Reply' ? stripTags_(e.Body) : '' };
   });
   var inn = plain_(table_(SH.REPLIES).rows).filter(function (r) {
-    return r['Matched Applicant ID'] === id || (email && String(r['From Email']).trim().toLowerCase() === email);
+    return (id && r['Matched Applicant ID'] === id) || (email && String(r['From Email']).trim().toLowerCase() === email);
   }).map(function (r) {
     return { dir: 'in', at: r['Received At'], subject: r.Subject, text: stripQuoted(r['Reply Text']).slice(0, 2000), category: r.Category };
   });
@@ -1229,6 +1236,12 @@ function api_(req) {
       applicant: out, thread: thread_(o),
       scores: optionalRows_(SH.SCORES).filter(function (s) { return s['Applicant ID'] === out['Applicant ID']; })
     };
+  }
+  if (req.action === 'emailThread') {
+    // Needs Attention: the emails from an address no applicant matched, and our replies to it
+    var em = String(req.email || '').trim().toLowerCase();
+    if (!knownSender_(em)) return { thread: [] };
+    return { thread: thread_({ 'Applicant ID': '', Email: em, Source: '' }) };
   }
   if (req.action === 'zoomRows') return zoomRowsApi_(req);
   if (req.action === 'chatGet') return chatGet_(req.id);
@@ -1433,6 +1446,37 @@ function api_(req) {
       if (blockedR) throw new Error('Do not contact: ' + blockedR + '.');
       var q = queueEmail_(st2, ar, 'Reply', replyEmail(text), ymdOf_(ar['Interview Date']), req.by);
       return { queued: !!q };
+    }
+    if (req.action === 'replyToEmail') {
+      // Needs Attention: answer someone who wrote to CareersCW but matched no applicant (e.g. a reschedule request)
+      var toE = String(req.email || '').trim().toLowerCase();
+      var body = String(req.text || '').trim();
+      if (!knownSender_(toE)) throw new Error('This address has not written to CareersCW.');
+      if (!body) throw new Error('Type a message first.');
+      if (body.length > 5000) throw new Error('Message is too long (5,000 characters max).');
+      if (st2.get('EMAIL_SENDING') !== 'ON') throw new Error('Email sending is off (Settings EMAIL_SENDING).');
+      var qe = queueEmail_(st2, { 'Applicant ID': '', Email: toE }, 'Reply', replyEmail(body), '', req.by);
+      return { queued: !!qe };
+    }
+    if (req.action === 'linkReply') {
+      // Needs Attention: say which applicant an unmatched email belongs to; optionally save the address on them
+      var lr = byId[String(req.applicantId || '').trim()];
+      var fromE = String(req.email || '').trim().toLowerCase();
+      if (!lr) throw new Error('No applicant with that ID.');
+      if (!knownSender_(fromE)) throw new Error('This address has not written to CareersCW.');
+      var repsL = table_(SH.REPLIES);
+      repsL.rows.forEach(function (r) {
+        if (String(r['From Email'] || '').trim().toLowerCase() === fromE && !r['Matched Applicant ID']) {
+          update_(repsL, r, { 'Matched Applicant ID': lr['Applicant ID'], 'Match Method': 'Linked by ' + req.by });
+        }
+      });
+      var flagsL = table_(SH.FLAGS);
+      var fl = flagsL.rows.filter(function (f) { return f['Flag ID'] === req.flagId; })[0];
+      if (fl) update_(flagsL, fl, { 'Applicant ID': lr['Applicant ID'] });
+      if (req.saveEmail && String(lr.Email || '').trim().toLowerCase() !== fromE) {
+        update_(apps, lr, { Email: fromE, Notes: (lr.Notes ? lr.Notes + '\n' : '') + nowStr_() + ' ' + req.by + ': Email changed to ' + fromE + ' (was ' + (lr.Email || 'empty') + ')' });
+      }
+      return { linked: lr['Applicant ID'] };
     }
     if (req.action === 'sendOljMessage') {
       var ao = byId[req.id];

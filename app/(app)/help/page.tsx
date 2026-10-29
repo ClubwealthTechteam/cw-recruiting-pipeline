@@ -80,7 +80,7 @@ const SECTIONS: Section[] = [
   { title: 'This Week\'s Session', href: '/session', items: ['Everyone invited to the Wednesday session: confirmed, reminder sent, arrival and Zoom minutes.'] },
   { title: 'Talent Pool', href: '/talent', items: ['Great and Good fits who were not hired and are not in an interview right now, plus anyone tagged "Talent pool". Invite them again when a position reopens.'] },
   { title: 'Reports', href: '/reports', items: ['By source and by position: applied, invited, confirmed, joined, completed, passed and hired, with completion rate, pass rate and days to hire. Last 30 days, 90 days or all.'] },
-  { title: 'Needs Attention', href: '/attention', items: ['Applicant questions, replies the system could not match, failed emails and do-not-invite hits. Mark each one resolved when done.'] },
+  { title: 'Needs Attention', href: '/attention', items: ['Applicant questions, replies the system could not match, failed emails and do-not-invite hits. Mark each one resolved when done.', 'Unmatched email replies (for example a reschedule request from a different address): Open emails & reply shows the whole email, lets you answer from CareersCW, and Link to applicant files it under the right person (and can save the new email on them), so you can re-invite them from their profile.'] },
   {
     title: 'Slack messages to Am and Camille',
     items: ['New Great or Good applicants, new Needs Attention items, late joiners during the session, the session results, and a weekly report every Thursday at 9 AM.']
