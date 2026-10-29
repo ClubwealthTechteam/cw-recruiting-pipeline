@@ -59,7 +59,7 @@ function fmt(date, tz, pattern) {
 }
 
 const ctxCalls = {};
-function load({ now, formRows = [], mode = 'TEST', settings = {}, rejected = [] }) {
+function load({ now, formRows = [], mode = 'TEST', settings = {}, rejected = [], onboarding = {} }) {
   const sheets = {};
   const props = {};
   for (const [k, h] of Object.entries(HEADERS)) sheets[k] = makeSheet(k, [h]);
@@ -69,6 +69,8 @@ function load({ now, formRows = [], mode = 'TEST', settings = {}, rejected = [] 
   sheets['Test Form'] = makeSheet('Test Form', [FORM_HDR, ...(mode === 'TEST' ? formRows : [])]);
   const source = makeSheet('Form Responses 1', [FORM_HDR, ...(mode === 'LIVE' ? formRows : [])]);
   const rejectedSheet = makeSheet('Rejected', rejected.map((e) => [e]));
+  // Onboarding sheet (read only): { CW: rows, HOMEXA: rows, PFL: rows }, each with its header row
+  const onboard = Object.fromEntries(Object.entries(onboarding).map(([k, rows]) => [k, makeSheet(k, rows)]));
   const RealDate = Date;
   class FakeDate extends RealDate {
     constructor(...a) { if (a.length) super(...a); else super(now.getTime()); }
@@ -96,7 +98,9 @@ function load({ now, formRows = [], mode = 'TEST', settings = {}, rejected = [] 
     Date: FakeDate, Intl, Math, JSON, String, Number, Object, Array, Error, parseInt, isNaN,
     SpreadsheetApp: {
       getActiveSpreadsheet: () => ({ getId: () => 'PIPE', getSheetByName: (n) => sheets[n] || null, insertSheet: (n) => (sheets[n] = makeSheet(n, [])) }),
-      openById: () => ({ getSheetByName: (n) => (n === 'Rejected' ? rejectedSheet : source) })
+      openById: (id) => (id === undefined || id === 'SRC'
+        ? { getSheetByName: (n) => (n === 'Rejected' ? rejectedSheet : source) }
+        : { getSheetByName: (n) => onboard[n] || null })
     },
     Utilities: { formatDate: fmt, sleep: () => {}, base64Decode: (s) => Array.from(Buffer.from(s, 'base64')), newBlob: (s) => ({ getBytes: () => Array.from(Buffer.from(String(s))) }) },
     LockService: { getScriptLock: () => ({ tryLock: () => true, waitLock: () => {}, releaseLock: () => {} }) },
