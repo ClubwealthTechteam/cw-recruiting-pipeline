@@ -80,7 +80,13 @@ function load({ now, formRows = [], mode = 'TEST', settings = {}, rejected = [] 
       getActiveSpreadsheet: () => ({ getId: () => 'PIPE', getSheetByName: (n) => sheets[n] || null, insertSheet: (n) => (sheets[n] = makeSheet(n, [])) }),
       openById: () => ({ getSheetByName: (n) => (n === 'Rejected' ? rejectedSheet : source) })
     },
-    Utilities: { formatDate: fmt, sleep: () => {} },
+    Utilities: { formatDate: fmt, sleep: () => {}, base64Decode: (s) => Array.from(Buffer.from(s, 'base64')), newBlob: (bytes, type, name) => ({ bytes, type, name }) },
+    // Drive: one folder; created files are recorded in ctxCalls.files
+    DriveApp: {
+      Access: { DOMAIN_WITH_LINK: 'DOMAIN_WITH_LINK' }, Permission: { VIEW: 'VIEW' },
+      getFoldersByName: () => ({ hasNext: () => !!ctxCalls.folder, next: () => ctxCalls.folder }),
+      createFolder: (n) => (ctxCalls.folder = { name: n, createFile: (blob) => { (ctxCalls.files = ctxCalls.files || []).push(blob); return { setSharing() {}, getUrl: () => 'https://drive.google.com/file/d/' + ctxCalls.files.length } } })
+    },
     LockService: { getScriptLock: () => ({ tryLock: () => true, waitLock: () => {}, releaseLock: () => {} }) },
     // secrets and hook URLs read as 's3cret'; anything the script stores itself (setProperty) reads back as stored
     PropertiesService: { getScriptProperties: () => ({ getProperty: (k) => (k in props ? props[k] : /_AT$/.test(k) ? null : 's3cret'), setProperty: (k, v) => { props[k] = String(v); } }) },

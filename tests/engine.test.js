@@ -681,7 +681,25 @@ test('addApplicant: a referral added by hand starts Applied as Source Referral, 
   assert.equal(dup.ok, false);
   assert.match(dup.error, /R-1/);
   // the next one gets R-2; without an email nothing is queued
-  const r2 = env.api({ action: 'addApplicant', by: 'Am', firstName: 'Lea', lastName: 'Santos', position: 'Inside Sales Agent (ISA)', invite: true });
+  const r2 = env.api({ action: 'addApplicant', by: 'Am', firstName: 'Lea', lastName: 'Santos', position: 'Inside Sales Agent (ISA)', invite: true, resumeLink: 'https://drive.google.com/file/d/abc' });
   assert.equal(r2.data.id, 'R-2');
   assert.equal(r2.data.invited, false);
+  assert.equal(env.rows('Applicants').find((a) => a['Applicant ID'] === 'R-2')['Resume Link'], 'https://drive.google.com/file/d/abc');
+  // a bad link is refused
+  assert.equal(env.api({ action: 'addApplicant', by: 'Am', firstName: 'Bo', lastName: 'Reyes', position: 'Collections VA', resumeLink: 'javascript:alert(1)' }).ok, false);
+});
+
+test('addApplicant: an uploaded resume is saved to the Resumes folder in Drive and linked on the applicant', () => {
+  const { ctxCalls } = require('./harness');
+  ctxCalls.folder = null; ctxCalls.files = [];
+  const env = invitedEnv();
+  env.ctx.setup();
+  const r = env.api({ action: 'addApplicant', by: 'Camille', firstName: 'Ana', lastName: 'Lim', position: 'Collections VA',
+    resume: { name: 'cv.pdf', type: 'application/pdf', data: Buffer.from('%PDF-1.4 test').toString('base64') } });
+  assert.equal(r.ok, true);
+  assert.equal(ctxCalls.folder.name, 'Recruiting Pipeline - Resumes');
+  assert.equal(ctxCalls.files[0].name, 'R-1 - Ana Lim - resume.pdf');
+  assert.equal(env.rows('Applicants').find((a) => a['Applicant ID'] === 'R-1')['Resume Link'], 'https://drive.google.com/file/d/1');
+  assert.equal(env.api({ action: 'addApplicant', by: 'Camille', firstName: 'Ed', lastName: 'Go', position: 'Collections VA', resume: { name: 'x.exe', type: 'application/x-msdownload', data: 'AAAA' } }).ok, false);
+  assert.equal(env.rows('Applicants').some((a) => a['First Name'] === 'Ed'), false); // nothing half-added
 });

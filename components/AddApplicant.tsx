@@ -4,13 +4,26 @@ import Link from 'next/link';
 import { useAction } from './useAction';
 
 const POSITIONS = ['Collections VA', 'Inside Sales Agent (ISA)', 'Real Estate Admin VA (TC/LC)'];
-const EMPTY = { firstName: '', lastName: '', email: '', phone: '', position: POSITIONS[0], other: '', referredBy: '', note: '', invite: true };
+const EMPTY = { firstName: '', lastName: '', email: '', phone: '', position: POSITIONS[0], other: '', referredBy: '', note: '', invite: true, resumeLink: '' };
+const MAX_RESUME = 3 * 1024 * 1024;
+const RESUME_ACCEPT = '.pdf,.doc,.docx,.png,.jpg,.jpeg';
+
+/** File → base64 (without the data: prefix), for the Apps Script to save in Drive. */
+const toBase64 = (file: File) => new Promise<string>((ok, fail) => {
+  const r = new FileReader();
+  r.onload = () => ok(String(r.result).split(',')[1] || '');
+  r.onerror = () => fail(new Error('Could not read the resume file.'));
+  r.readAsDataURL(file);
+});
 
 /** Adds someone by hand (referrals: no form, OLJ or email application). They start as Applied, Source Referral, tagged Referral. */
 export default function AddApplicant() {
   const [open, setOpen] = useState(false);
   const [f, setF] = useState(EMPTY);
   const [added, setAdded] = useState<{ id: string; invited: boolean; session: string; hold: string } | null>(null);
+  const [resume, setResume] = useState<File | null>(null);
+  const [fileError, setFileError] = useState('');
+  const [formKey, setFormKey] = useState(0); // remounts the file input after a successful add
   const { run, busy, error } = useAction();
   const set = (k: keyof typeof EMPTY) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
     setF({ ...f, [k]: e.target.type === 'checkbox' ? (e.target as HTMLInputElement).checked : e.target.value });
@@ -18,11 +31,16 @@ export default function AddApplicant() {
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
+    let file: { name: string; type: string; data: string } | undefined;
+    if (resume) {
+      try { file = { name: resume.name, type: resume.type, data: await toBase64(resume) }; } catch (err) { setFileError((err as Error).message); return; }
+    }
     const data = await run({
       action: 'addApplicant', firstName: f.firstName.trim(), lastName: f.lastName.trim(), email: f.email.trim(), phone: f.phone.trim(),
-      position, referredBy: f.referredBy.trim(), note: f.note.trim(), invite: f.invite && !!f.email.trim()
+      position, referredBy: f.referredBy.trim(), note: f.note.trim(), invite: f.invite && !!f.email.trim(),
+      resumeLink: resume ? '' : f.resumeLink.trim(), resume: file
     });
-    if (data && typeof data === 'object') { setAdded(data as typeof added); setF(EMPTY); }
+    if (data && typeof data === 'object') { setAdded(data as typeof added); setF(EMPTY); setResume(null); setFormKey((k) => k + 1); }
   }
 
   if (!open) {
@@ -46,6 +64,14 @@ export default function AddApplicant() {
         </label>
         {f.position === 'Other' && <label>Position (type it) *<input value={f.other} onChange={set('other')} required maxLength={200} /></label>}
         <label>Referred by<input value={f.referredBy} onChange={set('referredBy')} placeholder="e.g. Camille, an RM" maxLength={100} /></label>
+        <label>Resume file
+          <input key={formKey} type="file" accept={RESUME_ACCEPT} onChange={(e) => {
+            const file = e.target.files?.[0] || null;
+            setFileError(file && file.size > MAX_RESUME ? 'Resume is larger than 3 MB.' : '');
+            setResume(file && file.size <= MAX_RESUME ? file : null);
+          }} />
+        </label>
+        <label>…or resume link<input type="url" value={f.resumeLink} onChange={set('resumeLink')} placeholder="Drive or Dropbox link" disabled={!!resume} /></label>
         <label className="wide">Note<textarea value={f.note} onChange={set('note')} rows={2} placeholder="Optional: anything the team should know" /></label>
       </div>
       <label className="check-line">
@@ -53,9 +79,10 @@ export default function AddApplicant() {
         Send the pre-interview invite now (needs an email; same screening and Wednesday 12 PM cut-off as form applicants)
       </label>
       <div className="add-actions">
-        <button className="btn primary" disabled={busy || !f.firstName.trim() || !f.lastName.trim() || !position}>{busy ? 'Adding…' : 'Add applicant'}</button>
+        <button className="btn primary" disabled={busy || !!fileError || !f.firstName.trim() || !f.lastName.trim() || !position}>{busy ? 'Adding…' : 'Add applicant'}</button>
         <button type="button" className="btn ghost" onClick={() => setOpen(false)}>Cancel</button>
-        {error && <span className="error">{error}</span>}
+        {(fileError || error) && <span className="error">{fileError || error}</span>}
+        <span className="hint">Resume: PDF, Word or image, up to 3 MB. Files are saved in the Drive folder "Recruiting Pipeline - Resumes".</span>
       </div>
     </form>
   );

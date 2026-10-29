@@ -618,6 +618,33 @@ function processEmailApps_(st) {
   return n;
 }
 
+var RESUME_FOLDER = 'Recruiting Pipeline - Resumes';
+var RESUME_TYPES = { 'application/pdf': 'pdf', 'application/msword': 'doc',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx', 'image/png': 'png', 'image/jpeg': 'jpg' };
+
+/**
+ * Saves a resume uploaded on the Candidates page (base64, 3 MB at most) to the Drive folder "Recruiting Pipeline -
+ * Resumes" and returns its link. The file is shared with anyone at Club Wealth who has the link (falls back to
+ * private if the domain does not allow it). Needs the drive.file scope (appsscript.json).
+ */
+function checkResume_(file) {
+  if (!RESUME_TYPES[file.type]) throw new Error('Resume must be a PDF, Word document or image.');
+  var bytes = Utilities.base64Decode(String(file.data));
+  if (bytes.length > 3 * 1024 * 1024) throw new Error('Resume is larger than 3 MB.');
+  return bytes;
+}
+
+function saveResume_(a, file) {
+  var ext = RESUME_TYPES[file.type];
+  var bytes = checkResume_(file);
+  var it = DriveApp.getFoldersByName(RESUME_FOLDER);
+  var folder = it.hasNext() ? it.next() : DriveApp.createFolder(RESUME_FOLDER);
+  var name = a['Applicant ID'] + ' - ' + (a['First Name'] + ' ' + a['Last Name']).trim() + ' - resume.' + ext;
+  var f = folder.createFile(Utilities.newBlob(bytes, file.type, name));
+  try { f.setSharing(DriveApp.Access.DOMAIN_WITH_LINK, DriveApp.Permission.VIEW); } catch (e) { /* stays private */ }
+  return f.getUrl();
+}
+
 /**
  * Screens one new applicant and, if they pass, queues their invite for the session interviewDateFor gives
  * (Wednesday 12 PM PT cut-off): an email for form applicants, an OLJ message for OLJ applicants. A held-back
@@ -1297,6 +1324,9 @@ function api_(req) {
       if (!first || !last) throw new Error('First and last name are required.');
       if (!typed) throw new Error('Pick a position.');
       if (mail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(mail)) throw new Error('That email address does not look right.');
+      var resumeLink = String(req.resumeLink || '').trim();
+      if (resumeLink && !/^https?:\/\/\S+$/.test(resumeLink)) throw new Error('The resume link must start with http:// or https://');
+      if (req.resume && req.resume.data) checkResume_(req.resume);
       var nameKey = normName(first + ' ' + last);
       var twin = apps.rows.filter(function (x) {
         return x.Historical !== 'Y' && ((mail && String(x.Email || '').trim().toLowerCase() === mail) ||
@@ -1315,13 +1345,15 @@ function api_(req) {
         Stage: 'Applied', 'Stage Updated At': nowStr_(), 'Stage Updated By': req.by, 'Invite Count': 0,
         Tags: 'Referral', Notes: noteLine, 'Created At': nowStr_()
       });
+      if (req.resume && req.resume.data) resumeLink = saveResume_(added, req.resume);
+      if (resumeLink) update_(apps, added, { 'Resume Link': resumeLink });
       appendTo_(SH.HISTORY, {
         'Timestamp (PT)': nowStr_(), 'Applicant ID': added['Applicant ID'], 'From Stage': '', 'To Stage': 'Applied',
         'Changed By': req.by, Reason: 'Added as a referral' + (refBy ? ' from ' + refBy : '')
       });
       var invited = null;
       if (req.invite && mail) invited = screenAndInvite_(st2, apps, added);
-      return { id: added['Applicant ID'], invited: !!invited, session: invited ? ymdOf_(added['Interview Date']) : '', hold: added['Invite Hold'] || '' };
+      return { id: added['Applicant ID'], resume: resumeLink, invited: !!invited, session: invited ? ymdOf_(added['Interview Date']) : '', hold: added['Invite Hold'] || '' };
     }
     if (req.action === 'sendInvite') {
       var ai = byId[req.id];
