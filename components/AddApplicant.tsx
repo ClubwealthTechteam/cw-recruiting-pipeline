@@ -5,11 +5,11 @@ import { useAction } from './useAction';
 
 const POSITIONS = ['Collections VA', 'Inside Sales Agent (ISA)', 'Real Estate Admin VA (TC/LC)'];
 const EMPTY = { firstName: '', lastName: '', email: '', phone: '', position: POSITIONS[0], other: '', referredBy: '', note: '', invite: true, resumeLink: '' };
-const MAX_RESUME = 3 * 1024 * 1024;
-const RESUME_ACCEPT = '.pdf,.doc,.docx,.png,.jpg,.jpeg';
+export const MAX_RESUME = 3 * 1024 * 1024;
+export const RESUME_ACCEPT = '.pdf,.doc,.docx,.png,.jpg,.jpeg';
 
 /** File → base64 (without the data: prefix), for the Apps Script to save in Drive. */
-const toBase64 = (file: File) => new Promise<string>((ok, fail) => {
+export const toBase64 = (file: File) => new Promise<string>((ok, fail) => {
   const r = new FileReader();
   r.onload = () => ok(String(r.result).split(',')[1] || '');
   r.onerror = () => fail(new Error('Could not read the resume file.'));

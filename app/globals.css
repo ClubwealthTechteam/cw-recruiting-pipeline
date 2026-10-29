@@ -314,3 +314,5 @@ html[data-sidebar="mini"] .sidebar-foot .link { font-size: 10px; }
 .add-actions { display: flex; gap: 8px; align-items: center; }
 .attention-inbox { margin-top: 10px; border: 1px solid var(--line); border-radius: 8px; padding: 10px; background: var(--card); }
 .attention-inbox .thread { max-height: 360px; overflow-y: auto; }
+.edit-profile { margin-top: 10px; }
+.detail-head .btn.small-btn { margin-top: 8px; }

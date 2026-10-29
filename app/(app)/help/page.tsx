@@ -72,6 +72,7 @@ const SECTIONS: Section[] = [
   {
     title: 'Candidate profile',
     items: [
+      'Edit profile (under the name) fixes a name, email, phone, country, position, links or experience overview, and can upload a resume. Every change is added to the Notes with who made it.',
       'Interview scorecard: rate Communication, English, Experience, Internet and Work setup (workspace & device) from 1 to 5. It shows 0 until rated; then the CRM suggests Passed (3.5 or higher with no 1s) or Not Fit, and one click applies it. Passed moves someone to Passed Pre-Interview, then to Passed Interview; after both they are marked Hired.',
       'Inbox: the email conversation and, for OLJ applicants, the OLJ conversation, with a box to reply. Email replies go out from CareersCW with the sign-off and banner; OLJ replies go out on the next OLJ run. Unread OLJ conversations stay unread for you.',
       'Tags, notes, the timeline of everything that happened, application answers and links, and invite buttons.'

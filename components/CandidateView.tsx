@@ -1,4 +1,5 @@
 import { Fragment } from 'react';
+import EditProfile from './EditProfile';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getData, getDataWithHistory, getApplicantDetail } from '@/lib/sheet';
@@ -14,6 +15,7 @@ import Scorecard from '@/components/Scorecard';
 import Inbox from '@/components/Inbox';
 import TagEditor from '@/components/TagEditor';
 
+const EDITABLE = ['First Name', 'Last Name', 'Email', 'Phone', 'Country', 'Position (as typed)', 'Experience Overview', 'Internet Speed', 'Resume Link', 'Speedtest Link', 'Voice Recording Link', 'Facebook Link'];
 const LINKS = ['Resume Link', 'Voice Recording Link', 'Speedtest Link', 'Facebook Link'];
 const FIELDS = ['Position (as typed)', 'Country', 'Phone', 'Has Experience', 'Years Experience', 'Recent Client', 'US Clients VA', 'US Realtor VA', 'Internet Speed'];
 
@@ -62,6 +64,7 @@ export default async function CandidateView({ appId, panel = false }: { appId: s
           <h1>{fullName(a) || '(no name)'}</h1>
           <div className="muted">{s(a.Position)} · {s(a.Source)} · Applied {formatDateTime(s(a['Applied At (PT)']))}</div>
           <TagEditor id={appId} tags={s(a.Tags)} />
+          <EditProfile id={appId} current={Object.fromEntries(EDITABLE.map((k) => [k, s(a[k])]))} />
         </div>
         <StageBadge stage={s(a.Stage)} />
       </header>

@@ -619,6 +619,9 @@ function processEmailApps_(st) {
 }
 
 var RESUME_FOLDER = 'Recruiting Pipeline - Resumes';
+/** Applicant columns the site's "Edit profile" may change (never stage, dates, IDs or anything the system sets). */
+var EDITABLE_FIELDS = ['First Name', 'Last Name', 'Email', 'Phone', 'Country', 'Position (as typed)', 'Experience Overview',
+  'Internet Speed', 'Resume Link', 'Speedtest Link', 'Voice Recording Link', 'Facebook Link'];
 var RESUME_TYPES = { 'application/pdf': 'pdf', 'application/msword': 'doc',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx', 'image/png': 'png', 'image/jpeg': 'jpg' };
 
@@ -1405,6 +1408,35 @@ function api_(req) {
       var invited = null;
       if (req.invite && mail) invited = screenAndInvite_(st2, apps, added);
       return { id: added['Applicant ID'], resume: resumeLink, invited: !!invited, session: invited ? ymdOf_(added['Interview Date']) : '', hold: added['Invite Hold'] || '' };
+    }
+    if (req.action === 'updateApplicant') {
+      // "Edit profile" on the candidate page: fix contact details, links and the resume. Each change is noted.
+      var ap = byId[req.id];
+      if (!ap) throw new Error('not found');
+      var ch = req.fields || {}, f2 = {}, said = [];
+      Object.keys(ch).forEach(function (k) {
+        if (EDITABLE_FIELDS.indexOf(k) === -1) throw new Error('That field cannot be edited: ' + k);
+        var v = String(ch[k] == null ? '' : ch[k]).trim().slice(0, k === 'Experience Overview' ? 3000 : 300);
+        if (k === 'Email') v = v.toLowerCase();
+        if (k === 'Email' && v && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) throw new Error('That email address does not look right.');
+        if (/ Link$/.test(k) && v && !/^https?:\/\/\S+$/.test(v)) throw new Error(k + ' must start with http:// or https://');
+        if ((k === 'First Name' || k === 'Last Name') && !v) throw new Error(k + ' cannot be empty.');
+        if (String(ap[k] == null ? '' : ap[k]).trim() === v) return;
+        f2[k] = v;
+        said.push(k + (k === 'Experience Overview' ? '' : ': ' + (String(ap[k] || '') || 'empty') + ' → ' + (v || 'empty')));
+      });
+      if (req.resume && req.resume.data) {
+        f2['Resume Link'] = saveResume_(ap, req.resume);
+        said.push('Resume uploaded');
+      }
+      if (!said.length) return { updated: 0 };
+      if (f2['Position (as typed)'] !== undefined) {
+        f2.Position = standardPosition(f2['Position (as typed)'], positionOverrides_());
+        f2['Screen Track'] = screenTrack(f2['Position (as typed)']) || 'Not screened';
+      }
+      f2.Notes = (ap.Notes ? ap.Notes + '\n' : '') + nowStr_() + ' ' + req.by + ': Profile edited (' + said.join('; ').slice(0, 900) + ')';
+      update_(apps, ap, f2);
+      return { updated: said.length, resume: f2['Resume Link'] || '' };
     }
     if (req.action === 'sendInvite') {
       var ai = byId[req.id];
