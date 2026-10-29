@@ -624,8 +624,8 @@ var RESUME_TYPES = { 'application/pdf': 'pdf', 'application/msword': 'doc',
 
 /**
  * Saves a resume uploaded on the Candidates page (base64, 3 MB at most) to the Drive folder "Recruiting Pipeline -
- * Resumes" (made by the script the first time; its id is kept in Script Property RESUME_FOLDER_ID, because the
- * drive.file permission cannot search Drive by name) and returns its link. The file is shared with anyone at Club Wealth who has the link (falls back to
+ * Resumes" (made by the script the first time; its id is kept in Script Property RESUME_FOLDER_ID) through the
+ * Drive API, and returns its link. The file is shared with anyone at Club Wealth who has the link (falls back to
  * private if the domain does not allow it). Needs the drive.file scope (appsscript.json).
  */
 function checkResume_(file) {
@@ -639,14 +639,43 @@ function saveResume_(a, file) {
   var ext = RESUME_TYPES[file.type];
   var bytes = checkResume_(file);
   var props = PropertiesService.getScriptProperties();
-  var folder = null;
   var fid = props.getProperty('RESUME_FOLDER_ID');
-  if (fid) { try { folder = DriveApp.getFolderById(fid); } catch (e) { folder = null; } }
-  if (!folder) { folder = DriveApp.createFolder(RESUME_FOLDER); props.setProperty('RESUME_FOLDER_ID', folder.getId()); }
+  if (!fid || !driveApi_('get', 'files/' + fid + '?fields=id,trashed')) {
+    fid = driveApi_('post', 'files?fields=id', { name: RESUME_FOLDER, mimeType: 'application/vnd.google-apps.folder' }).id;
+    props.setProperty('RESUME_FOLDER_ID', fid);
+  }
   var name = a['Applicant ID'] + ' - ' + (a['First Name'] + ' ' + a['Last Name']).trim() + ' - resume.' + ext;
-  var f = folder.createFile(Utilities.newBlob(bytes, file.type, name));
-  try { f.setSharing(DriveApp.Access.DOMAIN_WITH_LINK, DriveApp.Permission.VIEW); } catch (e) { /* stays private */ }
-  return f.getUrl();
+  // multipart upload: the file's details, then its bytes
+  var boundary = 'cwresume' + Date.now();
+  var meta = Utilities.newBlob('--' + boundary + '\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n' +
+    JSON.stringify({ name: name, parents: [fid] }) + '\r\n--' + boundary + '\r\nContent-Type: ' + file.type + '\r\n\r\n').getBytes();
+  var tail = Utilities.newBlob('\r\n--' + boundary + '--').getBytes();
+  var res = UrlFetchApp.fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,webViewLink', {
+    method: 'post', contentType: 'multipart/related; boundary=' + boundary, payload: meta.concat(bytes, tail),
+    headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() }, muteHttpExceptions: true
+  });
+  if (res.getResponseCode() >= 300) throw new Error('Could not save the resume to Drive (' + res.getResponseCode() + ').');
+  var f = JSON.parse(res.getContentText());
+  // anyone at Club Wealth with the link can view it; stays private if the domain does not allow that
+  try { driveApi_('post', 'files/' + f.id + '/permissions', { type: 'domain', domain: 'clubwealth.com', role: 'reader', allowFileDiscovery: false }); } catch (e) { /* private */ }
+  return f.webViewLink || 'https://drive.google.com/file/d/' + f.id + '/view';
+}
+
+/**
+ * Small Drive v3 REST call with the script's own token. Uses only the drive.file permission (files the script
+ * created), which DriveApp cannot do: DriveApp needs full Drive access even to create a folder.
+ * GET returns null when the file is not found or not visible.
+ */
+function driveApi_(method, path, body) {
+  var res = UrlFetchApp.fetch('https://www.googleapis.com/drive/v3/' + path, {
+    method: method, contentType: 'application/json', payload: body ? JSON.stringify(body) : undefined,
+    headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() }, muteHttpExceptions: true
+  });
+  var code = res.getResponseCode();
+  if (method === 'get' && code === 404) return null;
+  if (code >= 300) throw new Error('Drive returned ' + code + ' for ' + path.split('?')[0]);
+  var o = JSON.parse(res.getContentText() || '{}');
+  return method === 'get' && o.trashed ? null : o;
 }
 
 /**

@@ -74,25 +74,42 @@ function load({ now, formRows = [], mode = 'TEST', settings = {}, rejected = [] 
     constructor(...a) { if (a.length) super(...a); else super(now.getTime()); }
     static now() { return now.getTime(); }
   }
+  // Drive v3 REST, as saveResume_ uses it: folders and files kept in ctxCalls.drive
+  const fakeDrive = (url, opts) => {
+    const d = (ctxCalls.drive = ctxCalls.drive || { folders: {}, files: [], perms: 0, n: 0 });
+    const reply = (code, o) => ({ getResponseCode: () => code, getContentText: () => JSON.stringify(o || {}) });
+    const m = /drive\/v3\/files\/([^/?]+)(\/permissions)?/.exec(url);
+    if ((opts.method || 'get') === 'get') return m && d.folders[m[1]] ? reply(200, { id: m[1], trashed: false }) : reply(404);
+    if (m && m[2]) { d.perms++; return reply(200, { id: 'p' }); }
+    if (/upload\/drive/.test(url)) {
+      const text = Buffer.from(opts.payload).toString('latin1');
+      const meta = JSON.parse(/\r\n\r\n(\{.*?\})\r\n--/s.exec(text)[1]);
+      d.files.push(meta);
+      return reply(200, { id: 'f' + d.files.length, webViewLink: 'https://drive.google.com/file/d/f' + d.files.length + '/view' });
+    }
+    const body = JSON.parse(opts.payload);
+    const id = 'folder' + (++d.n);
+    d.folders[id] = body;
+    return reply(200, { id });
+  };
   const ctx = {
     Date: FakeDate, Intl, Math, JSON, String, Number, Object, Array, Error, parseInt, isNaN,
     SpreadsheetApp: {
       getActiveSpreadsheet: () => ({ getId: () => 'PIPE', getSheetByName: (n) => sheets[n] || null, insertSheet: (n) => (sheets[n] = makeSheet(n, [])) }),
       openById: () => ({ getSheetByName: (n) => (n === 'Rejected' ? rejectedSheet : source) })
     },
-    Utilities: { formatDate: fmt, sleep: () => {}, base64Decode: (s) => Array.from(Buffer.from(s, 'base64')), newBlob: (bytes, type, name) => ({ bytes, type, name }) },
-    // Drive: one folder; created files are recorded in ctxCalls.files
-    DriveApp: {
-      Access: { DOMAIN_WITH_LINK: 'DOMAIN_WITH_LINK' }, Permission: { VIEW: 'VIEW' },
-      getFolderById: (id) => { if (!ctxCalls.folder || id !== 'FOLDER1') throw new Error('not found'); return ctxCalls.folder; },
-      createFolder: (n) => (ctxCalls.foldersMade = (ctxCalls.foldersMade || 0) + 1, ctxCalls.folder = { name: n, getId: () => 'FOLDER1', createFile: (blob) => { (ctxCalls.files = ctxCalls.files || []).push(blob); return { setSharing() {}, getUrl: () => 'https://drive.google.com/file/d/' + ctxCalls.files.length } } })
-    },
+    Utilities: { formatDate: fmt, sleep: () => {}, base64Decode: (s) => Array.from(Buffer.from(s, 'base64')), newBlob: (s) => ({ getBytes: () => Array.from(Buffer.from(String(s))) }) },
     LockService: { getScriptLock: () => ({ tryLock: () => true, waitLock: () => {}, releaseLock: () => {} }) },
     // secrets and hook URLs read as 's3cret'; anything the script stores itself (setProperty) reads back as stored
     PropertiesService: { getScriptProperties: () => ({ getProperty: (k) => (k in props ? props[k] : /_AT$/.test(k) ? null : 's3cret'), setProperty: (k, v) => { props[k] = String(v); } }) },
     ContentService: { createTextOutput: (s) => ({ s, setMimeType() { return this; } }), MimeType: { JSON: 'json' } },
-    ScriptApp: { WeekDay: { THURSDAY: 'THURSDAY' }, getProjectTriggers: () => [], deleteTrigger() {}, newTrigger: () => ({ timeBased: () => ({ everyMinutes: () => ({ create() {} }), onWeekDay: () => ({ atHour: () => ({ create() {} }) }) }), forSpreadsheet: () => ({ onFormSubmit: () => ({ create() {} }), onChange: () => ({ create() {} }) }) }) },
-    UrlFetchApp: { fetch: (url, opts) => { (ctxCalls.fetches = ctxCalls.fetches || []).push(url); (ctxCalls.posts = ctxCalls.posts || []).push({ url, body: opts && opts.payload }); return { getResponseCode: () => ctxCalls.code || 200 }; } }
+    ScriptApp: { getOAuthToken: () => 'tok', WeekDay: { THURSDAY: 'THURSDAY' }, getProjectTriggers: () => [], deleteTrigger() {}, newTrigger: () => ({ timeBased: () => ({ everyMinutes: () => ({ create() {} }), onWeekDay: () => ({ atHour: () => ({ create() {} }) }) }), forSpreadsheet: () => ({ onFormSubmit: () => ({ create() {} }), onChange: () => ({ create() {} }) }) }) },
+    UrlFetchApp: { fetch: (url, opts) => {
+      (ctxCalls.fetches = ctxCalls.fetches || []).push(url);
+      if (/googleapis\.com\/(upload\/)?drive\//.test(url)) return fakeDrive(url, opts);
+      (ctxCalls.posts = ctxCalls.posts || []).push({ url, body: opts && opts.payload });
+      return { getResponseCode: () => ctxCalls.code || 200 };
+    } }
   };
   vm.createContext(ctx);
   for (const f of ['Logic.gs', 'Code.gs']) vm.runInContext(fs.readFileSync(path.join(__dirname, '../apps-script', f), 'utf8'), ctx, { filename: f });

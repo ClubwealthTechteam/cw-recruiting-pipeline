@@ -691,22 +691,26 @@ test('addApplicant: a referral added by hand starts Applied as Source Referral, 
 
 test('addApplicant: an uploaded resume is saved to the Resumes folder in Drive and linked on the applicant', () => {
   const { ctxCalls } = require('./harness');
-  ctxCalls.folder = null; ctxCalls.files = []; ctxCalls.foldersMade = 0;
+  ctxCalls.drive = null;
   const env = invitedEnv();
   env.ctx.setup();
   const r = env.api({ action: 'addApplicant', by: 'Camille', firstName: 'Ana', lastName: 'Lim', position: 'Collections VA',
     resume: { name: 'cv.pdf', type: 'application/pdf', data: Buffer.from('%PDF-1.4 test').toString('base64') } });
-  assert.equal(r.ok, true);
-  assert.equal(ctxCalls.folder.name, 'Recruiting Pipeline - Resumes');
-  assert.equal(ctxCalls.files[0].name, 'R-1 - Ana Lim - resume.pdf');
-  assert.equal(env.rows('Applicants').find((a) => a['Applicant ID'] === 'R-1')['Resume Link'], 'https://drive.google.com/file/d/1');
-  // the second upload reuses the folder (found by its saved id, not by name)
+  assert.equal(r.ok, true, r.error);
+  const d = ctxCalls.drive;
+  assert.deepEqual(Object.values(d.folders).map((f) => f.name), ['Recruiting Pipeline - Resumes']);
+  assert.equal(d.files[0].name, 'R-1 - Ana Lim - resume.pdf');
+  assert.deepEqual(d.files[0].parents, ['folder1']);
+  assert.equal(d.perms, 1);
+  assert.equal(env.rows('Applicants').find((a) => a['Applicant ID'] === 'R-1')['Resume Link'], 'https://drive.google.com/file/d/f1/view');
+  // the second upload reuses the folder (found by its saved id)
   env.api({ action: 'addApplicant', by: 'Camille', firstName: 'Bea', lastName: 'Cruz', position: 'Collections VA',
     resume: { name: 'cv.pdf', type: 'application/pdf', data: Buffer.from('%PDF-1.4 two').toString('base64') } });
-  assert.equal(ctxCalls.foldersMade, 1);
-  assert.equal(ctxCalls.files[1].name, 'R-2 - Bea Cruz - resume.pdf');
+  assert.equal(Object.keys(d.folders).length, 1);
+  assert.equal(d.files[1].name, 'R-2 - Bea Cruz - resume.pdf');
+  // a bad file type is refused before anything is created
   assert.equal(env.api({ action: 'addApplicant', by: 'Camille', firstName: 'Ed', lastName: 'Go', position: 'Collections VA', resume: { name: 'x.exe', type: 'application/x-msdownload', data: 'AAAA' } }).ok, false);
-  assert.equal(env.rows('Applicants').some((a) => a['First Name'] === 'Ed'), false); // nothing half-added
+  assert.equal(env.rows('Applicants').some((a) => a['First Name'] === 'Ed'), false);
 });
 
 test('Needs Attention inbox: read and answer an unmatched email, then link it to the applicant', () => {
