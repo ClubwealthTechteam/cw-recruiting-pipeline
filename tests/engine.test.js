@@ -835,7 +835,7 @@ test('Active Team Members: the Onboarding sheet is copied without private fields
   env.ctx.tick();
   const team = env.rows('Team (Onboarding)');
   assert.equal(team.length, 3);
-  assert.deepEqual(team.map((m) => [m.Email, m.Company, m.Department, m.Status, m.Days]), [
+  assert.deepEqual(team.map((m) => [m.Email, m.Company, m.Department, m.Status, m.Days]).sort(), [
     ['ana@x.com', 'Club Wealth', 'ISA', 'Working', '230'], ['bo@x.com', 'Club Wealth', 'TC/LC', 'Terminated', '20'], ['cy@x.com', 'Homexa', 'TC/LC', '', '13']]);
   assert.equal(JSON.stringify(team).includes('123 Street'), false, 'address is not copied');
   assert.equal(JSON.stringify(team).includes('1/1/1990'), false, 'birthday is not copied');
@@ -853,4 +853,27 @@ test('Active Team Members: the Onboarding sheet is copied without private fields
   assert.equal(env.api({ action: 'updateTeam', by: 'Camille', email: 'ana@x.com', field: 'Email', value: 'z' }).ok, false);
   // the Onboarding sheet is never written
   assert.equal(env.ctx.SpreadsheetApp.openById('ONB').getSheetByName('CW').data.length, 3);
+});
+
+test('Active Team Members: older onboarding sheets are included, and a rehire shows once with the latest hire', () => {
+  const cw = ['Lenght of stay (Days)', 'Remarks', 'Timestamp', 'Email Address', 'First and Last Name', 'Mobile Number', 'Full Address', 'Date of Birth', 'Position Hired For', 'Start date (Friday Date)'];
+  const old = ['STATUS', 'MANUAL INPUT', '90 days?', 'Timestamp', 'Email Address', 'First and Last Name', 'Start date', 'Preferred Name at Work ', 'Mobile Number', 'Full Address', 'Date of Birth', 'Position Hired For'];
+  const env = load({ mode: 'LIVE', now: pdt('2026-10-29T08:00:00'), onboarding: {
+    CW: [cw, ['10', 'Working', 't', 'rose@x.com', 'Rose Flores', '0917', 'addr', 'dob', 'RE ISA', '9/18/2026']],
+    '2025': [cw, ['551', 'Terminated', 't', 'Rose@x.com', 'Rosarie Flores', '0917', 'addr', 'dob', 'CW ISA', '5/2/2025'],
+      ['531', 'Working', 't', 'am@x.com', 'Am M', '0918', 'addr', 'dob', 'CW Admin', '5/16/2025']],
+    'Form Responses 1': [old, ['Term', '', '', 't', 'ed@x.com', 'Ed Go', '1/5/2024', 'Ed', '0919', 'addr', 'dob', 'ISA'],
+      ['Working', '', '', 't', 'jo@x.com', 'Jo Lim', '3/1/2024', 'Jo', '0920', 'addr', 'dob', 'Client Care']] } });
+  env.ctx.setup();
+  env.ctx.tick();
+  const team = env.rows('Team (Onboarding)');
+  assert.deepEqual(team.map((m) => m.Email).sort(), ['am@x.com', 'ed@x.com', 'jo@x.com', 'rose@x.com']);
+  const rose = team.find((m) => m.Email === 'rose@x.com');
+  assert.equal(rose.Status, 'Working', 'rehire: the 2026 hire wins over the 2025 one');
+  assert.equal(rose['Start Date'], '2026-09-18');
+  const ed = team.find((m) => m.Email === 'ed@x.com');
+  assert.equal(ed.Status, 'Terminated', '"Term" is shown as Terminated');
+  assert.equal(ed['Source Tab'], '2023-2024 · Form Responses 1');
+  assert.equal(ed.Days, String(Math.round((Date.parse('2026-10-29') - Date.parse('2024-01-05')) / 86400000)));
+  assert.equal(team.find((m) => m.Email === 'jo@x.com').Department, 'Client Care');
 });
