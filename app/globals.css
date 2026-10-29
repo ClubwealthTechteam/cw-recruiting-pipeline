@@ -325,6 +325,8 @@ html[data-sidebar="mini"] .sidebar-foot .link { font-size: 10px; }
 /* Active Team Members */
 .muted-row td { color: var(--muted); }
 .team-table { table-layout: fixed; }
-.team-table th:nth-child(1) { width: 22%; } .team-table th:nth-child(2) { width: 16%; } .team-table th:nth-child(3) { width: 11%; }
-.team-table th:nth-child(4) { width: 13%; } .team-table th:nth-child(5) { width: 10%; } .team-table th:nth-child(6) { width: 6%; }
-.team-table th:nth-child(7) { width: 10%; } .team-table th:nth-child(9) { width: 7%; }
+.team-table th:nth-child(1) { width: 19%; } .team-table th:nth-child(2) { width: 14%; } .team-table th:nth-child(3) { width: 10%; }
+.team-table th:nth-child(4) { width: 12%; } .team-table th:nth-child(5) { width: 9%; } .team-table th:nth-child(6) { width: 5%; }
+.team-table th:nth-child(7) { width: 11%; } .team-table th:nth-child(8) { width: 12%; } .team-table th:nth-child(9) { width: 8%; }
+.team-table td { overflow-wrap: anywhere; }
+.team-table td:last-child { text-align: right; white-space: nowrap; }
