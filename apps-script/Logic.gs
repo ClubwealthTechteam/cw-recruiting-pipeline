@@ -386,7 +386,7 @@ function statusEmail(type, firstName) {
 
 /** Department from the free-typed "Position Hired For" (Miguel, 2026-10-29: role family; can be corrected on the site). */
 function departmentOf(position) {
-  var p = String(position || '').toLowerCase();
+  var p = String(position || '').toLowerCase().replace(/[_\-\/()]+/g, ' '); // "RE_ISA", "HX-TC/LC"
   if (/collection|accounts? receivable/.test(p)) return 'Collections';
   if (/transaction|listing|\btc\b|\blc\b/.test(p)) return 'TC/LC';
   if (/\bisa\b|inside sales|appointment|cold call|sales agent/.test(p)) return 'ISA';
