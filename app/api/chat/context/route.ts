@@ -22,7 +22,7 @@ export async function GET(req: Request) {
     ok: true,
     question: chat.question,
     today: new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Los_Angeles' }).format(new Date()),
-    definitions: 'Interviews are Wednesdays 2:00 PM Pacific. Stages: Applied, Invited, Confirmed (replied with full name), Open for re-invite, Interview Completed (stayed 1h+ in Zoom; Settings MIN_MINUTES_COMPLETED), Did Not Complete (under that), No Show (confirmed but did not join), No Confirmation (invited, never confirmed, did not join), Passed Pre-Interview, Passed Interview (after both: Hired), Hired, Not Fit. Rates exclude applicants invited by hand before the system started.',
+    definitions: 'Interviews are Wednesdays 2:00 PM Pacific. Stages: Applied, Invited, Confirmed (replied with full name), Open for re-invite, Interview Completed (stayed 1h+ in Zoom; Settings MIN_MINUTES_COMPLETED), Did Not Complete (under that), Uninterested | Left Zoom (said it is not for them and left the session), No Show (confirmed but did not join), No Confirmation (invited, never confirmed, did not join), Passed Pre-Interview, Passed Interview (after both: Hired), Hired, Not Fit. Rates exclude applicants invited by hand before the system started.',
     metrics: { ...m, perWeek: m.perWeek },
     stageCounts: count(current),
     beforeSystem: { applicants: historical.length, firstApplied: ymd(historical[0]?.['Applied At (PT)']), stageCounts: count(historical) },

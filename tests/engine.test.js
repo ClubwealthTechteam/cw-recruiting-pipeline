@@ -658,3 +658,76 @@ test('Slack: the same alert is never sent twice, even across many quiet runs (re
   // Settings never holds the clock any more (Sheets would turn it into a date)
   assert.equal(env.rows('Settings').some((r) => r.Key === 'SLACK_SINCE'), false);
 });
+
+test('addApplicant: a referral added by hand starts Applied as Source Referral, refuses duplicates, and can be invited', () => {
+  const env = invitedEnv({ EMAIL_SENDING: 'ON' });
+  env.ctx.setup();
+  assert.equal(env.api({ action: 'addApplicant', by: 'Hacker', firstName: 'Kai', lastName: 'Cruz', position: 'Collections VA' }).ok, false);
+  assert.equal(env.api({ action: 'addApplicant', by: 'Camille', firstName: 'Kai', lastName: '', position: 'Collections VA' }).ok, false);
+  const r = env.api({ action: 'addApplicant', by: 'Camille', firstName: 'Kai', lastName: 'Cruz', email: 'Kai@Example.com', position: 'Collections VA', referredBy: 'an RM', invite: true });
+  assert.equal(r.ok, true);
+  assert.equal(r.data.id, 'R-1');
+  const kai = env.rows('Applicants').find((a) => a['Applicant ID'] === 'R-1');
+  assert.equal(kai.Source, 'Referral');
+  assert.equal(kai['Source Ref'], 'Referred by an RM');
+  assert.equal(kai.Email, 'kai@example.com');
+  assert.equal(kai.Tags, 'Referral');
+  assert.match(kai.Notes, /Camille: Added as a referral from an RM/);
+  assert.equal(env.rows('History').filter((h) => h['Applicant ID'] === 'R-1' && h['To Stage'] === 'Applied').length, 1);
+  assert.equal(r.data.invited, true);
+  assert.equal(env.rows('Outbox').filter((e) => e['Applicant ID'] === 'R-1' && e.Type === 'Invite').length, 1);
+  // same person again (by email or by name) is refused and names the existing record
+  const dup = env.api({ action: 'addApplicant', by: 'Am', firstName: 'KAI', lastName: 'cruz', position: 'Collections VA' });
+  assert.equal(dup.ok, false);
+  assert.match(dup.error, /R-1/);
+  // the next one gets R-2; without an email nothing is queued
+  const r2 = env.api({ action: 'addApplicant', by: 'Am', firstName: 'Lea', lastName: 'Santos', position: 'Inside Sales Agent (ISA)', invite: true, resumeLink: 'https://drive.google.com/file/d/abc' });
+  assert.equal(r2.data.id, 'R-2');
+  assert.equal(r2.data.invited, false);
+  assert.equal(env.rows('Applicants').find((a) => a['Applicant ID'] === 'R-2')['Resume Link'], 'https://drive.google.com/file/d/abc');
+  // a bad link is refused
+  assert.equal(env.api({ action: 'addApplicant', by: 'Am', firstName: 'Bo', lastName: 'Reyes', position: 'Collections VA', resumeLink: 'javascript:alert(1)' }).ok, false);
+});
+
+test('addApplicant: an uploaded resume is saved to the Resumes folder in Drive and linked on the applicant', () => {
+  const { ctxCalls } = require('./harness');
+  ctxCalls.folder = null; ctxCalls.files = [];
+  const env = invitedEnv();
+  env.ctx.setup();
+  const r = env.api({ action: 'addApplicant', by: 'Camille', firstName: 'Ana', lastName: 'Lim', position: 'Collections VA',
+    resume: { name: 'cv.pdf', type: 'application/pdf', data: Buffer.from('%PDF-1.4 test').toString('base64') } });
+  assert.equal(r.ok, true);
+  assert.equal(ctxCalls.folder.name, 'Recruiting Pipeline - Resumes');
+  assert.equal(ctxCalls.files[0].name, 'R-1 - Ana Lim - resume.pdf');
+  assert.equal(env.rows('Applicants').find((a) => a['Applicant ID'] === 'R-1')['Resume Link'], 'https://drive.google.com/file/d/1');
+  assert.equal(env.api({ action: 'addApplicant', by: 'Camille', firstName: 'Ed', lastName: 'Go', position: 'Collections VA', resume: { name: 'x.exe', type: 'application/x-msdownload', data: 'AAAA' } }).ok, false);
+  assert.equal(env.rows('Applicants').some((a) => a['First Name'] === 'Ed'), false); // nothing half-added
+});
+
+test('Needs Attention inbox: read and answer an unmatched email, then link it to the applicant', () => {
+  const env = invitedEnv({ EMAIL_SENDING: 'ON' });
+  env.ctx.setup();
+  addRow(env, 'Replies', { 'Message ID': 'u1', 'Received At': '2026-10-28 18:09:00', 'From Email': 'Other.Address@gmail.com', Subject: 'RE: ClubWealth | Pre-Interview invite', 'Reply Text': 'I missed the interview, is there another schedule?', Category: 'Other' });
+  env.ctx.tick();
+  const flag = env.rows('Needs Attention').find((f) => f.Type === 'Unmatched reply');
+  assert.ok(flag);
+  // the thread shows their email; an address that never wrote to CareersCW shows nothing and cannot be emailed
+  const t = env.api({ action: 'emailThread', email: 'other.address@gmail.com' });
+  assert.equal(t.data.thread.filter((m) => m.dir === 'in').length, 1);
+  assert.deepEqual(env.api({ action: 'emailThread', email: 'stranger@x.com' }).data.thread, []);
+  assert.equal(env.api({ action: 'replyToEmail', by: 'Am', email: 'stranger@x.com', text: 'hi' }).ok, false);
+  // reply goes out from CareersCW and appears in the thread
+  assert.equal(env.api({ action: 'replyToEmail', by: 'Am', email: 'other.address@gmail.com', text: 'Yes, join us next Wednesday at 2 PM PT.' }).ok, true);
+  const out = env.rows('Outbox').filter((e) => e.To === 'other.address@gmail.com');
+  assert.equal(out.length, 1);
+  assert.equal(out[0].Type, 'Reply');
+  assert.equal(env.api({ action: 'emailThread', email: 'other.address@gmail.com' }).data.thread.filter((m) => m.dir === 'out').length, 1);
+  // link it to the applicant and save the new address on them
+  assert.equal(env.api({ action: 'linkReply', by: 'Am', email: 'other.address@gmail.com', flagId: flag['Flag ID'], applicantId: 'F-3', saveEmail: true }).ok, true);
+  assert.equal(env.rows('Replies').find((r) => r['Message ID'] === 'u1')['Matched Applicant ID'], 'F-3');
+  assert.equal(env.rows('Needs Attention').find((f) => f['Flag ID'] === flag['Flag ID'])['Applicant ID'], 'F-3');
+  const f3 = env.rows('Applicants').find((a) => a['Applicant ID'] === 'F-3');
+  assert.equal(f3.Email, 'other.address@gmail.com');
+  assert.match(f3.Notes, /Email changed to other.address@gmail.com/);
+  assert.equal(env.api({ action: 'linkReply', by: 'Am', email: 'other.address@gmail.com', applicantId: 'NOPE' }).ok, false);
+});

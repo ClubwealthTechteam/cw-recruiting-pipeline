@@ -40,7 +40,8 @@ const SECTIONS: Section[] = [
       'While the session runs, a green "In Zoom now" or grey "Left Zoom 2:13 PM" badge shows next to the stage on Candidates, the Board and the Session page. It disappears after the 3:30 wrap-up.',
       'The invite asks applicants to join 10 minutes early; green = on time, amber = under 10 minutes early, red = late.',
       'If someone renames themselves in Zoom, their time stops counting at the rename.',
-      'At 3:30 PM the stages are set: Interview Completed (stayed 1h+ in Zoom), Did Not Complete (under 1 hour), No Show (confirmed but did not join) or No Confirmation (invited, never confirmed, did not join).'
+      'At 3:30 PM the stages are set: Interview Completed (stayed 1h+ in Zoom), Did Not Complete (under 1 hour), No Show (confirmed but did not join) or No Confirmation (invited, never confirmed, did not join).',
+      'Someone who says the role is not for them and leaves the session: move them to Uninterested | Left Zoom by hand. The 3:30 wrap-up leaves them as they are.'
     ]
   },
   {
@@ -52,6 +53,7 @@ const SECTIONS: Section[] = [
     title: 'Candidates',
     href: '/candidates',
     items: [
+      '+ Add applicant (referral) above the table adds someone by hand (Source Referral, tagged Referral). With an email it can send the pre-interview invite straight away, with the same screening and cut-off as form applicants.',
       'Filter by stage, fit, source, position, score, tag and session. Counts per position update with the filters.',
       'Saved views (shared by the team): pick filters, then "+ Save this view".',
       'Newest applicant first, with the time they applied. The header stays on top while scrolling.',
@@ -63,7 +65,7 @@ const SECTIONS: Section[] = [
     title: 'Pipeline Board',
     href: '/board',
     items: [
-      'One column per stage: Applied, Invited, Confirmed, Interview Completed, Passed Pre-Interview, Passed Interview, Hired, Onboarded, then re-invite, Did Not Complete, No Show, No Confirmation and Not Fit.',
+      'One column per stage: Applied, Invited, Confirmed, Interview Completed, Passed Pre-Interview, Passed Interview, Hired, Onboarded, then re-invite, Did Not Complete, Uninterested | Left Zoom, No Show, No Confirmation and Not Fit.',
       'Drag a card to another column to move the applicant. Drag near the edge to scroll sideways, or use the "Move…" menu on the card.'
     ]
   },
@@ -78,7 +80,7 @@ const SECTIONS: Section[] = [
   { title: 'This Week\'s Session', href: '/session', items: ['Everyone invited to the Wednesday session: confirmed, reminder sent, arrival and Zoom minutes.'] },
   { title: 'Talent Pool', href: '/talent', items: ['Great and Good fits who were not hired and are not in an interview right now, plus anyone tagged "Talent pool". Invite them again when a position reopens.'] },
   { title: 'Reports', href: '/reports', items: ['By source and by position: applied, invited, confirmed, joined, completed, passed and hired, with completion rate, pass rate and days to hire. Last 30 days, 90 days or all.'] },
-  { title: 'Needs Attention', href: '/attention', items: ['Applicant questions, replies the system could not match, failed emails and do-not-invite hits. Mark each one resolved when done.'] },
+  { title: 'Needs Attention', href: '/attention', items: ['Applicant questions, replies the system could not match, failed emails and do-not-invite hits. Mark each one resolved when done.', 'Unmatched email replies (for example a reschedule request from a different address): Open emails & reply shows the whole email, lets you answer from CareersCW, and Link to applicant files it under the right person (and can save the new email on them), so you can re-invite them from their profile.'] },
   {
     title: 'Slack messages to Am and Camille',
     items: ['New Great or Good applicants, new Needs Attention items, late joiners during the session, the session results, and a weekly report every Thursday at 9 AM.']

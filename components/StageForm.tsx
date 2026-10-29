@@ -8,6 +8,7 @@ const PRESETS: Record<string, string[]> = {
   'Did Not Complete': ['Left early – told to reapply', 'Connection or equipment problem – told to reapply', 'Left early – not qualified', 'Joined late – not entertained'],
   'Not Fit': ['Internet below 50 Mbps', 'Equipment not suitable', 'Communication skills', 'Experience does not match the role', 'No-show history'],
   'Open for re-invite': ['Schedule conflict', 'Asked to reschedule', 'Emergency', 'Technical problem on the day'],
+  'Uninterested | Left Zoom': ['Said the role is not for them and left Zoom', 'Left after the work rules were explained'],
   'No Show': ['Confirmed but did not join Zoom'],
   'No Confirmation': ['Invited, never confirmed, did not join'],
   'Passed Pre-Interview': ['Passed the pre-interview'],

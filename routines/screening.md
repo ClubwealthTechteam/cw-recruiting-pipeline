@@ -11,7 +11,13 @@ Screening rules (approved by Miguel, 2026-10-28):
 | ISA (unspecified) | judge against both ISA rules; say which one it fits |
 | Collections | any collections experience (any industry) |
 
-Tags: **Great** = clearly meets the rule (1+ year or highly relevant) · **Good** = meets the 6-month minimum · **Not Fit** = does not meet it or not enough information.
+**Cross-fit rule (Miguel, 2026-10-29):** judge against the applicant's own track first. If they do not meet it, check
+the other open tracks. An ISA applicant who meets ISA CW (6+ months BPO) is never Not Fit, even if they do not meet ISA
+Homexa; a TC/LC or Collections applicant whose experience meets ISA CW (or another open track) is not Not Fit either.
+They are tagged Great or Good for the track they fit, and the summary starts "Fits <track> (applied for <track>):".
+Not Fit = meets none of the open tracks. On 2026-10-29 every earlier Not Fit was re-checked once under this rule.
+
+Tags: **Great** = clearly meets the rule (1+ year or highly relevant) · **Good** = meets the 6-month minimum · **Not Fit** = the stated experience meets none of the open tracks (no experience details = "Not rated yet", see below).
 The tag only guides Recruitment; it never changes a stage.
 
 **No details rule (Miguel, 2026-10-28):** an applicant whose application or OLJ summary says nothing about their work

@@ -618,6 +618,33 @@ function processEmailApps_(st) {
   return n;
 }
 
+var RESUME_FOLDER = 'Recruiting Pipeline - Resumes';
+var RESUME_TYPES = { 'application/pdf': 'pdf', 'application/msword': 'doc',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx', 'image/png': 'png', 'image/jpeg': 'jpg' };
+
+/**
+ * Saves a resume uploaded on the Candidates page (base64, 3 MB at most) to the Drive folder "Recruiting Pipeline -
+ * Resumes" and returns its link. The file is shared with anyone at Club Wealth who has the link (falls back to
+ * private if the domain does not allow it). Needs the drive.file scope (appsscript.json).
+ */
+function checkResume_(file) {
+  if (!RESUME_TYPES[file.type]) throw new Error('Resume must be a PDF, Word document or image.');
+  var bytes = Utilities.base64Decode(String(file.data));
+  if (bytes.length > 3 * 1024 * 1024) throw new Error('Resume is larger than 3 MB.');
+  return bytes;
+}
+
+function saveResume_(a, file) {
+  var ext = RESUME_TYPES[file.type];
+  var bytes = checkResume_(file);
+  var it = DriveApp.getFoldersByName(RESUME_FOLDER);
+  var folder = it.hasNext() ? it.next() : DriveApp.createFolder(RESUME_FOLDER);
+  var name = a['Applicant ID'] + ' - ' + (a['First Name'] + ' ' + a['Last Name']).trim() + ' - resume.' + ext;
+  var f = folder.createFile(Utilities.newBlob(bytes, file.type, name));
+  try { f.setSharing(DriveApp.Access.DOMAIN_WITH_LINK, DriveApp.Permission.VIEW); } catch (e) { /* stays private */ }
+  return f.getUrl();
+}
+
 /**
  * Screens one new applicant and, if they pass, queues their invite for the session interviewDateFor gives
  * (Wednesday 12 PM PT cut-off): an email for form applicants, an OLJ message for OLJ applicants. A held-back
@@ -857,7 +884,7 @@ function weeklyReport() {
   var day = days[days.length - 1];
   var inv = apps.filter(function (a) { return ymdOf_(a['Interview Date']) === day && a.Stage !== 'Applied'; });
   var done = function (a) { return ['Interview Completed', 'Passed Pre-Interview', 'Passed Interview', 'Hired', 'Onboarded'].indexOf(a.Stage) !== -1; };
-  var joined = function (a) { return Number(a['Zoom Minutes']) > 0 || done(a) || a.Stage === 'Did Not Complete'; };
+  var joined = function (a) { return Number(a['Zoom Minutes']) > 0 || done(a) || a.Stage === 'Did Not Complete' || a.Stage === 'Uninterested | Left Zoom'; };
   var group = function (key) {
     var m = {};
     inv.forEach(function (a) {
@@ -1059,18 +1086,25 @@ function cleanTags_(raw) {
   }).slice(0, 12).join(', ');
 }
 
+/** True when this address has written to CareersCW (it is in the Replies tab), so the CRM may show or answer its emails. */
+function knownSender_(email) {
+  if (!email) return false;
+  return table_(SH.REPLIES).rows.some(function (r) { return String(r['From Email'] || '').trim().toLowerCase() === email; });
+}
+
 /** One applicant's email conversation: what we sent (Outbox) and what they wrote back (Replies), oldest first. */
 function thread_(a) {
   var id = a['Applicant ID'];
   var email = String(a.Email || '').trim().toLowerCase();
   var out = plain_(table_(SH.OUTBOX).rows).filter(function (e) {
-    return e['Applicant ID'] === id && e.Type !== 'OLJ Invite' && e.Type !== 'OLJ Message' && e.Test !== 'Y' && (e.Status === 'Sent' || e.Status === 'Queued');
+    var mineE = id ? e['Applicant ID'] === id : (!e['Applicant ID'] && email && String(e.To).trim().toLowerCase() === email);
+    return mineE && e.Type !== 'OLJ Invite' && e.Type !== 'OLJ Message' && e.Test !== 'Y' && (e.Status === 'Sent' || e.Status === 'Queued');
   }).map(function (e) {
     return { dir: 'out', at: e['Sent At'] || e['Queued At'], type: e.Type, subject: e.Subject, status: e.Status, by: e['Queued By'] || 'System',
       text: e.Type === 'Reply' ? stripTags_(e.Body) : '' };
   });
   var inn = plain_(table_(SH.REPLIES).rows).filter(function (r) {
-    return r['Matched Applicant ID'] === id || (email && String(r['From Email']).trim().toLowerCase() === email);
+    return (id && r['Matched Applicant ID'] === id) || (email && String(r['From Email']).trim().toLowerCase() === email);
   }).map(function (r) {
     return { dir: 'in', at: r['Received At'], subject: r.Subject, text: stripQuoted(r['Reply Text']).slice(0, 2000), category: r.Category };
   });
@@ -1203,6 +1237,12 @@ function api_(req) {
       scores: optionalRows_(SH.SCORES).filter(function (s) { return s['Applicant ID'] === out['Applicant ID']; })
     };
   }
+  if (req.action === 'emailThread') {
+    // Needs Attention: the emails from an address no applicant matched, and our replies to it
+    var em = String(req.email || '').trim().toLowerCase();
+    if (!knownSender_(em)) return { thread: [] };
+    return { thread: thread_({ 'Applicant ID': '', Email: em, Source: '' }) };
+  }
   if (req.action === 'zoomRows') return zoomRowsApi_(req);
   if (req.action === 'chatGet') return chatGet_(req.id);
   if (req.action === 'chatAnswer') return chatAnswer_(req.id, req.answer);
@@ -1288,6 +1328,46 @@ function api_(req) {
       }
       return { ok: true };
     }
+    if (req.action === 'addApplicant') {
+      // Added by hand from the Candidates page, for referrals (no form, OLJ or email application).
+      var first = String(req.firstName || '').trim().slice(0, 100), last = String(req.lastName || '').trim().slice(0, 100);
+      var mail = String(req.email || '').trim().toLowerCase();
+      var typed = String(req.position || '').trim().slice(0, 200);
+      var refBy = String(req.referredBy || '').trim().slice(0, 100);
+      if (!first || !last) throw new Error('First and last name are required.');
+      if (!typed) throw new Error('Pick a position.');
+      if (mail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(mail)) throw new Error('That email address does not look right.');
+      var resumeLink = String(req.resumeLink || '').trim();
+      if (resumeLink && !/^https?:\/\/\S+$/.test(resumeLink)) throw new Error('The resume link must start with http:// or https://');
+      if (req.resume && req.resume.data) checkResume_(req.resume);
+      var nameKey = normName(first + ' ' + last);
+      var twin = apps.rows.filter(function (x) {
+        return x.Historical !== 'Y' && ((mail && String(x.Email || '').trim().toLowerCase() === mail) ||
+          normName(x['First Name'] + ' ' + x['Last Name']) === nameKey);
+      })[0];
+      if (twin) throw new Error('Already in the CRM as ' + twin['Applicant ID'] + ' (' + (twin['First Name'] + ' ' + twin['Last Name']).trim() + ').');
+      var maxR = 0;
+      apps.rows.forEach(function (x) { var m = /^R-(\d+)$/.exec(String(x['Applicant ID'])); if (m) maxR = Math.max(maxR, Number(m[1])); });
+      var noteLine = nowStr_() + ' ' + req.by + ': Added as a referral' + (refBy ? ' from ' + refBy : '') +
+        (req.note ? '. ' + String(req.note).slice(0, 1000) : '');
+      var added = append_(apps, {
+        'Applicant ID': 'R-' + (maxR + 1), Source: 'Referral', 'Source Ref': refBy ? 'Referred by ' + refBy : 'Referral',
+        'Applied At (PT)': nowStr_(), 'First Name': first, 'Last Name': last, Email: mail,
+        Phone: String(req.phone || '').trim().slice(0, 40), 'Position (as typed)': typed,
+        Position: standardPosition(typed, positionOverrides_()), 'Screen Track': screenTrack(typed) || 'Not screened',
+        Stage: 'Applied', 'Stage Updated At': nowStr_(), 'Stage Updated By': req.by, 'Invite Count': 0,
+        Tags: 'Referral', Notes: noteLine, 'Created At': nowStr_()
+      });
+      if (req.resume && req.resume.data) resumeLink = saveResume_(added, req.resume);
+      if (resumeLink) update_(apps, added, { 'Resume Link': resumeLink });
+      appendTo_(SH.HISTORY, {
+        'Timestamp (PT)': nowStr_(), 'Applicant ID': added['Applicant ID'], 'From Stage': '', 'To Stage': 'Applied',
+        'Changed By': req.by, Reason: 'Added as a referral' + (refBy ? ' from ' + refBy : '')
+      });
+      var invited = null;
+      if (req.invite && mail) invited = screenAndInvite_(st2, apps, added);
+      return { id: added['Applicant ID'], resume: resumeLink, invited: !!invited, session: invited ? ymdOf_(added['Interview Date']) : '', hold: added['Invite Hold'] || '' };
+    }
     if (req.action === 'sendInvite') {
       var ai = byId[req.id];
       if (!ai) throw new Error('not found');
@@ -1366,6 +1446,37 @@ function api_(req) {
       if (blockedR) throw new Error('Do not contact: ' + blockedR + '.');
       var q = queueEmail_(st2, ar, 'Reply', replyEmail(text), ymdOf_(ar['Interview Date']), req.by);
       return { queued: !!q };
+    }
+    if (req.action === 'replyToEmail') {
+      // Needs Attention: answer someone who wrote to CareersCW but matched no applicant (e.g. a reschedule request)
+      var toE = String(req.email || '').trim().toLowerCase();
+      var body = String(req.text || '').trim();
+      if (!knownSender_(toE)) throw new Error('This address has not written to CareersCW.');
+      if (!body) throw new Error('Type a message first.');
+      if (body.length > 5000) throw new Error('Message is too long (5,000 characters max).');
+      if (st2.get('EMAIL_SENDING') !== 'ON') throw new Error('Email sending is off (Settings EMAIL_SENDING).');
+      var qe = queueEmail_(st2, { 'Applicant ID': '', Email: toE }, 'Reply', replyEmail(body), '', req.by);
+      return { queued: !!qe };
+    }
+    if (req.action === 'linkReply') {
+      // Needs Attention: say which applicant an unmatched email belongs to; optionally save the address on them
+      var lr = byId[String(req.applicantId || '').trim()];
+      var fromE = String(req.email || '').trim().toLowerCase();
+      if (!lr) throw new Error('No applicant with that ID.');
+      if (!knownSender_(fromE)) throw new Error('This address has not written to CareersCW.');
+      var repsL = table_(SH.REPLIES);
+      repsL.rows.forEach(function (r) {
+        if (String(r['From Email'] || '').trim().toLowerCase() === fromE && !r['Matched Applicant ID']) {
+          update_(repsL, r, { 'Matched Applicant ID': lr['Applicant ID'], 'Match Method': 'Linked by ' + req.by });
+        }
+      });
+      var flagsL = table_(SH.FLAGS);
+      var fl = flagsL.rows.filter(function (f) { return f['Flag ID'] === req.flagId; })[0];
+      if (fl) update_(flagsL, fl, { 'Applicant ID': lr['Applicant ID'] });
+      if (req.saveEmail && String(lr.Email || '').trim().toLowerCase() !== fromE) {
+        update_(apps, lr, { Email: fromE, Notes: (lr.Notes ? lr.Notes + '\n' : '') + nowStr_() + ' ' + req.by + ': Email changed to ' + fromE + ' (was ' + (lr.Email || 'empty') + ')' });
+      }
+      return { linked: lr['Applicant ID'] };
     }
     if (req.action === 'sendOljMessage') {
       var ao = byId[req.id];
