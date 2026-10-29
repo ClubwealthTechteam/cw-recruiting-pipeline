@@ -84,8 +84,8 @@ function load({ now, formRows = [], mode = 'TEST', settings = {}, rejected = [] 
     // Drive: one folder; created files are recorded in ctxCalls.files
     DriveApp: {
       Access: { DOMAIN_WITH_LINK: 'DOMAIN_WITH_LINK' }, Permission: { VIEW: 'VIEW' },
-      getFoldersByName: () => ({ hasNext: () => !!ctxCalls.folder, next: () => ctxCalls.folder }),
-      createFolder: (n) => (ctxCalls.folder = { name: n, createFile: (blob) => { (ctxCalls.files = ctxCalls.files || []).push(blob); return { setSharing() {}, getUrl: () => 'https://drive.google.com/file/d/' + ctxCalls.files.length } } })
+      getFolderById: (id) => { if (!ctxCalls.folder || id !== 'FOLDER1') throw new Error('not found'); return ctxCalls.folder; },
+      createFolder: (n) => (ctxCalls.foldersMade = (ctxCalls.foldersMade || 0) + 1, ctxCalls.folder = { name: n, getId: () => 'FOLDER1', createFile: (blob) => { (ctxCalls.files = ctxCalls.files || []).push(blob); return { setSharing() {}, getUrl: () => 'https://drive.google.com/file/d/' + ctxCalls.files.length } } })
     },
     LockService: { getScriptLock: () => ({ tryLock: () => true, waitLock: () => {}, releaseLock: () => {} }) },
     // secrets and hook URLs read as 's3cret'; anything the script stores itself (setProperty) reads back as stored
