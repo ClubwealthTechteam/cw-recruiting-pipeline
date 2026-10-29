@@ -214,4 +214,10 @@ test('departments from the free-typed position', () => {
   assert.equal(L.departmentOf('AI & Tech Virtual Assistant'), 'AI & Tech');
   assert.equal(L.departmentOf('Client Care'), 'Client Care');
   assert.equal(L.departmentOf('General Admin'), 'Admin');
+  assert.equal(L.departmentOf('Recruiter'), 'Recruitment');
+  assert.equal(L.departmentOf('Appoinment Setter'), 'ISA');
+  assert.equal(L.departmentOf('Independent Sales Associate'), 'ISA');
+  assert.equal(L.departmentOf('Event administrative assistant'), 'Admin');
+  assert.equal(L.departmentOf('Wordpress & Clickfunnel Designer'), 'AI & Tech');
+  assert.equal(L.departmentOf(''), 'Other');
 });

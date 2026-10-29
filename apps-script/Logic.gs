@@ -389,11 +389,13 @@ function departmentOf(position) {
   var p = String(position || '').toLowerCase().replace(/[_\-\/()]+/g, ' '); // "RE_ISA", "HX-TC/LC"
   if (/collection|accounts? receivable/.test(p)) return 'Collections';
   if (/transaction|listing|\btc\b|\blc\b/.test(p)) return 'TC/LC';
-  if (/\bisa\b|inside sales|appointment|cold call|sales agent/.test(p)) return 'ISA';
+  if (/\bisa\b|inside sales|appoi?ntment|appoinment|cold call|sales (agent|associate|representative)/.test(p)) return 'ISA';
+  if (/recruit|\bhr\b|human resource/.test(p)) return 'Recruitment';
   if (/client care|customer/.test(p)) return 'Client Care';
   if (/marketing|ads\b|social media/.test(p)) return 'Marketing';
   if (/\bai\b|tech|developer|automation/.test(p)) return 'AI & Tech';
-  if (/admin|assistant|\bva\b/.test(p)) return 'Admin';
+  if (/admin|assistant|\bva\b|event/.test(p)) return 'Admin';
+  if (/designer|developer|wordpress|web/.test(p)) return 'AI & Tech';
   return 'Other';
 }
 

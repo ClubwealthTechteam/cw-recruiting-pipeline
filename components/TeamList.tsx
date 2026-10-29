@@ -3,7 +3,7 @@ import { useMemo, useState } from 'react';
 import type { TeamMember } from '@/lib/sheet';
 import { useAction } from './useAction';
 
-const DEPARTMENTS = ['ISA', 'TC/LC', 'Collections', 'Client Care', 'Admin', 'AI & Tech', 'Marketing', 'Other'];
+const DEPARTMENTS = ['ISA', 'TC/LC', 'Collections', 'Client Care', 'Recruitment', 'Admin', 'AI & Tech', 'Marketing', 'Other'];
 const STATUSES = ['Working', 'Pending', 'Restart', 'Delay for a week', 'Terminated', 'Resigned', 'AWOL', 'No show', 'NO 2nd Chance', 'Did not continue'];
 const isActive = (m: TeamMember) => m.Active === 'Y';
 
