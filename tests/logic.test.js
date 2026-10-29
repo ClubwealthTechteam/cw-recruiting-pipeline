@@ -206,3 +206,12 @@ test('Slack messages are short bulleted lists', () => {
   assert.match(L.slackLate([{ name: 'Romie', minutesLate: 7 }]), /Romie joined 7 min late/);
   assert.match(L.slackSessionResults('2026-10-28', { completed: 5, dnc: 2, noshow: 3, noconf: 4 }, ''), /No show \(confirmed\): 3\n• No confirmation: 4/);
 });
+
+test('departments from the free-typed position', () => {
+  assert.equal(L.departmentOf('RE_ISA'), 'ISA');
+  assert.equal(L.departmentOf('HX TC / LC'), 'TC/LC');
+  assert.equal(L.departmentOf('Collections VA'), 'Collections');
+  assert.equal(L.departmentOf('AI & Tech Virtual Assistant'), 'AI & Tech');
+  assert.equal(L.departmentOf('Client Care'), 'Client Care');
+  assert.equal(L.departmentOf('General Admin'), 'Admin');
+});
