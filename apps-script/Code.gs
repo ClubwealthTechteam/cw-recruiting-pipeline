@@ -624,7 +624,8 @@ var RESUME_TYPES = { 'application/pdf': 'pdf', 'application/msword': 'doc',
 
 /**
  * Saves a resume uploaded on the Candidates page (base64, 3 MB at most) to the Drive folder "Recruiting Pipeline -
- * Resumes" and returns its link. The file is shared with anyone at Club Wealth who has the link (falls back to
+ * Resumes" (made by the script the first time; its id is kept in Script Property RESUME_FOLDER_ID, because the
+ * drive.file permission cannot search Drive by name) and returns its link. The file is shared with anyone at Club Wealth who has the link (falls back to
  * private if the domain does not allow it). Needs the drive.file scope (appsscript.json).
  */
 function checkResume_(file) {
@@ -637,8 +638,11 @@ function checkResume_(file) {
 function saveResume_(a, file) {
   var ext = RESUME_TYPES[file.type];
   var bytes = checkResume_(file);
-  var it = DriveApp.getFoldersByName(RESUME_FOLDER);
-  var folder = it.hasNext() ? it.next() : DriveApp.createFolder(RESUME_FOLDER);
+  var props = PropertiesService.getScriptProperties();
+  var folder = null;
+  var fid = props.getProperty('RESUME_FOLDER_ID');
+  if (fid) { try { folder = DriveApp.getFolderById(fid); } catch (e) { folder = null; } }
+  if (!folder) { folder = DriveApp.createFolder(RESUME_FOLDER); props.setProperty('RESUME_FOLDER_ID', folder.getId()); }
   var name = a['Applicant ID'] + ' - ' + (a['First Name'] + ' ' + a['Last Name']).trim() + ' - resume.' + ext;
   var f = folder.createFile(Utilities.newBlob(bytes, file.type, name));
   try { f.setSharing(DriveApp.Access.DOMAIN_WITH_LINK, DriveApp.Permission.VIEW); } catch (e) { /* stays private */ }
@@ -1348,18 +1352,18 @@ function api_(req) {
       if (twin) throw new Error('Already in the CRM as ' + twin['Applicant ID'] + ' (' + (twin['First Name'] + ' ' + twin['Last Name']).trim() + ').');
       var maxR = 0;
       apps.rows.forEach(function (x) { var m = /^R-(\d+)$/.exec(String(x['Applicant ID'])); if (m) maxR = Math.max(maxR, Number(m[1])); });
+      var newId = 'R-' + (maxR + 1);
+      if (req.resume && req.resume.data) resumeLink = saveResume_({ 'Applicant ID': newId, 'First Name': first, 'Last Name': last }, req.resume);
       var noteLine = nowStr_() + ' ' + req.by + ': Added as a referral' + (refBy ? ' from ' + refBy : '') +
         (req.note ? '. ' + String(req.note).slice(0, 1000) : '');
       var added = append_(apps, {
-        'Applicant ID': 'R-' + (maxR + 1), Source: 'Referral', 'Source Ref': refBy ? 'Referred by ' + refBy : 'Referral',
+        'Applicant ID': newId, Source: 'Referral', 'Source Ref': refBy ? 'Referred by ' + refBy : 'Referral',
         'Applied At (PT)': nowStr_(), 'First Name': first, 'Last Name': last, Email: mail,
         Phone: String(req.phone || '').trim().slice(0, 40), 'Position (as typed)': typed,
         Position: standardPosition(typed, positionOverrides_()), 'Screen Track': screenTrack(typed) || 'Not screened',
         Stage: 'Applied', 'Stage Updated At': nowStr_(), 'Stage Updated By': req.by, 'Invite Count': 0,
-        Tags: 'Referral', Notes: noteLine, 'Created At': nowStr_()
+        Tags: 'Referral', Notes: noteLine, 'Resume Link': resumeLink, 'Created At': nowStr_()
       });
-      if (req.resume && req.resume.data) resumeLink = saveResume_(added, req.resume);
-      if (resumeLink) update_(apps, added, { 'Resume Link': resumeLink });
       appendTo_(SH.HISTORY, {
         'Timestamp (PT)': nowStr_(), 'Applicant ID': added['Applicant ID'], 'From Stage': '', 'To Stage': 'Applied',
         'Changed By': req.by, Reason: 'Added as a referral' + (refBy ? ' from ' + refBy : '')
