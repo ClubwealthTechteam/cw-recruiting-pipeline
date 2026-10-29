@@ -13,6 +13,7 @@ function doneMessage(body: Record<string, unknown>): string {
     }
     case 'addNote': return 'Note added ✓';
     case 'setEmail': return 'Email saved ✓';
+    case 'addApplicant': return `${body.firstName} ${body.lastName} added ✓`;
     case 'resolveFlag': return 'Marked resolved ✓';
     case 'sendInvite': return 'Invite queued ✓';
     case 'saveScore': return 'Scorecard saved ✓';

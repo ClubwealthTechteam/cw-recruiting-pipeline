@@ -4,6 +4,7 @@ import { getData, getDataWithHistory } from '@/lib/sheet';
 import { STAGES, s, fullName, ymd, formatDate, formatDateTime, positionCounts, weekOf, scoreSummary, splitTags, isTest, SOURCES, SOURCE_LABEL, zoomLive } from '@/lib/pipeline';
 import SavedViews from '@/components/SavedViews';
 import CandidatesTable, { type CandidateRow } from '@/components/CandidatesTable';
+import AddApplicant from '@/components/AddApplicant';
 import DataError from '@/components/DataError';
 
 const PAGE = 200;
@@ -102,6 +103,7 @@ export default async function Candidates({ searchParams }: { searchParams: Promi
           ))}
         </div>
       </div>
+      <AddApplicant />
       <CandidatesTable rows={tableRows} />
       {rows.length > PAGE && (
         <div className="pager">

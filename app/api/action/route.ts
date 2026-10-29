@@ -3,7 +3,7 @@ import { currentUser } from '@/lib/auth';
 import { act } from '@/lib/sheet';
 import { fireRoutine } from '@/lib/chat';
 
-const ALLOWED = ['setStage', 'addNote', 'setEmail', 'resolveFlag', 'sendInvite', 'saveScore', 'setTags', 'saveView', 'deleteView', 'sendReply', 'sendOljMessage', 'undoStage', 'undoNote'];
+const ALLOWED = ['setStage', 'addNote', 'setEmail', 'resolveFlag', 'sendInvite', 'saveScore', 'setTags', 'saveView', 'deleteView', 'sendReply', 'sendOljMessage', 'undoStage', 'undoNote', 'addApplicant'];
 
 export async function POST(req: Request) {
   const user = await currentUser();

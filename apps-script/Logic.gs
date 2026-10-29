@@ -14,6 +14,7 @@ var STAGES = [
   'Open for re-invite',
   'Interview Completed',
   'Did Not Complete',
+  'Uninterested | Left Zoom',
   'No Show',
   'No Confirmation',
   'Passed Pre-Interview',

@@ -300,3 +300,15 @@ html[data-sidebar="mini"] .sidebar-foot .link { font-size: 10px; }
 .stage-cell .badge + .badge, td > .badge + .badge { margin-left: 6px; }
 .badge.zoom-live { animation: zoom-pulse 2s ease-in-out infinite; }
 @keyframes zoom-pulse { 50% { opacity: 0.6; } }
+
+/* Candidates: add an applicant by hand (referrals) */
+.add-applicant { margin-bottom: 10px; }
+.add-applicant.closed { display: flex; align-items: center; gap: 12px; }
+.add-applicant.panel { padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+.add-head { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+.add-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px 12px; }
+.add-grid label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
+.add-grid label.wide { grid-column: 1 / -1; }
+.add-grid input, .add-grid select, .add-grid textarea { width: 100%; }
+.check-line { display: flex; gap: 8px; align-items: center; font-size: 13px; }
+.add-actions { display: flex; gap: 8px; align-items: center; }

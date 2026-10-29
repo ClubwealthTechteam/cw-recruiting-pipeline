@@ -658,3 +658,30 @@ test('Slack: the same alert is never sent twice, even across many quiet runs (re
   // Settings never holds the clock any more (Sheets would turn it into a date)
   assert.equal(env.rows('Settings').some((r) => r.Key === 'SLACK_SINCE'), false);
 });
+
+test('addApplicant: a referral added by hand starts Applied as Source Referral, refuses duplicates, and can be invited', () => {
+  const env = invitedEnv({ EMAIL_SENDING: 'ON' });
+  env.ctx.setup();
+  assert.equal(env.api({ action: 'addApplicant', by: 'Hacker', firstName: 'Kai', lastName: 'Cruz', position: 'Collections VA' }).ok, false);
+  assert.equal(env.api({ action: 'addApplicant', by: 'Camille', firstName: 'Kai', lastName: '', position: 'Collections VA' }).ok, false);
+  const r = env.api({ action: 'addApplicant', by: 'Camille', firstName: 'Kai', lastName: 'Cruz', email: 'Kai@Example.com', position: 'Collections VA', referredBy: 'an RM', invite: true });
+  assert.equal(r.ok, true);
+  assert.equal(r.data.id, 'R-1');
+  const kai = env.rows('Applicants').find((a) => a['Applicant ID'] === 'R-1');
+  assert.equal(kai.Source, 'Referral');
+  assert.equal(kai['Source Ref'], 'Referred by an RM');
+  assert.equal(kai.Email, 'kai@example.com');
+  assert.equal(kai.Tags, 'Referral');
+  assert.match(kai.Notes, /Camille: Added as a referral from an RM/);
+  assert.equal(env.rows('History').filter((h) => h['Applicant ID'] === 'R-1' && h['To Stage'] === 'Applied').length, 1);
+  assert.equal(r.data.invited, true);
+  assert.equal(env.rows('Outbox').filter((e) => e['Applicant ID'] === 'R-1' && e.Type === 'Invite').length, 1);
+  // same person again (by email or by name) is refused and names the existing record
+  const dup = env.api({ action: 'addApplicant', by: 'Am', firstName: 'KAI', lastName: 'cruz', position: 'Collections VA' });
+  assert.equal(dup.ok, false);
+  assert.match(dup.error, /R-1/);
+  // the next one gets R-2; without an email nothing is queued
+  const r2 = env.api({ action: 'addApplicant', by: 'Am', firstName: 'Lea', lastName: 'Santos', position: 'Inside Sales Agent (ISA)', invite: true });
+  assert.equal(r2.data.id, 'R-2');
+  assert.equal(r2.data.invited, false);
+});

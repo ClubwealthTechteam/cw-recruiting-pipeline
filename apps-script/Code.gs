@@ -857,7 +857,7 @@ function weeklyReport() {
   var day = days[days.length - 1];
   var inv = apps.filter(function (a) { return ymdOf_(a['Interview Date']) === day && a.Stage !== 'Applied'; });
   var done = function (a) { return ['Interview Completed', 'Passed Pre-Interview', 'Passed Interview', 'Hired', 'Onboarded'].indexOf(a.Stage) !== -1; };
-  var joined = function (a) { return Number(a['Zoom Minutes']) > 0 || done(a) || a.Stage === 'Did Not Complete'; };
+  var joined = function (a) { return Number(a['Zoom Minutes']) > 0 || done(a) || a.Stage === 'Did Not Complete' || a.Stage === 'Uninterested | Left Zoom'; };
   var group = function (key) {
     var m = {};
     inv.forEach(function (a) {
@@ -1287,6 +1287,41 @@ function api_(req) {
         screenAndInvite_(st2, apps, a2);
       }
       return { ok: true };
+    }
+    if (req.action === 'addApplicant') {
+      // Added by hand from the Candidates page, for referrals (no form, OLJ or email application).
+      var first = String(req.firstName || '').trim().slice(0, 100), last = String(req.lastName || '').trim().slice(0, 100);
+      var mail = String(req.email || '').trim().toLowerCase();
+      var typed = String(req.position || '').trim().slice(0, 200);
+      var refBy = String(req.referredBy || '').trim().slice(0, 100);
+      if (!first || !last) throw new Error('First and last name are required.');
+      if (!typed) throw new Error('Pick a position.');
+      if (mail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(mail)) throw new Error('That email address does not look right.');
+      var nameKey = normName(first + ' ' + last);
+      var twin = apps.rows.filter(function (x) {
+        return x.Historical !== 'Y' && ((mail && String(x.Email || '').trim().toLowerCase() === mail) ||
+          normName(x['First Name'] + ' ' + x['Last Name']) === nameKey);
+      })[0];
+      if (twin) throw new Error('Already in the CRM as ' + twin['Applicant ID'] + ' (' + (twin['First Name'] + ' ' + twin['Last Name']).trim() + ').');
+      var maxR = 0;
+      apps.rows.forEach(function (x) { var m = /^R-(\d+)$/.exec(String(x['Applicant ID'])); if (m) maxR = Math.max(maxR, Number(m[1])); });
+      var noteLine = nowStr_() + ' ' + req.by + ': Added as a referral' + (refBy ? ' from ' + refBy : '') +
+        (req.note ? '. ' + String(req.note).slice(0, 1000) : '');
+      var added = append_(apps, {
+        'Applicant ID': 'R-' + (maxR + 1), Source: 'Referral', 'Source Ref': refBy ? 'Referred by ' + refBy : 'Referral',
+        'Applied At (PT)': nowStr_(), 'First Name': first, 'Last Name': last, Email: mail,
+        Phone: String(req.phone || '').trim().slice(0, 40), 'Position (as typed)': typed,
+        Position: standardPosition(typed, positionOverrides_()), 'Screen Track': screenTrack(typed) || 'Not screened',
+        Stage: 'Applied', 'Stage Updated At': nowStr_(), 'Stage Updated By': req.by, 'Invite Count': 0,
+        Tags: 'Referral', Notes: noteLine, 'Created At': nowStr_()
+      });
+      appendTo_(SH.HISTORY, {
+        'Timestamp (PT)': nowStr_(), 'Applicant ID': added['Applicant ID'], 'From Stage': '', 'To Stage': 'Applied',
+        'Changed By': req.by, Reason: 'Added as a referral' + (refBy ? ' from ' + refBy : '')
+      });
+      var invited = null;
+      if (req.invite && mail) invited = screenAndInvite_(st2, apps, added);
+      return { id: added['Applicant ID'], invited: !!invited, session: invited ? ymdOf_(added['Interview Date']) : '', hold: added['Invite Hold'] || '' };
     }
     if (req.action === 'sendInvite') {
       var ai = byId[req.id];

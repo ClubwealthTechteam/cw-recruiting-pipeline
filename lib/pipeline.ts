@@ -2,13 +2,13 @@ import type { Row } from './sheet';
 
 export const STAGES = [
   'Applied', 'Invited', 'Confirmed', 'Open for re-invite', 'Interview Completed',
-  'Did Not Complete', 'No Show', 'No Confirmation', 'Passed Pre-Interview', 'Passed Interview', 'Hired', 'Onboarded', 'Not Fit'
+  'Did Not Complete', 'Uninterested | Left Zoom', 'No Show', 'No Confirmation', 'Passed Pre-Interview', 'Passed Interview', 'Hired', 'Onboarded', 'Not Fit'
 ] as const;
 
 /** Board column order: the main flow first, then the side outcomes. */
 export const BOARD_STAGES = [
   'Applied', 'Invited', 'Confirmed', 'Interview Completed', 'Passed Pre-Interview', 'Passed Interview', 'Hired', 'Onboarded',
-  'Open for re-invite', 'Did Not Complete', 'No Show', 'No Confirmation', 'Not Fit'
+  'Open for re-invite', 'Did Not Complete', 'Uninterested | Left Zoom', 'No Show', 'No Confirmation', 'Not Fit'
 ];
 
 /** Hired or further along (Onboarded counts as hired everywhere). */
@@ -26,7 +26,7 @@ export type Stage = (typeof STAGES)[number];
 /** Grey = not engaged yet, blue = in progress, amber = needs action, red = missed, green = success. */
 export const STAGE_TONE: Record<string, string> = {
   Applied: 'grey', Invited: 'blue', Confirmed: 'blue', 'Open for re-invite': 'amber',
-  'Interview Completed': 'amber', 'Did Not Complete': 'red', 'No Show': 'red', 'No Confirmation': 'grey',
+  'Interview Completed': 'amber', 'Did Not Complete': 'red', 'Uninterested | Left Zoom': 'grey', 'No Show': 'red', 'No Confirmation': 'grey',
   'Passed Pre-Interview': 'green', 'Passed Interview': 'green', Hired: 'green', Onboarded: 'green', 'Not Fit': 'grey'
 };
 
@@ -123,7 +123,7 @@ export function metrics(allApplicants: Row[], history: Row[], flags: Row[], now 
     reached.get(id)!.add(s(h['To Stage']));
   }
   const did = (a: Row, stage: string) => s(a.Stage) === stage || !!reached.get(s(a['Applicant ID']))?.has(stage);
-  const attended = (a: Row) => Number(a['Zoom Minutes']) > 0 || did(a, 'Interview Completed') || did(a, 'Did Not Complete');
+  const attended = (a: Row) => Number(a['Zoom Minutes']) > 0 || did(a, 'Interview Completed') || did(a, 'Did Not Complete') || did(a, 'Uninterested | Left Zoom');
 
   // Applicants per week, last 8 weeks, by source
   const thisWeek = weekOf(todayPT(now));
