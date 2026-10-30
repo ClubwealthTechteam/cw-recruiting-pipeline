@@ -416,7 +416,15 @@ function applySentEmails_(st) {
     var a = byId[e['Applicant ID']];
     var status = String(e.Status);
     if (status === 'Failed') {
-      flag_(e['Applicant ID'], 'Email failed', e.Type + ' to applicant failed: ' + (e.Error || 'no detail'));
+      var heldBack = e.Type === 'OLJ Invite' && /^Not sent: /.test(String(e.Error || ''));
+      if (heldBack && a) {
+        // The OLJ sender held the invite back (e.g. no summary yet). Hold the applicant so it is not queued again
+        // every tick; the hold clears when they write something new on OLJ (processOLJ_). Miguel, 2026-10-30.
+        update_(apps, a, { 'Invite Hold': OLJ_HOLD_PREFIX + String(e.Error).replace(/^Not sent: /, '') });
+        flag_(e['Applicant ID'], 'OLJ invite held', String(e.Error).replace(/^Not sent: /, 'OLJ invite not sent: '));
+      } else {
+        flag_(e['Applicant ID'], 'Email failed', e.Type + ' to applicant failed: ' + (e.Error || 'no detail'));
+      }
       update_(out, e, { Applied: 'Y' });
       return;
     }
@@ -526,6 +534,9 @@ function applyReply_(st, apps, a, rep) {
 
 // ---------- 4. OLJ applicants (summarized by the Claude routine) ----------
 
+/** Invite Hold text when the OLJ sender held an invite back (Miguel, 2026-10-30). */
+var OLJ_HOLD_PREFIX = 'OLJ invite held until they write again: ';
+
 function processOLJ_(st) {
   var olj = table_(SH.OLJ);
   var apps = table_(SH.APPLICANTS);
@@ -554,7 +565,10 @@ function processOLJ_(st) {
       update_(olj, o, { 'Applicant ID': a['Applicant ID'] });
       n++;
     } else if (String(a['OLJ Summary']) !== String(o.Summary)) {
-      update_(apps, a, { 'OLJ Summary': o.Summary });
+      var f = { 'OLJ Summary': o.Summary };
+      // They wrote something new on OLJ: an invite the sender held back may now go out.
+      if (String(a['Invite Hold'] || '').indexOf(OLJ_HOLD_PREFIX) === 0) { f['Invite Hold'] = ''; a['Invite Hold'] = ''; }
+      update_(apps, a, f);
     }
     if (email && !a.Email) update_(apps, a, { Email: email });
     if (a.Stage === 'Applied' && !(Number(a['Invite Count']) > 0) && !a['Invite Hold'] && !pendingInvite_(a['Applicant ID'])) {
