@@ -13,7 +13,7 @@ export async function POST(req: Request) {
   const { action, ...payload } = body;
   try {
     const data = await act(action, user, payload);
-    if ((action === 'sendInvite' && payload.channel === 'olj') || action === 'sendOljMessage') {
+    if ((action === 'sendInvite' && payload.channel === 'olj') || action === 'sendOljMessage' || (action === 'sendTemplate' && payload.channel === 'olj')) {
       // Start the OLJ sender now if it is connected; otherwise the next scheduled OLJ run sends it.
       const started = await fireRoutine(process.env.OLJ_SEND_ROUTINE_ID, process.env.OLJ_SEND_ROUTINE_TOKEN, 'Send queued OLJ invites')
         .then(() => true).catch(() => false);

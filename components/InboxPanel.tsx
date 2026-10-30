@@ -206,6 +206,7 @@ function Templates({ id, channel, a, emailReady, onDone }: { id: string; channel
       ))}
       {blocked && <span className="error small">Do not invite: {s(a['Do Not Invite'])}.</span>}
       {!olj && !emailReady && <span className="hint">Email sending is off.</span>}
+      {olj && <span className="hint">OLJ messages go out on the next OLJ run (7:17 AM, 10:17 AM, 1:17 PM, 4:17 PM PT).</span>}
       {error && <span className="error small">{error}</span>}
     </div>
   );
