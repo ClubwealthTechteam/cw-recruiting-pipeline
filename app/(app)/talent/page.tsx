@@ -53,7 +53,7 @@ export default async function Talent({ searchParams }: { searchParams: Promise<Q
             {rows.map((a) => (
               <tr key={s(a['Applicant ID'])}>
                 <td><Link href={`/candidates/${encodeURIComponent(s(a['Applicant ID']))}`}>{fullName(a) || '(no name)'}</Link><div className="muted small">{s(a.Source)}</div></td>
-                <td><FitBadge tag={s(a['Screen Tag'])} track={s(a['Screen Track'])} /></td>
+                <td><FitBadge tag={s(a['Screen Tag'])} track={s(a['Screen Track'])} summary={s(a['Screen Summary'])} /></td>
                 <td>{s(a.Position)}</td>
                 <td><StageBadge stage={s(a.Stage)} /></td>
                 <td className="small">{why(a)}</td>
