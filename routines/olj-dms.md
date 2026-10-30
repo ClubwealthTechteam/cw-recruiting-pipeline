@@ -32,3 +32,8 @@ stays Queued for the next run. So an OLJ message typed at 9 AM goes out at 10:17
 
 The reader also fills the **Thread** column: rows with an empty Thread are left out of `known.json`, so their
 (read) conversations are opened again, 15 per run, until every row has its messages.
+
+## Read since Oct 24 (from 2026-10-30)
+Miguel, 2026-10-30: each run opens every **read** conversation whose last message is on or after 2026-10-24
+(`--since 2026-10-24 --max-open 80`), instead of 15 per run. Unread conversations are still never opened, so they
+stay unread for Recruitment and show as "Unread on OLJ" in the CRM until someone opens them on OLJ.
