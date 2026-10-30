@@ -252,7 +252,7 @@ export function zoomLive(zoom: Row[], now = new Date()): Map<string, ZoomLive> {
 /** Hired / Rejected / Benched emails from the Outbox, newest first (Body only on those waiting for approval). */
 export function statusEmails(outbox: Row[], applicantId?: string) {
   return outbox
-    .filter((e) => ['Hired', 'Rejected', 'Benched'].includes(s(e.Type)) && (!applicantId || s(e['Applicant ID']) === applicantId))
+    .filter((e) => ['Hired', 'Rejected', 'Benched', 'Onboarding'].includes(s(e.Type)) && (!applicantId || s(e['Applicant ID']) === applicantId))
     .map((e) => ({
       id: s(e['Email ID']), applicantId: s(e['Applicant ID']), type: s(e.Type), to: s(e.To), subject: s(e.Subject), body: s(e.Body),
       status: s(e.Status), queuedAt: s(e['Queued At']), queuedBy: s(e['Queued By']), decidedBy: s(e['Decided By']),

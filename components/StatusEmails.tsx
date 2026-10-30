@@ -6,7 +6,7 @@ export type StatusEmail = {
   queuedAt: string; queuedBy: string; decidedBy?: string; decidedAt?: string; sentAt?: string; error?: string;
 };
 
-const NAME: Record<string, string> = { Hired: 'Hired email', Rejected: 'Rejected email', Benched: 'Benched email' };
+const NAME: Record<string, string> = { Hired: 'Hired email', Rejected: 'Rejected email', Benched: 'Benched email', Onboarding: 'Onboarding email' };
 
 /** One status email waiting for approval: who it goes to, the exact email, and Approve & send / Don't send. */
 export function PendingStatusEmail({ e, name }: { e: StatusEmail; name?: string }) {

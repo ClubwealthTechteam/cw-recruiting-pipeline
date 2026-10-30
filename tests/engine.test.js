@@ -904,3 +904,48 @@ test('move to another session: Wednesday only, old queued emails cancelled, new 
 });
 
 function ymdOf(v) { return String(v || '').slice(0, 10); }
+test('inbox panel: email and OLJ conversations, needs-reply clears after an answer', () => {
+  const env = invitedEnv({ EMAIL_SENDING: 'ON' });
+  env.ctx.setup();
+  addRow(env, 'Replies', { 'Message ID': 'u1', 'Received At': '2026-10-27 10:00:00', 'From Email': 'Other.Address@gmail.com', Subject: 'RE: ClubWealth | Pre-Interview invite', 'Reply Text': 'Can I move to next week?', Category: 'Other' });
+  addRow(env, 'OLJ', { 'Conversation Key': 'c7', 'Job Post': 'Collections Virtual Assistant', 'Applicant Name': 'Lito Lapid', Summary: 'Interested', Thread: JSON.stringify([{ from: 'applicant', at: '2026-10-27T15:00:00.000000Z', text: 'Is the session at 2 PM?' }]) });
+  env.ctx.tick();
+  let list = env.api({ action: 'inbox', channel: 'email' }).data.conversations;
+  assert.equal(list.length, 1);
+  assert.deepEqual([list[0].email, list[0].applicant, list[0].needsReply], ['other.address@gmail.com', null, true]);
+  env.api({ action: 'replyToEmail', by: 'Am', email: 'other.address@gmail.com', text: 'Yes.' });
+  assert.equal(env.api({ action: 'inbox', channel: 'email' }).data.conversations[0].needsReply, false);
+  list = env.api({ action: 'inbox', channel: 'olj' }).data.conversations;
+  assert.deepEqual([list[0].key, list[0].applicant.id, list[0].needsReply, list[0].last], ['c7', 'O-c7', true, 'Is the session at 2 PM?']);
+  env.api({ action: 'sendOljMessage', by: 'Am', id: 'O-c7', text: 'Yes, 2 PM PT.' });
+  assert.equal(env.api({ action: 'inbox', channel: 'olj' }).data.conversations[0].needsReply, false);
+});
+
+test('inbox templates: reminders queue once; Hired / Onboarding go to Needs Approval, never straight out', () => {
+  const env = invitedEnv({ EMAIL_SENDING: 'ON' });
+  env.ctx.setup();
+  addRow(env, 'OLJ', { 'Conversation Key': 'c7', 'Job Post': 'Collections Virtual Assistant', 'Applicant Name': 'Lito Lapid', Summary: 'Interested' });
+  env.ctx.tick();
+  const A = env.sheets.Applicants.data, h = A[0];
+  A.find((r) => r[0] === 'O-c7')[h.indexOf('Interview Date')] = '2026-10-28';
+  const r = env.api({ action: 'sendTemplate', by: 'Am', id: 'F-2', template: 'Reminder' });
+  assert.equal(r.ok, true, r.error);
+  const rem = env.rows('Outbox').find((e) => e.Type === 'Reminder' && e['Applicant ID'] === 'F-2');
+  assert.equal(rem.Status, 'Queued');
+  assert.match(rem.Body, /pre-interview tomorrow, Wednesday, October 28, 2026/);
+  assert.match(env.api({ action: 'sendTemplate', by: 'Am', id: 'F-2', template: 'Reminder' }).error, /already sent or is queued/);
+  // OLJ reminder: the routine's wording, so it is never sent twice
+  assert.equal(env.api({ action: 'sendTemplate', by: 'Am', id: 'O-c7', template: 'Reminder', channel: 'olj' }).ok, true);
+  assert.match(env.rows('Outbox').find((e) => e.Type === 'OLJ Message').Body, /friendly reminder about your virtual pre-interview tomorrow/);
+  assert.equal(env.api({ action: 'sendTemplate', by: 'Am', id: 'O-c7', template: 'Reminder', channel: 'olj' }).ok, false);
+  // status templates wait for approval
+  for (const t of ['Hired', 'Onboarding']) {
+    const s = env.api({ action: 'sendTemplate', by: 'Am', id: 'F-2', template: t });
+    assert.equal(s.data.pending, true, s.error);
+    assert.equal(env.rows('Outbox').find((e) => e['Email ID'] === s.data.emailId).Status, 'Pending approval');
+  }
+  assert.match(env.api({ action: 'sendTemplate', by: 'Am', id: 'F-2', template: 'Hired' }).error, /already waiting/);
+  assert.equal(env.api({ action: 'sendTemplate', by: 'Am', id: 'F-2', template: 'Hired', channel: 'olj' }).ok, false);
+  assert.match(env.api({ action: 'sendTemplate', by: 'Am', id: 'F-2', template: 'Nope' }).error, /Unknown template/);
+  assert.equal(env.ctx.EMAIL_TYPES.includes('Onboarding'), true);
+});

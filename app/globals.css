@@ -330,3 +330,33 @@ html[data-sidebar="mini"] .sidebar-foot .link { font-size: 10px; }
 .team-table th:nth-child(7) { width: 11%; } .team-table th:nth-child(8) { width: 12%; } .team-table th:nth-child(9) { width: 8%; }
 .team-table td { overflow-wrap: anywhere; }
 .team-table td:last-child { text-align: right; white-space: nowrap; }
+
+/* Dashboard > OLJ Inbox / Email Inbox (floating panel, no page change) */
+.nav-row { display: flex; align-items: stretch; }
+.nav-row > a { flex: 1; }
+.nav-caret { background: none; border: 0; color: #9fb0c8; cursor: pointer; padding: 0 12px; font-size: 12px; }
+.nav-caret:hover { color: #fff; background: var(--navy-2); }
+.nav-sub { background: none; border: 0; color: #c3cddd; padding: 6px 16px 6px 34px; display: flex; gap: 10px; align-items: center; font-size: 12.5px; cursor: pointer; width: 100%; text-align: left; white-space: nowrap; }
+.nav-sub:hover { background: var(--navy-2); color: #fff; }
+.nav-sub .nav-icon { width: 15px; height: 15px; }
+html[data-sidebar="mini"] .nav-caret { display: none; }
+html[data-sidebar="mini"] .nav-sub { padding: 8px 0; justify-content: center; }
+.inbox-pop { position: fixed; top: 24px; left: 208px; right: 24px; bottom: 24px; max-width: 1180px; z-index: 40; background: var(--card); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 12px 40px rgba(16, 30, 54, .28); display: flex; flex-direction: column; overflow: hidden; }
+html[data-sidebar="mini"] .inbox-pop { left: 80px; }
+.inbox-pop-head { display: flex; align-items: center; gap: 14px; padding: 10px 14px; border-bottom: 1px solid var(--line); }
+.inbox-pop-close { margin-left: auto; background: none; border: 0; font-size: 22px; line-height: 1; cursor: pointer; color: var(--muted); }
+.inbox-pop-body { flex: 1; display: grid; grid-template-columns: 330px 1fr; min-height: 0; }
+.inbox-list { border-right: 1px solid var(--line); overflow-y: auto; }
+.inbox-list ul { list-style: none; margin: 0; padding: 0; }
+.inbox-list-tools { position: sticky; top: 0; background: var(--card); padding: 10px; display: flex; gap: 8px; align-items: center; border-bottom: 1px solid var(--line); }
+.inbox-list-tools input[type="text"], .inbox-list-tools input:not([type]) { flex: 1; min-width: 0; }
+.inbox-item { display: flex; flex-direction: column; gap: 2px; width: 100%; text-align: left; background: none; border: 0; border-bottom: 1px solid var(--line); padding: 9px 12px; cursor: pointer; font: inherit; color: inherit; }
+.inbox-item:hover { background: var(--grey-bg); }
+.inbox-item.on { background: #e8f0fc; box-shadow: inset 3px 0 0 #2d6cdf; }
+.inbox-item-top { display: flex; align-items: center; gap: 6px; }
+.inbox-item-top .muted { margin-left: auto; }
+.inbox-item-last { font-size: 12.5px; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.inbox-item .dot { width: 8px; height: 8px; border-radius: 50%; background: #2d6cdf; flex: none; }
+.inbox-view { overflow-y: auto; padding: 14px 18px; display: flex; flex-direction: column; gap: 10px; }
+.inbox-view-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.inbox-templates { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 8px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }

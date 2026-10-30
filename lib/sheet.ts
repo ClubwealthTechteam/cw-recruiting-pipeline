@@ -104,3 +104,21 @@ export async function getEmailThread(email: string): Promise<ThreadItem[]> {
   const r = await call<{ thread?: ThreadItem[] }>({ action: 'emailThread', email });
   return r.thread || [];
 }
+
+/** One conversation in the inbox panel (Dashboard > OLJ Inbox / Email Inbox). */
+export type InboxConversation = {
+  key: string; at: string; last: string; needsReply: boolean; email?: string; subject?: string; name?: string;
+  applicant: { id: string; name: string; position: string; stage: string; session: string; source: string; email: string } | null;
+};
+
+/** The inbox panel's list, newest first (not cached, so a new reply shows on the next open). */
+export async function getInbox(channel: 'email' | 'olj'): Promise<InboxConversation[]> {
+  const r = await call<{ conversations?: InboxConversation[] }>({ action: 'inbox', channel });
+  return r.conversations || [];
+}
+
+/** One applicant's conversation for the inbox panel (not cached, so a message just sent shows straight away). */
+export async function getConversation(id: string): Promise<{ applicant: Row | null; thread: ThreadItem[] }> {
+  const r = await call<{ applicant?: Row | null; thread?: ThreadItem[] }>({ action: 'applicant', id });
+  return { applicant: r.applicant || null, thread: r.thread || [] };
+}
