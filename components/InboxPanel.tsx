@@ -18,6 +18,34 @@ const TITLE: Record<InboxChannel, string> = { olj: 'OLJ Inbox', email: 'Email In
 const STATUS_TEMPLATES = ['Hired', 'Onboarding', 'Benched', 'Rejected'];
 const s = (v: unknown) => (v === undefined || v === null ? '' : String(v));
 
+type Filter = 'all' | 'unread' | 'messages' | 'sent';
+const FILTERS: { key: Filter; label: string; title: string }[] = [
+  { key: 'all', label: 'All', title: 'Every conversation' },
+  { key: 'unread', label: 'Unread', title: 'OLJ: not opened on OnlineJobs.ph yet. Email: new since you last opened it here.' },
+  { key: 'messages', label: 'Messages', title: 'The applicant wrote last and nobody has answered' },
+  { key: 'sent', label: 'Sent', title: 'Club Wealth wrote last (an answer, invite or reminder)' }
+];
+
+// Which email conversations this browser has opened, and at which message (per viewer, so it lives in the browser).
+const SEEN_KEY = 'cw-inbox-seen';
+function readSeen(): Record<string, string> {
+  try { return JSON.parse(localStorage.getItem(SEEN_KEY) || '{}'); } catch { return {}; }
+}
+function markSeen(c: InboxConversation) {
+  try { localStorage.setItem(SEEN_KEY, JSON.stringify({ ...readSeen(), [c.key]: c.at })); } catch { /* private window */ }
+}
+/** OLJ "Unread" is OLJ's own state (the CRM never opens those). Email has none, so it is "not opened here yet". */
+function isUnread(c: InboxConversation, channel: InboxChannel, seen: Record<string, string>) {
+  if (channel === 'olj') return c.last === 'Unread on OLJ';
+  return c.needsReply && seen[c.key] !== c.at;
+}
+function matches(f: Filter, c: InboxConversation, channel: InboxChannel, seen: Record<string, string>) {
+  if (f === 'unread') return isUnread(c, channel, seen);
+  if (f === 'messages') return c.needsReply && !(channel === 'olj' && c.last === 'Unread on OLJ');
+  if (f === 'sent') return !c.needsReply;
+  return true;
+}
+
 /**
  * Floating inbox over the current page (no page change): every OnlineJobs.ph or CareersCW conversation on the left,
  * the selected one on the right with a reply box and one-click templates. Status templates (Hired, Onboarding,
@@ -28,7 +56,8 @@ export default function InboxPanel({ emailReady }: { emailReady: boolean }) {
   const [list, setList] = useState<InboxConversation[] | null>(null);
   const [listError, setListError] = useState('');
   const [sel, setSel] = useState<InboxConversation | null>(null);
-  const [onlyOpen, setOnlyOpen] = useState(false);
+  const [filter, setFilter] = useState<Filter>('all');
+  const [seen, setSeen] = useState<Record<string, string>>({});
   const [q, setQ] = useState('');
 
   const loadList = useCallback(async (c: InboxChannel) => {
@@ -43,7 +72,7 @@ export default function InboxPanel({ emailReady }: { emailReady: boolean }) {
   useEffect(() => {
     const open = (e: Event) => {
       const c = (e as CustomEvent<InboxChannel>).detail;
-      setChannel(c); setList(null); setSel(null); setQ('');
+      setChannel(c); setList(null); setSel(null); setQ(''); setSeen(readSeen());
       loadList(c);
     };
     const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') setChannel(null); };
@@ -54,7 +83,7 @@ export default function InboxPanel({ emailReady }: { emailReady: boolean }) {
 
   if (!channel) return null;
   const needle = q.trim().toLowerCase();
-  const shown = (list || []).filter((c) => (!onlyOpen || c.needsReply) &&
+  const shown = (list || []).filter((c) => matches(filter, c, channel, seen) &&
     (!needle || [c.applicant?.name, c.name, c.email, c.applicant?.id, c.applicant?.position].some((v) => s(v).toLowerCase().includes(needle))));
   const open = (list || []).filter((c) => c.needsReply).length;
 
@@ -74,17 +103,23 @@ export default function InboxPanel({ emailReady }: { emailReady: boolean }) {
         <aside className="inbox-list">
           <div className="inbox-list-tools">
             <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search name, email, ID…" />
-            <label className="check-label"><input type="checkbox" checked={onlyOpen} onChange={(e) => setOnlyOpen(e.target.checked)} /> Needs reply</label>
+          </div>
+          <div className="inbox-filters">
+            {FILTERS.map((f) => (
+              <button key={f.key} type="button" className={filter === f.key ? 'on' : ''} title={f.title} onClick={() => setFilter(f.key)}>
+                {f.label} <span className="count">{(list || []).filter((c) => matches(f.key, c, channel, seen)).length}</span>
+              </button>
+            ))}
           </div>
           {listError && <p className="error">{listError}</p>}
           {list && !shown.length && <p className="muted small">No conversations.</p>}
           <ul>
             {shown.map((c) => (
               <li key={c.key}>
-                <button type="button" className={`inbox-item${sel?.key === c.key ? ' on' : ''}`} onClick={() => setSel(c)}>
+                <button type="button" className={`inbox-item${sel?.key === c.key ? ' on' : ''}`} onClick={() => { setSel(c); if (channel === 'email') { markSeen(c); setSeen(readSeen()); } }}>
                   <span className="inbox-item-top">
                     <strong>{c.applicant?.name || c.name || c.email || '(unknown)'}</strong>
-                    {c.needsReply && <span className="dot" title="Needs a reply" />}
+                    {isUnread(c, channel, seen) ? <span className="dot" title="Unread" /> : c.needsReply ? <span className="dot hollow" title="Needs a reply" /> : null}
                     <span className="muted small">{s(c.at).slice(5, 16)}</span>
                   </span>
                   <span className="muted small">{c.applicant ? `${c.applicant.position || c.applicant.source} · ${c.applicant.stage}` : 'Not matched to an applicant'}</span>
