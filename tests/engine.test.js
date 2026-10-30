@@ -949,3 +949,28 @@ test('inbox templates: reminders queue once; Hired / Onboarding go to Needs Appr
   assert.match(env.api({ action: 'sendTemplate', by: 'Am', id: 'F-2', template: 'Nope' }).error, /Unknown template/);
   assert.equal(env.ctx.EMAIL_TYPES.includes('Onboarding'), true);
 });
+
+test('an OLJ invite the sender held back is not queued again until the applicant writes again', () => {
+  const env = invitedEnv();
+  env.ctx.setup();
+  addRow(env, 'OLJ', { 'Conversation Key': 'h1', 'Job Post': 'Collections Virtual Assistant', 'Applicant Name': 'Lito Lapid', Summary: 'Interested; 3 yrs collections experience.' });
+  env.ctx.tick();
+  const olj = () => env.rows('Outbox').filter((e) => e['Applicant ID'] === 'O-h1' && e.Type === 'OLJ Invite');
+  assert.equal(olj().length, 1);
+  // the OLJ sender holds it back
+  const ob = env.sheets.Outbox, h = ob.data[0];
+  const r = ob.data.find((x) => x[h.indexOf('Applicant ID')] === 'O-h1');
+  r[h.indexOf('Status')] = 'Failed';
+  r[h.indexOf('Error')] = 'Not sent: No summary, resume or cover message yet';
+  env.ctx.tick();
+  env.ctx.tick();
+  assert.equal(olj().length, 1, 'not queued again');
+  const a = env.rows('Applicants').find((x) => x['Applicant ID'] === 'O-h1');
+  assert.match(a['Invite Hold'], /^OLJ invite held until they write again: No summary/);
+  assert.ok(env.rows('Needs Attention').some((f) => f.Type === 'OLJ invite held'));
+  // they write again: the hold clears and one new invite is queued
+  const t = env.sheets.OLJ, th = t.data[0];
+  t.data.find((x) => x[0] === 'h1')[th.indexOf('Summary')] = 'Sent a resume and cover letter.';
+  env.ctx.tick();
+  assert.equal(olj().filter((e) => e.Status === 'Queued').length, 1);
+});
