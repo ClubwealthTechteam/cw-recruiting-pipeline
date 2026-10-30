@@ -45,7 +45,7 @@ export default function CandidatesTable({ rows }: { rows: CandidateRow[] }) {
                 <Link href={`/candidates/${encodeURIComponent(r.id)}`}>{r.name || '(no name)'}</Link><div className="muted small">{r.email}</div>
                 {r.tags && r.tags.length > 0 && <div className="row-tags">{r.tags.map((t) => <Link key={t} href={`/candidates?stage=All&tag=${encodeURIComponent(t)}`} className="mini-tag">{t}</Link>)}</div>}
               </td>
-              <td><FitBadge tag={r.fit} track={r.fitTrack} hold={r.hold} /></td>
+              <td><FitBadge tag={r.fit} track={r.fitTrack} hold={r.hold} summary={r.fitSummary} old={r.historical} /></td>
               <td>{r.score ? <span className={`badge ${r.scoreSuggestion === 'Passed' ? 'green' : 'red'}`} title={`Suggested: ${r.scoreSuggestion}`}>{r.score}</span> : <span className="muted">0</span>}</td>
               <td className="stage-cell" onMouseMove={(e) => e.stopPropagation()}>
                 <StageBadge stage={r.stage} /><ZoomBadge z={r.zoom} />{r.historical && <span className="tag">Before system</span>}{r.test && <span className="tag">Test · not counted</span>}

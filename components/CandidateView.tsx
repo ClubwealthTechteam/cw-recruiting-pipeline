@@ -78,7 +78,7 @@ export default async function CandidateView({ appId, panel = false }: { appId: s
       <div className={panel ? '' : 'two-col'}>
         <section className="panel">
           <h2>Screening</h2>
-          <p><FitBadge tag={s(a['Screen Tag'])} track={s(a['Screen Track'])} /> <span className="muted">{s(a['Screen Track'])}</span></p>
+          <p><FitBadge tag={s(a['Screen Tag'])} track={s(a['Screen Track'])} summary={s(a['Screen Summary'])} /> <span className="muted">{s(a['Screen Track'])}</span></p>
           {a['Screen Summary'] ? <p className="prewrap">{s(a['Screen Summary'])}</p> : <p className="muted">Not screened yet.</p>}
         </section>
         <section className="panel">
