@@ -11,9 +11,9 @@ const LABEL: Record<string, string> = {
  * The applicant's conversation (email from CareersCW, and OnlineJobs.ph for OLJ applicants) with a box to answer.
  * Email answers go out from CareersCW with the Club Wealth sign-off and banner; OLJ answers go out on the next OLJ run.
  */
-export default function Inbox({ id, thread, hasEmail, isOlj, emailReady }: { id: string; thread: ThreadItem[]; hasEmail: boolean; isOlj: boolean; emailReady: boolean }) {
-  const channels = [...(isOlj ? ['OLJ'] : []), ...(hasEmail ? ['Email'] : [])] as ('OLJ' | 'Email')[];
-  const [channel, setChannel] = useState<'OLJ' | 'Email'>(channels[0] || 'Email');
+export default function Inbox({ id, thread, hasEmail, isOlj, emailReady, only, onSent }: { id: string; thread: ThreadItem[]; hasEmail: boolean; isOlj: boolean; emailReady: boolean; only?: 'OLJ' | 'Email'; onSent?: () => void }) {
+  const channels = ([...(isOlj ? ['OLJ'] : []), ...(hasEmail ? ['Email'] : [])] as ('OLJ' | 'Email')[]).filter((c) => !only || c === only);
+  const [channel, setChannel] = useState<'OLJ' | 'Email'>(only || channels[0] || 'Email');
   const [text, setText] = useState('');
   const { run, busy, error } = useAction();
   const shown = thread.filter((m) => (channel === 'OLJ' ? m.channel === 'OLJ' : m.channel !== 'OLJ'));
@@ -24,7 +24,7 @@ export default function Inbox({ id, thread, hasEmail, isOlj, emailReady }: { id:
     const where = channel === 'OLJ' ? 'OnlineJobs.ph' : 'email (from CareersCW)';
     if (!confirm(`Send this to the applicant by ${where}?`)) return;
     const ok = await run(channel === 'OLJ' ? { action: 'sendOljMessage', id, text } : { action: 'sendReply', id, text });
-    if (ok) setText('');
+    if (ok) { setText(''); onSent?.(); }
   }
 
   return (

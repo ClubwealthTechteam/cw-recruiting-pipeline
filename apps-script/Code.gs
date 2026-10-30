@@ -354,7 +354,7 @@ function backfillScreenTracks_() {
 
 // ---------- 2. sending (Zapier) and sent emails ----------
 
-var EMAIL_TYPES = ['Invite', 'Re-invite', 'Reminder', 'Confirmation', 'Reply', 'Hired', 'Rejected', 'Benched'];
+var EMAIL_TYPES = ['Invite', 'Re-invite', 'Reminder', 'Confirmation', 'Reply', 'Hired', 'Rejected', 'Benched', 'Onboarding'];
 
 /**
  * Hands each queued email to the Zapier "recruiting-pipeline-email-sender" hook, which sends it from
@@ -1110,6 +1110,12 @@ function statusEmailOnMove_(st, apps, a, stage, by) {
   });
   var type = STATUS_EMAIL_FOR_STAGE[stage];
   if (!type) return null;
+  return queueStatusEmail_(st, out, apps, a, type, by);
+}
+
+/** Prepares one status email for approval (Status "Pending approval"). Never twice: not when one was already sent. */
+function queueStatusEmail_(st, out, apps, a, type, by) {
+  var id = a['Applicant ID'];
   var done = out.rows.filter(function (e) { return e['Applicant ID'] === id && e.Type === type && (e.Status === 'Sent' || e.Status === 'Queued'); })[0];
   if (done) {
     update_(apps, a, { Notes: (a.Notes ? a.Notes + '\n' : '') + nowStr_() + ' System: ' + type + ' email not queued again (already ' + String(done.Status).toLowerCase() + ' ' + ymdOf_(done['Sent At'] || done['Queued At']) + ')' });
@@ -1406,6 +1412,70 @@ function stripTags_(html) {
     .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&amp;/g, '&').trim();
 }
 
+// ---------- site inbox (Dashboard > OLJ Inbox / Email Inbox) ----------
+
+/**
+ * Conversations for the inbox panel, newest first: who wrote, their last message and whether it still needs an answer.
+ * Email: CareersCW replies (Replies tab), matched or not. OLJ: conversations the OLJ reader saved (it never opens unread
+ * ones). Test rows are left out. Read only.
+ */
+function inbox_(channel) {
+  var apps = indexBy_(table_(SH.APPLICANTS).rows, 'Applicant ID');
+  var out = table_(SH.OUTBOX).rows;
+  var who = function (a) {
+    return a ? { id: a['Applicant ID'], name: (String(a['First Name'] || '') + ' ' + String(a['Last Name'] || '')).trim(), position: a.Position || '',
+      stage: a.Stage || '', session: ymdOf_(a['Interview Date']), source: a.Source || '', email: a.Email || '' } : null;
+  };
+  var convs = {};
+  if (channel === 'olj') {
+    table_(SH.OLJ).rows.forEach(function (o) {
+      var a = apps[o['Applicant ID']];
+      if (a && a.Source === 'Test') return;
+      var msgs = [];
+      try { msgs = o.Thread ? JSON.parse(o.Thread) : []; } catch (err) { msgs = []; }
+      var last = msgs[msgs.length - 1];
+      var unread = /^Unread on OLJ/.test(String(o.Summary));
+      convs[o['Conversation Key']] = {
+        key: o['Conversation Key'], applicant: who(a), name: a ? '' : String(o['Applicant Name'] || ''),
+        at: ptStamp_(last ? last.at : o['Last Message At']) || ptStamp_(o['Last Message At']),
+        last: unread ? 'Unread on OLJ' : last ? String(last.text || '').slice(0, 140) : String(o.Summary || '').slice(0, 140),
+        needsReply: unread || !!(last && last.from !== 'us')
+      };
+    });
+    out.forEach(function (e) {
+      var c = e.Type === 'OLJ Message' && convs[String(e.To || '').replace(/^OLJ:/, '')];
+      if (c && (e.Status === 'Queued' || e.Status === 'Sent') && String(e['Queued At']) >= c.at) c.needsReply = false;
+    });
+  } else {
+    // Replies that matched no applicant (e.g. they wrote after their stage changed) still belong to the applicant
+    // with that email: the newest one, preferring applicants from after the system started.
+    var byEmail = {};
+    Object.keys(apps).forEach(function (k) {
+      var a = apps[k], e = String(a.Email || '').trim().toLowerCase(), b = e && byEmail[e];
+      if (!e) return;
+      if (!b || (b.Historical === 'Y' && a.Historical !== 'Y') || ((b.Historical === 'Y') === (a.Historical === 'Y') && String(a['Applied At (PT)']) > String(b['Applied At (PT)']))) byEmail[e] = a;
+    });
+    table_(SH.REPLIES).rows.forEach(function (r) {
+      var a = apps[r['Matched Applicant ID']] || byEmail[String(r['From Email'] || '').trim().toLowerCase()];
+      if (a && a.Source === 'Test' && String(a.Email).toLowerCase() !== 'techteam@clubwealth.com') return;
+      var email = String(r['From Email'] || '').trim().toLowerCase();
+      var k = a ? a['Applicant ID'] : email;
+      var at = ptStamp_(r['Received At']);
+      var c = convs[k];
+      if (c && c.at >= at) return;
+      convs[k] = { key: k, applicant: who(a), email: email, at: at, subject: r.Subject || '', last: stripQuoted(r['Reply Text']).slice(0, 140), needsReply: true };
+    });
+    out.forEach(function (e) {
+      if (e.Type !== 'Reply' || (e.Status !== 'Sent' && e.Status !== 'Queued')) return;
+      var c = convs[e['Applicant ID']] || convs[String(e.To || '').trim().toLowerCase()];
+      if (c && String(e['Sent At'] || e['Queued At']) >= c.at) c.needsReply = false;
+    });
+  }
+  var list = Object.keys(convs).map(function (k) { return convs[k]; });
+  list.sort(function (x, y) { return String(y.at).localeCompare(String(x.at)); });
+  return { conversations: list.slice(0, 300) };
+}
+
 // ---------- chat bubble (answers come from a Claude routine, read-only) ----------
 
 function chatRow_(t, id) {
@@ -1496,6 +1566,7 @@ function api_(req) {
       scores: optionalRows_(SH.SCORES).filter(function (s) { return s['Applicant ID'] === out['Applicant ID']; })
     };
   }
+  if (req.action === 'inbox') return inbox_(req.channel === 'olj' ? 'olj' : 'email');
   if (req.action === 'emailThread') {
     // Needs Attention: the emails from an address no applicant matched, and our replies to it
     var em = String(req.email || '').trim().toLowerCase();
@@ -1829,6 +1900,48 @@ function api_(req) {
         update_(apps, lr, { Email: fromE, Notes: (lr.Notes ? lr.Notes + '\n' : '') + nowStr_() + ' ' + req.by + ': Email changed to ' + fromE + ' (was ' + (lr.Email || 'empty') + ')' });
       }
       return { linked: lr['Applicant ID'] };
+    }
+    if (req.action === 'sendTemplate') {
+      // Inbox templates (Miguel, 2026-10-30). The invite uses sendInvite. Reminders are queued straight away;
+      // Hired / Onboarding / Benched / Rejected go to Needs Approval like every status email, never straight out.
+      var tp = byId[req.id];
+      if (!tp) throw new Error('not found');
+      var tpl = String(req.template || '');
+      var olj = req.channel === 'olj';
+      if (tpl === 'Reminder') {
+        var day = ymdOf_(tp['Interview Date']);
+        if (!day || sessionDateProblem(day, new Date())) throw new Error('No upcoming session to remind them about. Move them to a session first.');
+        var outR = table_(SH.OUTBOX);
+        var again = outR.rows.some(function (e) {
+          return e['Applicant ID'] === tp['Applicant ID'] && ymdOf_(e['Interview Date']) === day && (e.Status === 'Queued' || e.Status === 'Sent') &&
+            (olj ? e.Type === 'OLJ Message' && /friendly reminder about your virtual pre-interview/.test(e.Body) : e.Type === 'Reminder');
+        });
+        if (again) throw new Error('A reminder for ' + longDate(day) + ' was already sent or is queued.');
+        if (olj) {
+          if (tp.Source !== 'OLJ' || !tp['Source Ref']) throw new Error('This applicant did not come from OnlineJobs.ph.');
+          append_(outR, {
+            'Email ID': id_('E'), 'Applicant ID': tp['Applicant ID'], Type: 'OLJ Message', To: 'OLJ:' + tp['Source Ref'],
+            Subject: '(OnlineJobs.ph message)', Body: oljReminderText(day, new Date()), 'Interview Date': day, 'Queued At': nowStr_(),
+            Status: 'Queued', 'Queued By': req.by
+          });
+          return { queued: true, template: tpl };
+        }
+        if (st2.get('EMAIL_SENDING') !== 'ON') throw new Error('Email sending is off (Settings EMAIL_SENDING).');
+        if (!tp.Email) throw new Error('This applicant has no email address.');
+        if (doNotInvite_(st2, tp)) throw new Error('Do not contact: ' + doNotInvite_(st2, tp) + '.');
+        return { queued: !!queueEmail_(st2, tp, 'Reminder', reminderEmail(day, new Date()), day, req.by), template: tpl };
+      }
+      if (STATUS_EMAIL_TYPES.indexOf(tpl) !== -1) {
+        if (olj) throw new Error('Status emails go by email only.');
+        ensureCols_(SH.OUTBOX, DECIDED_COLS);
+        var outS = table_(SH.OUTBOX);
+        var waiting = outS.rows.some(function (e) { return e['Applicant ID'] === tp['Applicant ID'] && e.Type === tpl && e.Status === 'Pending approval'; });
+        if (waiting) throw new Error('A ' + tpl + ' email for this applicant is already waiting in Needs Approval.');
+        var pid = queueStatusEmail_(st2, outS, apps, tp, tpl, req.by);
+        if (!pid) throw new Error('Not prepared: a ' + tpl + ' email was already sent, or there is no email address (see Notes).');
+        return { pending: true, emailId: pid, template: tpl };
+      }
+      throw new Error('Unknown template.');
     }
     if (req.action === 'sendOljMessage') {
       var ao = byId[req.id];

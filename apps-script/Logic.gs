@@ -161,12 +161,12 @@ function inviteEmail(interviewYmd, sentAt) {
 }
 
 /** Wednesday 6:00 AM reminder, to confirmed applicants only. */
-function reminderEmail(interviewYmd) {
+function reminderEmail(interviewYmd, sentAt) {
   var daylight = isDaylight(interviewYmd);
   var zone = daylight ? 'Pacific Daylight Time (PDT)' : 'Pacific Standard Time (PST)';
   var body =
     '<p>Hi!</p>' +
-    '<p>This is a friendly reminder about your virtual pre-interview later today, Wednesday, ' +
+    '<p>This is a friendly reminder about your virtual pre-interview ' + reminderWhen_(interviewYmd, sentAt) + ', Wednesday, ' +
     longDate(interviewYmd) + ', at 2:00 PM ' + zone + '.</p>' +
     '<p>Please join via Zoom using this link: ' + link() + '</p>' +
     '<p>You may use Time Buddy to check the time in your area and ensure you join on time.</p>' +
@@ -179,6 +179,29 @@ function reminderEmail(interviewYmd) {
     '<p>Thank you, and we look forward to seeing you at the interview!</p>' +
     SIGNATURE_HTML;
   return { subject: 'ClubWealth | Pre-reminder invite', body: body };
+}
+
+/** "later today" on the day (the 6 AM reminder), else "tomorrow" or "on" when sent by hand from the inbox earlier. */
+function reminderWhen_(interviewYmd, sentAt) {
+  if (!sentAt) return 'later today';
+  var today = todayPT(sentAt);
+  return today === interviewYmd ? 'later today' : addDays(today, 1) === interviewYmd ? 'tomorrow' : 'on';
+}
+
+/**
+ * The Wednesday reminder as an OLJ message: the same words the OLJ routine sends (routines/olj_confirm.js), which
+ * recognises "friendly reminder about your virtual pre-interview" and so never sends a second one.
+ */
+function oljReminderText(interviewYmd, sentAt) {
+  var zone = isDaylight(interviewYmd) ? 'Pacific Daylight Time (PDT)' : 'Pacific Standard Time (PST)';
+  return [
+    'Hi!',
+    'This is a friendly reminder about your virtual pre-interview ' + reminderWhen_(interviewYmd, sentAt) + ', Wednesday, ' + longDate(interviewYmd) + ', at 2:00 PM ' + zone + '.',
+    'Please join via Zoom using this link: ' + JOIN_LABEL + '\nYou may use Time Buddy to check the time in your area and ensure you join on time.',
+    'Kindly remember to:',
+    '\u2022 Join 10 minutes early (late attendees will not be entertained)\n\u2022 Use your own equipment (working headset, mic, and camera; LAN connection preferred)\n\u2022 Rename yourself with your full name and position (e.g., John Smith_Position)',
+    'Thank you, and we look forward to seeing you at the interview!'
+  ].join('\n\n');
 }
 
 /** Bot reply after someone confirms (signed "- Club Wealth", no person). Only queued when Settings SEND_CONFIRMATION_REPLY = YES. */
@@ -378,7 +401,7 @@ function replyEmail(text) {
 
 /** Which approval email a stage move queues (Miguel, 2026-10-29). Onboarded uses the Hired template. */
 var STATUS_EMAIL_FOR_STAGE = { 'Hired': 'Hired', 'Onboarded': 'Hired', 'Not Fit': 'Rejected', 'Benched': 'Benched' };
-var STATUS_EMAIL_TYPES = ['Hired', 'Rejected', 'Benched'];
+var STATUS_EMAIL_TYPES = ['Hired', 'Rejected', 'Benched', 'Onboarding'];
 
 /**
  * The status email for one applicant. PLACEHOLDER text until Miguel sends the final templates: the subject and body
@@ -389,10 +412,11 @@ function statusEmail(type, firstName) {
   var text = {
     Hired: '[PLACEHOLDER - Hired email. Miguel will send the final text.]',
     Rejected: '[PLACEHOLDER - Rejected email. Miguel will send the final text.]',
-    Benched: '[PLACEHOLDER - Benched email (passed the interview, no job offer yet). Miguel will send the final text.]'
+    Benched: '[PLACEHOLDER - Benched email (passed the interview, no job offer yet). Miguel will send the final text.]',
+    Onboarding: '[PLACEHOLDER - Onboarding email (first steps after the offer). Miguel will send the final text.]'
   }[type];
   if (!text) throw new Error('No status email for ' + type);
-  var subject = { Hired: 'ClubWealth | Welcome to the team', Rejected: 'ClubWealth | Your application', Benched: 'ClubWealth | Your application update' }[type];
+  var subject = { Hired: 'ClubWealth | Welcome to the team', Rejected: 'ClubWealth | Your application', Benched: 'ClubWealth | Your application update', Onboarding: 'ClubWealth | Onboarding' }[type];
   return { subject: subject + ' [PLACEHOLDER]', body: hi + '<p>' + text + '</p>' + SIGNATURE_HTML };
 }
 
@@ -499,7 +523,7 @@ if (typeof module !== 'undefined') {
     statusEmail: statusEmail, STATUS_EMAIL_FOR_STAGE: STATUS_EMAIL_FOR_STAGE, departmentOf: departmentOf, teamActive: teamActive,
     ptParts: ptParts, addDays: addDays, todayPT: todayPT, interviewDateFor: interviewDateFor,
     reinviteDateFor: reinviteDateFor, sessionDateProblem: sessionDateProblem, isDaylight: isDaylight, longDate: longDate,
-    inviteEmail: inviteEmail, reminderEmail: reminderEmail, confirmationEmail: confirmationEmail,
+    inviteEmail: inviteEmail, reminderEmail: reminderEmail, oljReminderText: oljReminderText, confirmationEmail: confirmationEmail,
     normName: normName, nameMatches: nameMatches, parseZoomName: parseZoomName,
     standardPosition: standardPosition, zoomResult: zoomResult, STAGES: STAGES,
     stripQuoted: stripQuoted, typedFullName: typedFullName, classifyReply: classifyReply, confirmsFor: confirmsFor, screenTrack: screenTrack,
