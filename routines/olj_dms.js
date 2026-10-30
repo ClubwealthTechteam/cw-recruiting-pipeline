@@ -10,7 +10,9 @@
  *   applicant's messages for the summary. Archived conversations are skipped.
  * - Never replies, sends, archives, labels, pins or changes anything.
  *
- * Usage: node olj_dms.js --out olj.json [--known known.json] [--max-open 15]
+ * Usage: node olj_dms.js --out olj.json [--known known.json] [--max-open 15] [--since YYYY-MM-DD]
+ *   --since: open only (read) conversations whose last message is on or after that date (Pacific). Older ones are still
+ *   listed, just not opened. Miguel, 2026-10-30: read everything since Oct 24, with --max-open raised to match.
  *   known.json: {"<conversation key>": "<Last Message At from the OLJ tab>", ...}
  * Output never goes to stdout except counts.
  */
@@ -24,6 +26,12 @@ const arg = (name, dflt) => {
 const OUT = arg('--out');
 const KNOWN = arg('--known');
 const MAX_OPEN = Number(arg('--max-open', 15));
+const SINCE = arg('--since', '');
+/** Pacific calendar date of an OLJ timestamp ("2026-10-28T16:47:18.000000Z"), or '' when it can't be read. */
+function ptDay(v) {
+  const d = new Date(String(v || '').replace(/\.(\d{3})\d*/, '.$1'));
+  return isNaN(d.getTime()) ? '' : new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Los_Angeles' }).format(d);
+}
 const pause = (ms) => new Promise((r) => setTimeout(r, ms + Math.random() * 1000));
 
 function stop(reason, extra = {}) {
@@ -97,6 +105,7 @@ function stop(reason, extra = {}) {
   let opened = 0;
   for (const r of rows) {
     if (r.unread || opened >= MAX_OPEN) continue;
+    if (SINCE && ptDay(r.lastMessageAt) < SINCE) continue;
     if (known[r.key] && known[r.key] === r.lastMessageAt) continue;
     await page.goto(`https://v2.onlinejobs.ph/message/conversation/${r.key}`, { waitUntil: 'networkidle' }).catch(() => {});
     await pause(3000);
