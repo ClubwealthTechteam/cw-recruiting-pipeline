@@ -12,6 +12,7 @@ import { NoteForm, EmailForm } from '@/components/SmallForms';
 import DataError from '@/components/DataError';
 import FitBadge from '@/components/FitBadge';
 import InviteButtons from '@/components/InviteButtons';
+import SessionForm from '@/components/SessionForm';
 import Scorecard from '@/components/Scorecard';
 import Inbox from '@/components/Inbox';
 import TagEditor from '@/components/TagEditor';
@@ -97,6 +98,9 @@ export default async function CandidateView({ appId, panel = false }: { appId: s
           {!s(a['Do Not Invite']) && s(a['Invite Hold']) && <p className="hint"><strong>Not invited automatically:</strong> {s(a['Invite Hold'])}. You can still invite by hand if this is a mistake.</p>}
           <InviteButtons id={appId} isOlj={s(a.Source) === 'OLJ'} hasEmail={!!a.Email} emailReady={d.emailSending === 'ON'} blocked={!!s(a['Do Not Invite'])} />
           <p className="hint">Invites are for the next Wednesday at 2:00 PM PT. The applicant moves to Invited once it is sent.</p>
+          <h3>Move to another session</h3>
+          <p className="hint">Now: {a['Interview Date'] ? `Wednesday, ${formatDate(ymd(a['Interview Date']))}, 2:00 PM PT` : 'no session'}. Emails still waiting for the old date are cancelled.</p>
+          <SessionForm ids={[appId]} current={ymd(a['Interview Date'])} />
         </section>
       </div>
       <div className={panel ? '' : 'two-col'}>

@@ -877,3 +877,30 @@ test('Active Team Members: older onboarding sheets are included, and a rehire sh
   assert.equal(ed.Days, String(Math.round((Date.parse('2026-10-29') - Date.parse('2024-01-05')) / 86400000)));
   assert.equal(team.find((m) => m.Email === 'jo@x.com').Department, 'Client Care');
 });
+
+test('move to another session: Wednesday only, old queued emails cancelled, new invite only when asked', () => {
+  const env = invitedEnv({ AUTO_INVITES: 'OFF', EMAIL_SENDING: 'ON' });
+  env.ctx.tick();
+  const id = 'F-2';
+  assert.equal(env.api({ action: 'sendInvite', by: 'Am', id, channel: 'email' }).ok, true);
+  const old = env.rows('Applicants').find((x) => x['Applicant ID'] === id)['Interview Date'];
+  assert.match(env.api({ action: 'moveSession', by: 'Am', ids: [id], date: '2026-11-12' }).error, /not a Wednesday/);
+  assert.match(env.api({ action: 'moveSession', by: 'Am', ids: [id], date: '2026-10-21' }).error, /already started/);
+  const r = env.api({ action: 'moveSession', by: 'Am', ids: [id], date: '2026-11-11' });
+  assert.equal(r.ok, true, r.error);
+  assert.deepEqual([r.data.moved, r.data.cancelled, r.data.invited], [1, 1, 0]);
+  const a = env.rows('Applicants').find((x) => x['Applicant ID'] === id);
+  assert.equal(a['Interview Date'], '2026-11-11');
+  assert.match(a.Notes, /Moved from the October 28, 2026 session to Wednesday November 11, 2026.*No new invite sent/);
+  assert.equal(env.rows('Outbox').find((e) => e['Applicant ID'] === id && ymdOf(e['Interview Date']) === old).Status, 'Cancelled');
+  assert.equal(env.rows('History').pop().Reason, 'Session moved 2026-10-28 → 2026-11-11');
+  // with the box ticked a Re-invite for the new date is queued
+  const r2 = env.api({ action: 'moveSession', by: 'Am', ids: [id], date: '2026-11-18', sendInvite: true });
+  assert.equal(r2.data.invited, 1);
+  const q = env.rows('Outbox').filter((e) => e['Applicant ID'] === id && e.Status === 'Queued');
+  assert.deepEqual(q.map((e) => [e.Type, e['Interview Date']]), [['Re-invite', '2026-11-18']]);
+  assert.match(q[0].Body, /November 18, 2026/);
+  assert.equal(env.api({ action: 'moveSession', by: 'Am', ids: [id], date: '2026-11-18' }).data.skipped.length, 1);
+});
+
+function ymdOf(v) { return String(v || '').slice(0, 10); }

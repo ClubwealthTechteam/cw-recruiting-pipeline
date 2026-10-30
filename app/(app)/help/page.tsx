@@ -21,7 +21,8 @@ const SECTIONS: Section[] = [
       'Pre-interview invites go out by themselves: by email from CareersCW (Club Wealth sign-off and banner) or by OLJ message for OLJ applicants.',
       'Wednesday 12 PM PT cut-off: before it, the invite is for today\'s session; after it, next Wednesday\'s.',
       'Wednesday reminders: by email at 6 AM to confirmed applicants; on OLJ during the morning checks.',
-      'Applicants who say they can\'t attend are re-invited to the following Wednesday.'
+      'Applicants who say they can\'t attend are re-invited to the following Wednesday.',
+      'Move to another session (under Invite on a profile, or for selected applicants in the bulk bar) puts someone on any upcoming Wednesday. Emails still waiting for the old date are cancelled; tick "Send new invite" to email the invite for the new date.'
     ]
   },
   {

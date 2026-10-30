@@ -221,3 +221,11 @@ test('departments from the free-typed position', () => {
   assert.equal(L.departmentOf('Wordpress & Clickfunnel Designer'), 'AI & Tech');
   assert.equal(L.departmentOf(''), 'Other');
 });
+
+test('sessionDateProblem: Wednesdays that have not started only', () => {
+  assert.equal(L.sessionDateProblem('2026-11-11', pdt('2026-10-29T22:00:00')), '');
+  assert.match(L.sessionDateProblem('2026-11-12', pdt('2026-10-29T22:00:00')), /not a Wednesday/);
+  assert.equal(L.sessionDateProblem('2026-11-04', pst('2026-11-04T13:59:00')), '');
+  assert.match(L.sessionDateProblem('2026-11-04', pst('2026-11-04T14:00:00')), /already started/);
+  assert.match(L.sessionDateProblem('', pdt('2026-10-29T22:00:00')), /Pick/);
+});

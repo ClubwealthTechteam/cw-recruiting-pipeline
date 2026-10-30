@@ -84,6 +84,20 @@ function reinviteDateFor(originalYmd, now) {
   return next;
 }
 
+/**
+ * Why a session date cannot be used for "Move to another session", or '' when it can (Miguel, 2026-10-30).
+ * It must be a Wednesday, and not a session that has already started (2:00 PM PT).
+ */
+function sessionDateProblem(ymdStr, now) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(ymdStr || ''))) return 'Pick a session date';
+  var p = ymdStr.split('-');
+  if (new Date(Date.UTC(+p[0], +p[1] - 1, +p[2])).getUTCDay() !== 3) return longDate(ymdStr) + ' is not a Wednesday';
+  var t = ptParts(now || new Date());
+  var today = ymd(t.y, t.m, t.d);
+  if (ymdStr < today || (ymdStr === today && t.hh >= 14)) return 'The ' + longDate(ymdStr) + ' session has already started';
+  return '';
+}
+
 /** Is 2:00 PM Pacific on this date in daylight time? Pacific DST: 2nd Sunday of March to 1st Sunday of November. */
 function isDaylight(ymdStr) {
   var p = ymdStr.split('-');
@@ -484,7 +498,7 @@ if (typeof module !== 'undefined') {
   module.exports = {
     statusEmail: statusEmail, STATUS_EMAIL_FOR_STAGE: STATUS_EMAIL_FOR_STAGE, departmentOf: departmentOf, teamActive: teamActive,
     ptParts: ptParts, addDays: addDays, todayPT: todayPT, interviewDateFor: interviewDateFor,
-    reinviteDateFor: reinviteDateFor, isDaylight: isDaylight, longDate: longDate,
+    reinviteDateFor: reinviteDateFor, sessionDateProblem: sessionDateProblem, isDaylight: isDaylight, longDate: longDate,
     inviteEmail: inviteEmail, reminderEmail: reminderEmail, confirmationEmail: confirmationEmail,
     normName: normName, nameMatches: nameMatches, parseZoomName: parseZoomName,
     standardPosition: standardPosition, zoomResult: zoomResult, STAGES: STAGES,

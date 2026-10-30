@@ -1697,6 +1697,56 @@ function api_(req) {
       update_(apps, ai, { 'Interview Date': session });
       return { queued: true, session: session, channel: req.channel };
     }
+    if (req.action === 'moveSession') {
+      // "Move to another session": puts applicants on a different Wednesday. Queued emails for the old date that
+      // have not gone out are cancelled. A new invite for the new date is queued only when sendInvite is ticked.
+      var newDate = String(req.date || '');
+      var bad = sessionDateProblem(newDate, new Date());
+      if (bad) throw new Error(bad + '.');
+      var outM = table_(SH.OUTBOX);
+      var moved = 0, invitedM = 0, cancelledM = 0, skipped = [];
+      (req.ids || []).forEach(function (id) {
+        var am = byId[id];
+        if (!am) return;
+        if (am.Stage === 'Banned') { skipped.push(id + ' (Banned)'); return; }
+        var oldDate = ymdOf_(am['Interview Date']);
+        if (oldDate === newDate) { skipped.push(id + ' (already on that date)'); return; }
+        outM.rows.forEach(function (e) {
+          if (e['Applicant ID'] !== id || e.Status !== 'Queued' || ymdOf_(e['Interview Date']) !== oldDate) return;
+          if (['Invite', 'Re-invite', 'OLJ Invite', 'Reminder', 'Confirmation'].indexOf(e.Type) === -1) return;
+          update_(outM, e, { Status: 'Cancelled', Error: 'Moved to ' + newDate + ' by ' + req.by });
+          cancelledM++;
+        });
+        var said = 'Moved from ' + (oldDate ? 'the ' + longDate(oldDate) : 'no') + ' session to Wednesday ' + longDate(newDate) + ', 2:00 PM PT';
+        var mail = '';
+        if (req.sendInvite && am.Source === 'OLJ' && am['Source Ref']) {
+          append_(outM, {
+            'Email ID': id_('E'), 'Applicant ID': id, Type: 'OLJ Invite', To: 'OLJ:' + am['Source Ref'],
+            Subject: '(OnlineJobs.ph message)', Body: '', 'Interview Date': newDate, 'Queued At': nowStr_(), Status: 'Queued',
+            'Queued By': req.by
+          });
+          mail = 'OLJ invite queued';
+          invitedM++;
+        } else if (req.sendInvite) {
+          if (st2.get('EMAIL_SENDING') !== 'ON') mail = 'no invite: email sending is off';
+          else if (!am.Email) mail = 'no invite: no email address';
+          else if (doNotInvite_(st2, am)) mail = 'no invite: ' + doNotInvite_(st2, am);
+          else if (queueEmail_(st2, am, 'Re-invite', inviteEmail(newDate, new Date()), newDate, req.by)) { mail = 'invite queued'; invitedM++; }
+        }
+        update_(apps, am, {
+          'Interview Date': newDate, 'Reminder Sent At': '',
+          Notes: (am.Notes ? am.Notes + '\n' : '') + nowStr_() + ' ' + req.by + ': ' + said + '. ' +
+            (mail ? mail.charAt(0).toUpperCase() + mail.slice(1) : 'No new invite sent') + '.' +
+            (req.reason ? ' ' + String(req.reason).slice(0, 300) : '')
+        });
+        appendTo_(SH.HISTORY, {
+          'Timestamp (PT)': nowStr_(), 'Applicant ID': id, 'From Stage': am.Stage, 'To Stage': am.Stage,
+          'Changed By': req.by, Reason: 'Session moved ' + (oldDate || '(none)') + ' \u2192 ' + newDate
+        });
+        moved++;
+      });
+      return { moved: moved, invited: invitedM, cancelled: cancelledM, skipped: skipped, date: newDate };
+    }
     if (req.action === 'saveScore') {
       var as = byId[req.id];
       if (!as) throw new Error('not found');

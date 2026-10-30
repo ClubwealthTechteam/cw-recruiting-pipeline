@@ -83,6 +83,14 @@ export function upcomingWednesday(now = new Date()): string {
   return addDays(t, (3 - dow + 7) % 7);
 }
 
+/** The next n Wednesday sessions (Pacific) that have not started yet (2:00 PM PT), for "Move to another session". */
+export function upcomingSessions(n = 8, now = new Date()): string[] {
+  let first = upcomingWednesday(now);
+  const hour = Number(new Intl.DateTimeFormat('en-US', { timeZone: 'America/Los_Angeles', hour: 'numeric', hourCycle: 'h23' }).format(now));
+  if (first === todayPT(now) && hour >= 14) first = addDays(first, 7);
+  return Array.from({ length: n }, (_, i) => addDays(first, 7 * i));
+}
+
 export function formatDate(d: string): string {
   if (!d) return '';
   const [y, m, day] = d.slice(0, 10).split('-').map(Number);
