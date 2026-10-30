@@ -1,4 +1,4 @@
-# Routine: Recruiting – OnlineJobs.ph DMs (4 times a day)
+# Routine: Recruiting – OnlineJobs.ph DMs: send queued + read inbox (4 times a day)
 
 **Schedule:** `CRON_TZ=America/Los_Angeles 17 7,10,13,16 * * *` · **Environment:** Default (`OLJ_EMAIL`, `OLJ_PASSWORD`) · **Connectors:** Google Sheets
 
@@ -22,3 +22,13 @@ Unread conversations are never opened, so the CRM shows them as "Unread on OLJ" 
 Answers typed in the CRM are Outbox rows Type **OLJ Message** (Status Queued, Body = the text). The next OLJ sender run
 passes them to `olj_send.js` as `{ emailId, key, type: "OLJ Message", text }`; they are sent exactly as typed, once,
 then marked Sent. They are never emailed.
+
+## Sending queued OLJ messages (from 2026-10-30)
+Each run first sends what Recruitment queued in the CRM (Outbox Type **OLJ Invite** or **OLJ Message**, Status Queued),
+at most 10 per run, with `olj_send.js`, then reads the inbox. Invites and reminders for a session that has already
+started (Wednesday 2:00 PM PT) are cancelled, not sent. Results go back to Outbox columns I:K: Sent (with Sent At),
+Cancelled (already in the conversation), or Failed with the reason (shown in Needs Attention). Anything not reached
+stays Queued for the next run. So an OLJ message typed at 9 AM goes out at 10:17 AM.
+
+The reader also fills the **Thread** column: rows with an empty Thread are left out of `known.json`, so their
+(read) conversations are opened again, 15 per run, until every row has its messages.

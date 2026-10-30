@@ -2,7 +2,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { openInbox } from './InboxPanel';
+import { openInbox, INBOX_STATE_EVENT, type InboxChannel } from './InboxPanel';
 
 // Simple line icons (24×24 paths) so the sidebar can shrink to icons only.
 const ICON: Record<string, string> = {
@@ -36,6 +36,12 @@ export default function NavLinks({ open, approvals = 0 }: { open: number; approv
   const path = usePathname();
   const [mini, setMini] = useState(false);
   const [inboxes, setInboxes] = useState(true);
+  const [openBox, setOpenBox] = useState<InboxChannel | null>(null);
+  useEffect(() => {
+    const on = (e: Event) => setOpenBox((e as CustomEvent<InboxChannel | null>).detail);
+    window.addEventListener(INBOX_STATE_EVENT, on);
+    return () => window.removeEventListener(INBOX_STATE_EVENT, on);
+  }, []);
   useEffect(() => {
     try { setMini(localStorage.getItem(KEY) === 'mini'); } catch { /* private window: keep it wide */ }
   }, []);
@@ -54,7 +60,7 @@ export default function NavLinks({ open, approvals = 0 }: { open: number; approv
         {LINKS.map((l) => {
           const active = l.href === '/' ? path === '/' : path.startsWith(l.href);
           const link = (
-            <Link key={l.href} href={l.href} prefetch className={active ? 'active' : ''} title={l.label}>
+            <Link key={l.href} href={l.href} prefetch className={active && !openBox ? 'active' : ''} title={l.label}>
               <svg className="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d={ICON[l.href]} /></svg>
               <span className="nav-label">{l.label}</span>
               {l.href === '/attention' && open > 0 && <span className="count">{open}</span>}
@@ -70,7 +76,7 @@ export default function NavLinks({ open, approvals = 0 }: { open: number; approv
                 <button type="button" className="nav-caret" onClick={() => setInboxes((v) => !v)} aria-expanded={inboxes} title={inboxes ? 'Hide inboxes' : 'Show inboxes'}>{inboxes ? '▾' : '▸'}</button>
               </div>
               {inboxes && (['olj', 'email'] as const).map((c) => (
-                <button key={c} type="button" className="nav-sub" onClick={() => openInbox(c)} title={c === 'olj' ? 'OLJ Inbox' : 'Email Inbox'}>
+                <button key={c} type="button" className={`nav-sub${openBox === c ? ' active' : ''}`} aria-current={openBox === c ? 'true' : undefined} onClick={() => openInbox(c)} title={c === 'olj' ? 'OLJ Inbox' : 'Email Inbox'}>
                   <svg className="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d={INBOX_ICON} /></svg>
                   <span className="nav-label">{c === 'olj' ? 'OLJ Inbox' : 'Email Inbox'}</span>
                 </button>
