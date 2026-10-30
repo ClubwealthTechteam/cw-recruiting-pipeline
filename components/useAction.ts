@@ -20,6 +20,10 @@ function doneMessage(body: Record<string, unknown>): string {
     case 'addApplicant': return `${body.firstName} ${body.lastName} added ✓`;
     case 'resolveFlag': return 'Marked resolved ✓';
     case 'sendInvite': return 'Invite queued ✓';
+    case 'moveSession': {
+      const n = Array.isArray(body.ids) ? body.ids.length : 1;
+      return `${n > 1 ? `${n} applicants moved` : 'Moved'} to the ${body.date} session${body.sendInvite ? ', new invite queued' : ''} ✓`;
+    }
     case 'saveScore': return 'Scorecard saved ✓';
     case 'setTags': return 'Tags saved ✓';
     case 'saveView': return 'View saved ✓';
