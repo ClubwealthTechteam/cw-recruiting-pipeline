@@ -365,3 +365,6 @@ html[data-sidebar="mini"] .inbox-pop { left: 80px; }
 .inbox-filters button.on { color: var(--ink); border-bottom-color: #2d6cdf; font-weight: 600; }
 .inbox-filters .count { font-size: 11px; background: var(--grey-bg); border-radius: 8px; padding: 0 6px; margin-left: 2px; }
 .inbox-item .dot.hollow { background: none; border: 1.5px solid #2d6cdf; }
+.inbox-backdrop { position: fixed; top: 0; right: 0; bottom: 0; left: 184px; z-index: 39; background: rgba(16, 30, 54, .45); }
+html[data-sidebar="mini"] .inbox-backdrop { left: 56px; }
+.sidebar .nav-sub.active { background: var(--navy-2); color: #fff; box-shadow: inset 3px 0 0 #6ea0e8; font-weight: 600; }

@@ -8,6 +8,8 @@ import type { InboxConversation, ThreadItem, Row } from '@/lib/sheet';
 
 export type InboxChannel = 'olj' | 'email';
 const EVENT = 'cw-open-inbox';
+/** Fired with the open channel (or null when closed), so the sidebar can show which inbox is open. */
+export const INBOX_STATE_EVENT = 'cw-inbox-state';
 
 /** Opens the floating inbox from anywhere (the Dashboard menu in the sidebar). */
 export function openInbox(channel: InboxChannel) {
@@ -81,6 +83,10 @@ export default function InboxPanel({ emailReady }: { emailReady: boolean }) {
     return () => { window.removeEventListener(EVENT, open); window.removeEventListener('keydown', esc); };
   }, [loadList]);
 
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent(INBOX_STATE_EVENT, { detail: channel }));
+  }, [channel]);
+
   if (!channel) return null;
   const needle = q.trim().toLowerCase();
   const shown = (list || []).filter((c) => matches(filter, c, channel, seen) &&
@@ -88,7 +94,10 @@ export default function InboxPanel({ emailReady }: { emailReady: boolean }) {
   const open = (list || []).filter((c) => c.needsReply).length;
 
   return (
-    <div className="inbox-pop" role="dialog" aria-label={TITLE[channel]}>
+    <>
+    {/* dims the page, not the sidebar; clicking it closes the inbox */}
+    <div className="inbox-backdrop" onClick={() => setChannel(null)} aria-hidden="true" />
+    <div className="inbox-pop" role="dialog" aria-modal="true" aria-label={TITLE[channel]}>
       <header className="inbox-pop-head">
         <div className="seg">
           {(['olj', 'email'] as InboxChannel[]).map((c) => (
@@ -136,6 +145,7 @@ export default function InboxPanel({ emailReady }: { emailReady: boolean }) {
         </section>
       </div>
     </div>
+    </>
   );
 }
 
