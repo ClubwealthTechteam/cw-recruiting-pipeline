@@ -1039,7 +1039,7 @@ function setup() {
   ensureTab_(SH.TEAM_UPDATES, TEAM_UPDATE_COLS);
   var ap = sheet_(SH.APPLICANTS);
   var aph = ap.getRange(1, 1, 1, ap.getLastColumn()).getValues()[0];
-  ['Invite Hold', 'Minutes Early', 'Arrival', 'Tags'].forEach(function (h) {
+  ['Invite Hold', 'Minutes Early', 'Arrival', 'Tags', 'Resume Experience'].forEach(function (h) {
     if (aph.indexOf(h) === -1) { ap.getRange(1, aph.length + 1).setValue(h).setFontWeight('bold'); aph.push(h); }
   });
   var oj = sheet_(SH.OLJ);
@@ -1781,6 +1781,42 @@ function api_(req) {
       } else throw new Error('bad channel');
       update_(apps, ai, { 'Interview Date': session });
       return { queued: true, session: session, channel: req.channel };
+    }
+    if (req.action === 'reinviteNoShows') {
+      // "Re-invite no-shows" on This Week's Session (Miguel, 2026-11-01): everyone from one session who is No Show or
+      // No Confirmation goes to Open for re-invite on the chosen Wednesday and gets the invite for it (email, or an OLJ
+      // invite for OLJ applicants). Works even while AUTO_INVITES is OFF, because a person clicked it.
+      var fromDay = String(req.session || '');
+      var toDay = String(req.date || '');
+      var badTo = sessionDateProblem(toDay, new Date());
+      if (badTo) throw new Error(badTo + '.');
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(fromDay) || fromDay >= toDay) throw new Error('Pick a later session than ' + fromDay + '.');
+      var wanted = ['No Show', 'No Confirmation'];
+      var outN = table_(SH.OUTBOX);
+      var res = { reinvited: 0, olj: 0, skipped: [] };
+      apps.rows.filter(function (x) { return ymdOf_(x['Interview Date']) === fromDay && wanted.indexOf(x.Stage) !== -1 && x.Source !== 'Test'; })
+        .forEach(function (an) {
+          var id = an['Applicant ID'];
+          var why = doNotInvite_(st2, an);
+          if (why) { res.skipped.push(id + ' (do not invite)'); return; }
+          var isOlj = an.Source === 'OLJ' && an['Source Ref'];
+          if (!isOlj && !an.Email) { res.skipped.push(id + ' (no email)'); return; }
+          if (!isOlj && st2.get('EMAIL_SENDING') !== 'ON') { res.skipped.push(id + ' (email sending is off)'); return; }
+          var reason = (an.Stage === 'No Show' ? 'Confirmed but did not join' : 'Did not confirm or join') + ' on ' + fromDay + '; re-invited to ' + toDay;
+          setStage_(apps, an, 'Open for re-invite', req.by, reason);
+          update_(apps, an, { 'Interview Date': toDay, 'Reminder Sent At': '', 'Re-invite Reason': reason });
+          if (isOlj) {
+            append_(outN, {
+              'Email ID': id_('E'), 'Applicant ID': id, Type: 'OLJ Invite', To: 'OLJ:' + an['Source Ref'],
+              Subject: '(OnlineJobs.ph message)', Body: '', 'Interview Date': toDay, 'Queued At': nowStr_(), Status: 'Queued', 'Queued By': req.by
+            });
+            res.olj++;
+          } else {
+            queueEmail_(st2, an, 'Re-invite', inviteEmail(toDay, new Date()), toDay, req.by);
+            res.reinvited++;
+          }
+        });
+      return res;
     }
     if (req.action === 'moveSession') {
       // "Move to another session": puts applicants on a different Wednesday. Queued emails for the old date that

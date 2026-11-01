@@ -74,6 +74,7 @@ export default async function CandidateView({ appId, panel = false }: { appId: s
       {/* a plain link (full page load), so it is not caught by the side panel again */}
       {panel && <p><a href={`/candidates/${encodeURIComponent(appId)}`} className="small">Open full page →</a></p>}
       {mail.filter((e) => e.status === 'Pending approval').map((e) => <PendingStatusEmail key={e.id} e={e} />)}
+      {/^⚠/m.test(s(a['Resume Experience'])) && <div className="panel warn"><strong>Check experience:</strong> {s(a['Resume Experience']).split('\n').filter((l) => l.startsWith('⚠')).map((l) => l.replace(/^⚠\s*/, '')).join(' ')} Ask about it in the interview.</div>}
       {flags.length > 0 && <div className="panel warn">{flags.length} open item{flags.length > 1 ? 's' : ''} in <Link href="/attention">Needs Attention</Link> for this applicant.</div>}
       <div className={panel ? '' : 'two-col'}>
         <section className="panel">
@@ -118,6 +119,7 @@ export default async function CandidateView({ appId, panel = false }: { appId: s
             {LINKS.map((f) => { const u = safeUrl(a[f]); return u ? <Fragment key={f}><dt>{f.replace(' Link', '')}</dt><dd><a href={u} target="_blank" rel="noopener noreferrer">Open</a></dd></Fragment> : null; })}
           </dl>
           {a['Experience Overview'] && (<><h3>Experience overview</h3><p className="prewrap">{s(a['Experience Overview'])}</p></>)}
+          {a['Resume Experience'] && (<><h3>Experience (from resume)</h3><p className="prewrap">{s(a['Resume Experience'])}</p><p className="hint">Read from the resume by the screening routine. Check the resume for anything that looks off.</p></>)}
           {s(a.Source) === 'OLJ' && (
             <>
               <h3>OnlineJobs.ph</h3>
