@@ -974,3 +974,28 @@ test('an OLJ invite the sender held back is not queued again until the applicant
   env.ctx.tick();
   assert.equal(olj().filter((e) => e.Status === 'Queued').length, 1);
 });
+
+test('re-invite no-shows: No Show and No Confirmation from one session move to the new date with a re-invite', () => {
+  const env = invitedEnv({ EMAIL_SENDING: 'ON', AUTO_INVITES: 'OFF' });
+  env.ctx.tick();
+  const A = env.sheets.Applicants.data, h = A[0];
+  const set = (id, k, v) => { A.find((r) => r[0] === id)[h.indexOf(k)] = v; };
+  ['F-2', 'F-3', 'F-4'].forEach((id) => set(id, 'Interview Date', '2026-10-21'));
+  set('F-2', 'Stage', 'No Show'); set('F-3', 'Stage', 'No Confirmation'); set('F-4', 'Stage', 'Interview Completed');
+  assert.match(env.api({ action: 'reinviteNoShows', by: 'Am', session: '2026-10-21', date: '2026-10-29' }).error, /not a Wednesday/);
+  const r = env.api({ action: 'reinviteNoShows', by: 'Am', session: '2026-10-21', date: '2026-11-04' });
+  assert.equal(r.ok, true, r.error);
+  assert.equal(r.data.reinvited, 2);
+  const rows = env.rows('Applicants');
+  for (const id of ['F-2', 'F-3']) {
+    const a = rows.find((x) => x['Applicant ID'] === id);
+    assert.equal(a.Stage, 'Open for re-invite');
+    assert.equal(a['Interview Date'], '2026-11-04');
+  }
+  assert.equal(rows.find((x) => x['Applicant ID'] === 'F-4').Stage, 'Interview Completed', 'completed people are left alone');
+  const q = env.rows('Outbox').filter((e) => e.Type === 'Re-invite' && e.Status === 'Queued');
+  assert.deepEqual(q.map((e) => e['Applicant ID']).sort(), ['F-2', 'F-3']);
+  assert.match(q[0].Body, /November 4, 2026/);
+  // running it again finds nobody (they are no longer No Show / No Confirmation)
+  assert.equal(env.api({ action: 'reinviteNoShows', by: 'Am', session: '2026-10-21', date: '2026-11-04' }).data.reinvited, 0);
+});

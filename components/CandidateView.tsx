@@ -74,6 +74,7 @@ export default async function CandidateView({ appId, panel = false }: { appId: s
       {/* a plain link (full page load), so it is not caught by the side panel again */}
       {panel && <p><a href={`/candidates/${encodeURIComponent(appId)}`} className="small">Open full page →</a></p>}
       {mail.filter((e) => e.status === 'Pending approval').map((e) => <PendingStatusEmail key={e.id} e={e} />)}
+      {/^⚠/m.test(s(a['Resume Experience'])) && <div className="panel warn"><strong>Check experience:</strong> {s(a['Resume Experience']).split('\n').filter((l) => l.startsWith('⚠')).map((l) => l.replace(/^⚠\s*/, '')).join(' ')} Ask about it in the interview.</div>}
       {flags.length > 0 && <div className="panel warn">{flags.length} open item{flags.length > 1 ? 's' : ''} in <Link href="/attention">Needs Attention</Link> for this applicant.</div>}
       <div className={panel ? '' : 'two-col'}>
         <section className="panel">

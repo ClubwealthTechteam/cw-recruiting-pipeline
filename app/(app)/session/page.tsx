@@ -4,6 +4,9 @@ import { s, fullName, ymd, formatDate, upcomingWednesday, isTest, zoomLive } fro
 import ZoomBadge from '@/components/ZoomBadge';
 import StageBadge from '@/components/StageBadge';
 import DataError from '@/components/DataError';
+import ReinviteNoShows from '@/components/ReinviteNoShows';
+import NonNegotiables from '@/components/NonNegotiables';
+import { todayPT } from '@/lib/pipeline';
 
 export default async function Session({ searchParams }: { searchParams: Promise<{ date?: string }> }) {
   const p = await searchParams;
@@ -19,6 +22,11 @@ export default async function Session({ searchParams }: { searchParams: Promise<
   const prev = new Date(`${date}T12:00:00Z`); prev.setUTCDate(prev.getUTCDate() - 7);
   const next = new Date(`${date}T12:00:00Z`); next.setUTCDate(next.getUTCDate() + 7);
   const live = zoomLive(d.zoom);
+  const isToday = date === todayPT();
+  const inNow = roster.filter((a) => live.get(s(a['Applicant ID']))?.inNow);
+  const leftZoom = roster.filter((a) => { const z = live.get(s(a['Applicant ID'])); return z && !z.inNow; });
+  const notYet = roster.filter((a) => !live.get(s(a['Applicant ID'])) && (a['Confirmed At'] || s(a.Stage) === 'Confirmed'));
+  const noShows = counted.filter((a) => ['No Show', 'No Confirmation'].includes(s(a.Stage))).length;
   const unmatchedZoom = d.zoom.filter((z) => ymd(z['Interview Date']) === date && !z['Matched Applicant ID']);
 
   return (
@@ -34,6 +42,18 @@ export default async function Session({ searchParams }: { searchParams: Promise<
         <div className="tile"><div className="tile-label">Confirmed</div><div className="tile-value">{confirmed}</div></div>
         <div className="tile"><div className="tile-label">Reminder sent</div><div className="tile-value">{reminded}</div><div className="tile-note">Wednesday 6:00 AM PT</div></div>
       </section>
+      {isToday && live.size > 0 && (
+        <section className="panel live-zoom">
+          <h2><span className="dot-live" /> Live in Zoom <span className="muted small">updates every few minutes during the session</span></h2>
+          <div className="live-cols">
+            <div><h3>In Zoom now ({inNow.length})</h3><ul>{inNow.map((a) => <li key={s(a['Applicant ID'])}><Link href={`/candidates/${encodeURIComponent(s(a['Applicant ID']))}`}>{fullName(a)}</Link> <span className="muted small">{live.get(s(a['Applicant ID']))?.minutes} min</span></li>)}</ul></div>
+            <div><h3>Left Zoom ({leftZoom.length})</h3><ul>{leftZoom.map((a) => <li key={s(a['Applicant ID'])}><Link href={`/candidates/${encodeURIComponent(s(a['Applicant ID']))}`}>{fullName(a)}</Link> <ZoomBadge z={live.get(s(a['Applicant ID']))} /></li>)}</ul></div>
+            <div><h3>Confirmed, not joined yet ({notYet.length})</h3><ul>{notYet.map((a) => <li key={s(a['Applicant ID'])}><Link href={`/candidates/${encodeURIComponent(s(a['Applicant ID']))}`}>{fullName(a)}</Link></li>)}</ul></div>
+          </div>
+        </section>
+      )}
+      <NonNegotiables open={isToday} />
+      {noShows > 0 && <section className="panel"><h2>After the session</h2><ReinviteNoShows session={date} count={noShows} /></section>}
       <section className="panel">
         <table className="table">
           <thead><tr><th>Name</th><th>Position</th><th>Stage</th><th>Confirmed</th><th>Reminder</th><th>Arrival</th><th>Zoom minutes</th></tr></thead>
