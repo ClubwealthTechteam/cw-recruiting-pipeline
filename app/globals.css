@@ -570,7 +570,7 @@ input:focus, select:focus, textarea:focus { outline: 3px solid #dbe7fb; border-c
 .tour { position: fixed; inset: 0; z-index: 140; pointer-events: none; }
 .tour-dim { position: fixed; background: rgba(15,23,42,.45); pointer-events: auto; }
 .tour-ring { position: fixed; border-radius: 10px; box-shadow: 0 0 0 3px #4d8ef0, 0 0 0 9px rgba(77,142,240,.25); pointer-events: none; transition: all .2s ease; }
-.tour-card { position: fixed; background: #fff; border-radius: 14px; box-shadow: 0 18px 50px rgba(16,24,40,.3); padding: 16px 18px 14px; pointer-events: auto; }
+.tour-card { position: fixed; opacity: 0; visibility: hidden; transition: opacity .18s ease; background: #fff; border-radius: 14px; box-shadow: 0 18px 50px rgba(16,24,40,.3); padding: 16px 18px 14px; pointer-events: auto; }
 .tour-meta { font-size: 11.5px; color: var(--muted); font-weight: 500; }
 .tour-title { font-size: 16px; font-weight: 600; margin: 4px 0 6px; letter-spacing: -.01em; }
 .tour-body { margin: 0 0 12px; line-height: 1.55; color: #2b3342; }
@@ -583,3 +583,4 @@ input:focus, select:focus, textarea:focus { outline: 3px solid #dbe7fb; border-c
 .tutorial { border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; display: flex; flex-direction: column; gap: 6px; background: #fff; }
 .tutorial b { font-size: 14px; }
 .tutorial .btn { align-self: flex-start; margin-top: auto; }
+.tour-card.in { opacity: 1; visibility: visible; }

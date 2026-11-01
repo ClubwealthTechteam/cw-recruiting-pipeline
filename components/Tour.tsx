@@ -18,6 +18,8 @@ export default function Tour({ user }: { user: string }) {
   const path = usePathname();
   const [st, setSt] = useState<State | null>(null);
   const [rect, setRect] = useState<DOMRect | null>(null);
+  // false while the next step's part is being found and scrolled to: the card stays hidden instead of showing in the middle
+  const [ready, setReady] = useState(false);
   const [welcome, setWelcome] = useState(false);
 
   useEffect(() => {
@@ -31,7 +33,7 @@ export default function Tour({ user }: { user: string }) {
   const tour = st ? TOURS.find((t) => t.id === st.id) : null;
   const step: TourStep | undefined = tour?.steps[st?.step ?? 0];
 
-  const stop = useCallback(() => { save(null); setSt(null); setRect(null); }, []);
+  const stop = useCallback(() => { save(null); setSt(null); setRect(null); setReady(false); }, []);
   const go = useCallback((delta: number) => {
     if (!st || !tour) return;
     const n = st.step + delta;
@@ -44,7 +46,7 @@ export default function Tour({ user }: { user: string }) {
       if (a) first = a.getAttribute('href') || undefined;
     }
     const s = { ...st, step: n, first };
-    save(s); setSt(s); setRect(null);
+    save(s); setSt(s); setReady(false); // keep the old highlight until the new one is found
   }, [st, tour, stop]);
 
   // Open the step's page (a full load, so the profile opens as a page and not in the side panel)
@@ -59,14 +61,19 @@ export default function Tour({ user }: { user: string }) {
   // Find and follow the highlighted element; skip optional steps whose part is not on the page
   useLayoutEffect(() => {
     if (!step) return;
-    if (!step.target) { setRect(null); return; }
+    setReady(false);
+    if (!step.target) { setRect(null); setReady(true); return; }
     let tries = 0;
     let el: HTMLElement | null = null;
     const find = () => {
       el = document.querySelector<HTMLElement>(`[data-tour="${step.target}"]`);
-      if (el) { el.scrollIntoView({ block: 'center', behavior: 'smooth' }); setTimeout(() => el && setRect(el.getBoundingClientRect()), 350); return; }
+      if (el) {
+        el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        timer = setTimeout(() => { if (el) { setRect(el.getBoundingClientRect()); setReady(true); } }, 380);
+        return;
+      }
       if (++tries < 15) { timer = setTimeout(find, 200); return; }
-      if (step.optional) go(1); else setRect(null);
+      if (step.optional) go(1); else { setRect(null); setReady(true); }
     };
     let timer = setTimeout(find, 150);
     const follow = () => { if (el) setRect(el.getBoundingClientRect()); };
@@ -123,7 +130,7 @@ export default function Tour({ user }: { user: string }) {
           <div className="tour-ring" style={r} />
         </>
       ) : <div className="tour-dim" style={{ inset: 0 }} />}
-      <div className="tour-card" style={{ ...card, width: W }} role="dialog" aria-label={step.title}>
+      <div className={`tour-card${ready ? ' in' : ''}`} style={{ ...card, width: W }} role="dialog" aria-label={step.title}>
         <div className="tour-meta">{tour.title} · Step {st.step + 1} of {tour.steps.length}</div>
         <div className="tour-title">{step.title}</div>
         <p className="tour-body">{step.body}</p>
