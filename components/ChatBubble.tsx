@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from 'react';
 type Msg = { role: 'you' | 'assistant' | 'note'; text: string; id?: string };
 
 const KEY = 'cwrp-chat';
+/** Other parts of the page (the Ask bar on Home) open the assistant with a question: dispatch this with detail = the question. */
+export const ASK_EVENT = 'cw-ask';
 
 /** Read-only assistant. Each question starts a Claude routine; answers take about a minute. */
 export default function ChatBubble() {
@@ -40,11 +42,22 @@ export default function ChatBubble() {
     return () => clearInterval(timer);
   }, [waiting]);
 
+  useEffect(() => {
+    const on = (e: Event) => { const q = String((e as CustomEvent<string>).detail || '').trim(); setOpen(true); if (q) void send(q); };
+    window.addEventListener(ASK_EVENT, on);
+    return () => window.removeEventListener(ASK_EVENT, on);
+  });
+
   async function ask(e: React.FormEvent) {
     e.preventDefault();
     const q = text.trim();
     if (!q || waiting) return;
     setText('');
+    await send(q);
+  }
+
+  async function send(q: string) {
+    if (waiting) return;
     setMsgs((m) => [...m, { role: 'you', text: q }]);
     try {
       const r = await fetch('/api/chat/ask', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ question: q }) }).then((x) => x.json());
@@ -75,7 +88,7 @@ export default function ChatBubble() {
           </form>
         </div>
       )}
-      <button className="chat-button" onClick={() => setOpen((o) => !o)} aria-label="Open pipeline assistant">{open ? '×' : 'Ask'}</button>
+      <button className="chat-button" data-tour="ask" onClick={() => setOpen((o) => !o)} aria-label="Open pipeline assistant">{open ? '×' : 'Ask'}</button>
     </div>
   );
 }

@@ -1,14 +1,15 @@
 'use client';
 import { useState } from 'react';
 import { useAction } from './useAction';
+import SendPreview, { type PreviewRequest } from './SendPreview';
 
 /** "Send invite via OLJ" / "Send invite via Email" for the applicant's next Wednesday session. */
 export default function InviteButtons({ id, isOlj, hasEmail, emailReady, blocked, compact = false }: { id: string; isOlj: boolean; hasEmail: boolean; emailReady: boolean; blocked: boolean; compact?: boolean }) {
   const { run, busy, error } = useAction();
   const [done, setDone] = useState('');
+  const [preview, setPreview] = useState<PreviewRequest | null>(null);
   async function send(channel: 'olj' | 'email') {
-    const label = channel === 'olj' ? 'OnlineJobs.ph' : 'email';
-    if (!confirm(`Send the pre-interview invite via ${label}?`)) return;
+    setPreview(null);
     const r = await run({ action: 'sendInvite', id, channel });
     if (r) {
       const day = new Date(`${r.session}T12:00:00Z`).toLocaleDateString('en-US', { timeZone: 'UTC', month: 'long', day: 'numeric' });
@@ -18,9 +19,10 @@ export default function InviteButtons({ id, isOlj, hasEmail, emailReady, blocked
     }
   }
   return (
-    <div className="invite-actions">
-      {(!compact || isOlj) && <button className="btn primary" disabled={busy || blocked || !isOlj} onClick={() => send('olj')} title={isOlj ? '' : 'Only for applicants who came from OnlineJobs.ph'}>{compact ? 'Invite via OLJ' : 'Send invite via OLJ'}</button>}
-      <button className="btn" disabled={busy || blocked || !hasEmail || !emailReady} onClick={() => send('email')}
+    <div className="invite-actions" data-tour="invite">
+      {preview && <SendPreview req={preview} title={`Pre-interview invite via ${preview.channel === 'olj' ? 'OnlineJobs.ph' : 'email'}`} onClose={() => setPreview(null)} onSend={() => send(preview.channel as 'olj' | 'email')} />}
+      {(!compact || isOlj) && <button className="btn primary" disabled={busy || blocked || !isOlj} onClick={() => setPreview({ kind: 'invite', id, channel: 'olj' })} title={isOlj ? '' : 'Only for applicants who came from OnlineJobs.ph'}>{compact ? 'Invite via OLJ' : 'Send invite via OLJ'}</button>}
+      <button className="btn" disabled={busy || blocked || !hasEmail || !emailReady} onClick={() => setPreview({ kind: 'invite', id, channel: 'email' })}
         title={!emailReady ? 'Email is not connected yet (CareersCW in Zapier)' : !hasEmail ? 'No email address' : ''}>{compact ? 'Invite via Email' : 'Send invite via Email'}</button>
       {!emailReady && !compact && <span className="hint">Email not connected yet.</span>}
       {done && <span className="hint">{done}</span>}

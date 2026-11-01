@@ -54,6 +54,7 @@ export default async function Candidates({ searchParams }: { searchParams: Promi
   const live = zoomLive(d.zoom);
   const tableRows: CandidateRow[] = shown.map((a) => ({
     id: s(a['Applicant ID']), name: fullName(a), email: s(a.Email), stage: s(a.Stage), source: s(a.Source),
+    changed: [s(a['Applied At (PT)']), s(a['Stage Updated At']), s(a['Confirmed At'])],
     position: s(a.Position), applied: formatDateTime(s(a['Applied At (PT)'])), interview: formatDate(ymd(a['Interview Date'])),
     confirmed: a['Confirmed At'] ? formatDate(ymd(a['Confirmed At'])) : '', minutes: s(a['Zoom Minutes']),
     invites: s(a['Invite Count']), historical: s(a.Historical) === 'Y', test: isTest(a),
@@ -71,8 +72,8 @@ export default async function Candidates({ searchParams }: { searchParams: Promi
 
   return (
     <>
-      <header className="page-head"><h1>Candidates</h1></header>
-      <Suspense fallback={null}><SavedViews views={(d.views || []).map((v) => ({ name: s(v.Name), query: s(v.Query), by: s(v['Created By']) }))} /></Suspense>
+      <header className="page-head"><h1>Candidates</h1><p className="sub">A blue dot marks applicants who are new or changed since your last visit.</p></header>
+      <Suspense fallback={null}><div data-tour="views"><SavedViews views={(d.views || []).map((v) => ({ name: s(v.Name), query: s(v.Query), by: s(v['Created By']) }))} /></div></Suspense>
       <nav className="tabs">
         {['Active', ...STAGES, 'All'].map((t) => (
           <Link key={t} href={link({ stage: t })} className={t === stage ? 'active' : ''}>{t} <span className="count">{counts[t] ?? 0}</span></Link>
@@ -104,7 +105,7 @@ export default async function Candidates({ searchParams }: { searchParams: Promi
         </div>
       </div>
       <AddApplicant />
-      <CandidatesTable rows={tableRows} />
+      <div data-tour="cand-table"><CandidatesTable rows={tableRows} /></div>
       {rows.length > PAGE && (
         <div className="pager">
           {page > 1 && <Link href={link({ page: String(page - 1) })} className="btn ghost">Previous</Link>}

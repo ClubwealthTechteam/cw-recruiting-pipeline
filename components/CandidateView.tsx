@@ -5,7 +5,10 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getData, getDataWithHistory, getApplicantDetail } from '@/lib/sheet';
 import { currentUser } from '@/lib/auth';
-import { s, fullName, ymd, formatDate, formatDateTime, statusEmails } from '@/lib/pipeline';
+import { s, fullName, ymd, formatDate, formatDateTime, statusEmails, sessionTimes, stampPht, nowStampPT, splitTags } from '@/lib/pipeline';
+import Presence from '@/components/Presence';
+import NotDuplicate from '@/components/NotDuplicate';
+import ProfileKeys from '@/components/ProfileKeys';
 import StageBadge from '@/components/StageBadge';
 import StageForm from '@/components/StageForm';
 import { NoteForm, EmailForm } from '@/components/SmallForms';
@@ -59,87 +62,154 @@ export default async function CandidateView({ appId, panel = false }: { appId: s
   const mail = statusEmails(d.outbox, appId);
   const cards = detail.scores.length ? detail.scores : (d.scores || []).filter((x) => s(x['Applicant ID']) === appId);
 
-  return (
+  // Possible duplicates: same email, or same first + last name (Miguel, 2026-11-02). Hidden once tagged "Not duplicate".
+  const norm = (v: unknown) => s(v).trim().toLowerCase().replace(/\s+/g, ' ');
+  const myEmail = norm(a.Email);
+  const myName = norm(fullName(a));
+  const dups = splitTags(a.Tags).includes('Not duplicate') ? [] : d.applicants.filter((x) => s(x['Applicant ID']) !== appId && (
+    (myEmail && norm(x.Email) === myEmail) || (myName.includes(' ') && norm(fullName(x)) === myName)));
+
+  // Someone else worked on this applicant in the last hour: say so, so two people don't reply or move them twice.
+  const nowStamp = nowStampPT();
+  const minsAgo = (stamp: string) => Math.round((Date.parse(nowStamp.replace(' ', 'T') + 'Z') - Date.parse(stamp.replace(' ', 'T') + 'Z')) / 60000);
+  const TEAM = ['Miguel', 'Camille', 'Am'];
+  const recent: { who: string; what: string; mins: number }[] = [];
+  for (const h of d.history.filter((x) => s(x['Applicant ID']) === appId)) {
+    const who = s(h['Changed By']); const m = minsAgo(s(h['Timestamp (PT)']));
+    if (TEAM.includes(who) && who !== me && m >= 0 && m <= 60) recent.push({ who, what: `moved this applicant to ${s(h['To Stage'])}`, mins: m });
+  }
+  for (const e of d.outbox.filter((x) => s(x['Applicant ID']) === appId)) {
+    const who = s(e['Queued By']); const m = minsAgo(s(e['Queued At']));
+    if (TEAM.includes(who) && who !== me && m >= 0 && m <= 60) recent.push({ who, what: s(e.Type).startsWith('OLJ') ? 'sent an OLJ message' : `sent ${s(e.Type) === 'Reply' ? 'an email reply' : `the ${s(e.Type).toLowerCase()} email`}`, mins: m });
+  }
+  recent.sort((x, y) => x.mins - y.mins);
+
+  // J / K order: the Candidates list order (newest applicants first)
+  const order = d.applicants.filter((x) => s(x.Historical) !== 'Y').sort((x, y) => s(y['Applied At (PT)']).localeCompare(s(x['Applied At (PT)']))).map((x) => s(x['Applicant ID']));
+  const at = order.indexOf(appId);
+  const prevId = at > 0 ? order[at - 1] : undefined;
+  const nextId = at >= 0 && at < order.length - 1 ? order[at + 1] : undefined;
+  const sessionLine = a['Interview Date'] ? `Wednesday, ${formatDate(ymd(a['Interview Date']))} · ${sessionTimes(ymd(a['Interview Date']))}` : '';
+  const initials = fullName(a).split(' ').filter(Boolean).slice(0, 2).map((x) => x[0]).join('').toUpperCase() || '?';
+
+  const notices = (
     <>
-      {!panel && <p><Link href="/candidates" className="muted">← Candidates</Link></p>}
-      <header className="page-head detail-head">
-        <div>
-          <h1>{fullName(a) || '(no name)'}</h1>
-          <div className="muted">{s(a.Position)} · {s(a.Source)} · Applied {formatDateTime(s(a['Applied At (PT)']))}</div>
-          <TagEditor id={appId} tags={s(a.Tags)} />
-          <EditProfile id={appId} current={Object.fromEntries(EDITABLE.map((k) => [k, s(a[k])]))} />
-        </div>
-        <StageBadge stage={s(a.Stage)} />
-      </header>
-      {/* a plain link (full page load), so it is not caught by the side panel again */}
-      {panel && <p><a href={`/candidates/${encodeURIComponent(appId)}`} className="small">Open full page →</a></p>}
       {mail.filter((e) => e.status === 'Pending approval').map((e) => <PendingStatusEmail key={e.id} e={e} />)}
+      {recent.length > 0 && <div className="panel info" data-tour="recent"><strong>Heads up:</strong> {recent.slice(0, 2).map((r) => `${r.who} ${r.what} ${r.mins < 1 ? 'just now' : `${r.mins} min ago`}`).join(' · ')}. Check before you reply or move them.</div>}
+      {dups.length > 0 && (
+        <div className="panel dup" data-tour="duplicate">
+          <strong>Possible duplicate:</strong>{' '}
+          {dups.slice(0, 3).map((x, i) => <span key={s(x['Applicant ID'])}>{i > 0 && ', '}<a href={`/candidates/${encodeURIComponent(s(x['Applicant ID']))}`}>{fullName(x) || s(x['Applicant ID'])}</a> ({s(x.Source)}, {s(x.Stage)}, applied {formatDate(ymd(x['Applied At (PT)']))})</span>)}
+          . Same {myEmail && dups.some((x) => norm(x.Email) === myEmail) ? 'email' : 'name'}. Keep one and move the other to Banned or Not Fit with the reason &quot;Duplicate&quot;, or <NotDuplicate id={appId} tags={s(a.Tags)} />
+        </div>
+      )}
       {/^⚠/m.test(s(a['Resume Experience'])) && <div className="panel warn"><strong>Check experience:</strong> {s(a['Resume Experience']).split('\n').filter((l) => l.startsWith('⚠')).map((l) => l.replace(/^⚠\s*/, '')).join(' ')} Ask about it in the interview.</div>}
       {flags.length > 0 && <div className="panel warn">{flags.length} open item{flags.length > 1 ? 's' : ''} in <Link href="/attention">Needs Attention</Link> for this applicant.</div>}
-      <div className={panel ? '' : 'two-col'}>
-        <section className="panel">
-          <h2>Screening</h2>
-          <p><FitBadge tag={s(a['Screen Tag'])} track={s(a['Screen Track'])} summary={s(a['Screen Summary'])} /> <span className="muted">{s(a['Screen Track'])}</span></p>
-          {a['Screen Summary'] ? <p className="prewrap">{s(a['Screen Summary'])}</p> : <p className="muted">Not screened yet.</p>}
-        </section>
-        <section className="panel">
-          <h2>Interview scorecard</h2>
-          <Scorecard id={appId} me={me} stage={s(a.Stage)} cards={cards} />
-        </section>
+    </>
+  );
+
+  const facts = (
+    <section className="panel" data-tour="facts">
+      <div className="profile-head">
+        <span className="av lg" style={{ background: '#1f5fbf' }}>{initials}</span>
+        <div><h1>{fullName(a) || '(no name)'}</h1><div className="muted small">{s(a.Position)} · {s(a.Source)}</div></div>
       </div>
-      <section className="panel"><h2>Move stage</h2><StageForm ids={[appId]} current={s(a.Stage)} /></section>
-      <div className={panel ? '' : 'two-col'}>
-        <section className="panel">
-          <h2>Inbox</h2>
-          <Inbox id={appId} thread={detail.thread} hasEmail={!!a.Email} isOlj={s(a.Source) === 'OLJ'} emailReady={d.emailSending === 'ON'} />
-        </section>
-        <section className="panel">
-          <h2>Invite</h2>
-          {s(a['Do Not Invite']) && <p className="error"><strong>Do not invite.</strong> {s(a['Do Not Invite'])}.</p>}
-          {!s(a['Do Not Invite']) && s(a['Invite Hold']) && <p className="hint"><strong>Not invited automatically:</strong> {s(a['Invite Hold'])}. You can still invite by hand if this is a mistake.</p>}
-          <InviteButtons id={appId} isOlj={s(a.Source) === 'OLJ'} hasEmail={!!a.Email} emailReady={d.emailSending === 'ON'} blocked={!!s(a['Do Not Invite'])} />
-          <p className="hint">Invites are for the next Wednesday at 2:00 PM PT. The applicant moves to Invited once it is sent.</p>
-          <h3>Move to another session</h3>
-          <p className="hint">Now: {a['Interview Date'] ? `Wednesday, ${formatDate(ymd(a['Interview Date']))}, 2:00 PM PT` : 'no session'}. Emails still waiting for the old date are cancelled.</p>
-          <SessionForm ids={[appId]} current={ymd(a['Interview Date'])} />
-        </section>
+      <p style={{ margin: '10px 0 0', display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}><StageBadge stage={s(a.Stage)} /><FitBadge tag={s(a['Screen Tag'])} track={s(a['Screen Track'])} summary={s(a['Screen Summary'])} /></p>
+      <TagEditor id={appId} tags={s(a.Tags)} />
+      <h3>Contact</h3>
+      <dl className="fields">
+        <dt>Email</dt><dd>{s(a.Email) || '—'}</dd>
+        {a.Phone && <><dt>Phone</dt><dd>{s(a.Phone)}</dd></>}
+        {a.Country && <><dt>Country</dt><dd>{s(a.Country)}</dd></>}
+        <dt>Applied</dt><dd>{formatDateTime(s(a['Applied At (PT)']))} PT<div className="time-pht small">{stampPht(s(a['Applied At (PT)']))}</div></dd>
+      </dl>
+      <h3>Application</h3>
+      <dl className="fields">
+        {FIELDS.filter((f) => !['Phone', 'Country'].includes(f)).map((f) => a[f] ? <Fragment key={f}><dt>{f}</dt><dd>{s(a[f])}</dd></Fragment> : null)}
+        {LINKS.map((f) => { const u = safeUrl(a[f]); return u ? <Fragment key={f}><dt>{f.replace(' Link', '')}</dt><dd><a href={u} target="_blank" rel="noopener noreferrer">Open ↗</a></dd></Fragment> : null; })}
+      </dl>
+      {a['Experience Overview'] && (<><h3>Experience overview</h3><p className="prewrap">{s(a['Experience Overview'])}</p></>)}
+      {a['Resume Experience'] && (<><h3>Experience (from resume)</h3><p className="prewrap">{s(a['Resume Experience'])}</p><p className="hint">Read from the resume by the screening routine. Check the resume for anything that looks off.</p></>)}
+      {s(a.Source) === 'OLJ' && (
+        <>
+          <h3>OnlineJobs.ph</h3>
+          <p className="muted">Job post: {s(a['OLJ Job Post'])}{a['OLJ Email Requested At'] ? ` · Email requested ${formatDate(ymd(a['OLJ Email Requested At']))}` : ''}</p>
+          <p className="prewrap">{s(a['OLJ Summary'])}</p>
+          <EmailForm id={appId} current={s(a.Email)} />
+        </>
+      )}
+      <EditProfile id={appId} current={Object.fromEntries(EDITABLE.map((k) => [k, s(a[k])]))} />
+    </section>
+  );
+
+  const conversation = (
+    <>
+      <section className="panel">
+        <h2>Conversation</h2>
+        <Inbox id={appId} thread={detail.thread} hasEmail={!!a.Email} isOlj={s(a.Source) === 'OLJ'} emailReady={d.emailSending === 'ON'} />
+      </section>
+      <section className="panel" data-tour="timeline">
+        <h2>Timeline</h2>
+        <ul className="timeline">
+          {events.map((e, i) => <li key={i}><span className="when">{e.at.slice(0, 16)}</span> {e.text}{e.who ? <span className="muted"> · {e.who}</span> : null}</li>)}
+        </ul>
+      </section>
+      <section className="panel" data-tour="notes">
+        <h2>Notes</h2>
+        {a.Notes ? <p className="prewrap">{s(a.Notes)}</p> : <p className="muted">No notes yet.</p>}
+        <NoteForm id={appId} />
+      </section>
+    </>
+  );
+
+  const actions = (
+    <>
+      <section className="panel" data-tour="stage"><h2>Stage</h2><StageForm ids={[appId]} current={s(a.Stage)} /></section>
+      <section className="panel" data-tour="session-box">
+        <h2>Session</h2>
+        <p style={{ margin: '0 0 4px' }}>{sessionLine || 'No session yet'}</p>
+        <p className="hint" style={{ marginTop: 0 }}>Invites sent: {s(a['Invite Count']) || '0'}{a['Zoom Minutes'] ? ` · Zoom: ${s(a['Zoom Minutes'])} min` : ''}{a.Arrival ? ` · ${s(a.Arrival)}` : ''}</p>
+        {s(a['Do Not Invite']) && <p className="error"><strong>Do not invite.</strong> {s(a['Do Not Invite'])}.</p>}
+        {!s(a['Do Not Invite']) && s(a['Invite Hold']) && <p className="hint"><strong>Not invited automatically:</strong> {s(a['Invite Hold'])}. You can still invite by hand if this is a mistake.</p>}
+        <InviteButtons id={appId} isOlj={s(a.Source) === 'OLJ'} hasEmail={!!a.Email} emailReady={d.emailSending === 'ON'} blocked={!!s(a['Do Not Invite'])} />
+        <p className="hint">Invites are for the next Wednesday, 2:00 PM PT. You see the email before it is sent.</p>
+        <h3>Move to another session</h3>
+        <SessionForm ids={[appId]} current={ymd(a['Interview Date'])} />
+        {a['Re-invite Reason'] && <p className="hint">Re-invite reason: {s(a['Re-invite Reason'])}</p>}
+        {a['Decision Reason'] && <p className="hint">Decision reason: {s(a['Decision Reason'])}</p>}
+      </section>
+      <section className="panel" data-tour="scorecard">
+        <h2>Interview scorecard</h2>
+        <Scorecard id={appId} me={me} stage={s(a.Stage)} cards={cards} />
+      </section>
+      <section className="panel">
+        <h2>Screening</h2>
+        {a['Screen Summary'] ? <p className="prewrap" style={{ margin: 0 }}>{s(a['Screen Summary'])}</p> : <p className="muted">Not screened yet.</p>}
+      </section>
+      <section className="panel"><h2>Status emails</h2><StatusEmailLog emails={mail} /></section>
+    </>
+  );
+
+  if (panel) {
+    return (
+      <>
+        <p style={{ display: 'flex', gap: 10, alignItems: 'center' }}><a href={`/candidates/${encodeURIComponent(appId)}`} className="small">Open full page →</a><Presence id={appId} /></p>
+        {notices}
+        <div className="col" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>{facts}{actions}{conversation}</div>
+      </>
+    );
+  }
+  return (
+    <>
+      <div className="profile-top">
+        <span><Link href="/candidates" className="muted">Candidates</Link> <span className="muted">/</span> <b>{fullName(a) || appId}</b></span>
+        <span style={{ display: 'flex', gap: 10, alignItems: 'center' }}><Presence id={appId} /><ProfileKeys prev={prevId} next={nextId} /></span>
       </div>
-      <div className={panel ? '' : 'two-col'}>
-        <section className="panel">
-          <h2>Application</h2>
-          <dl className="fields">
-            <dt>Email</dt><dd>{s(a.Email) || '—'}</dd>
-            <dt>Session</dt><dd>{a['Interview Date'] ? `Wednesday, ${formatDate(ymd(a['Interview Date']))}, 2:00 PM PT` : '—'}</dd>
-            <dt>Invites sent</dt><dd>{s(a['Invite Count']) || '0'}</dd>
-            <dt>Zoom minutes</dt><dd>{s(a['Zoom Minutes']) || '—'}</dd>
-            <dt>Arrival</dt><dd>{s(a.Arrival) || '—'}</dd>
-            {a['Re-invite Reason'] && (<><dt>Re-invite reason</dt><dd>{s(a['Re-invite Reason'])}</dd></>)}
-            {a['Decision Reason'] && (<><dt>Decision reason</dt><dd>{s(a['Decision Reason'])}</dd></>)}
-            {FIELDS.map((f) => a[f] ? <Fragment key={f}><dt>{f}</dt><dd>{s(a[f])}</dd></Fragment> : null)}
-            {LINKS.map((f) => { const u = safeUrl(a[f]); return u ? <Fragment key={f}><dt>{f.replace(' Link', '')}</dt><dd><a href={u} target="_blank" rel="noopener noreferrer">Open</a></dd></Fragment> : null; })}
-          </dl>
-          {a['Experience Overview'] && (<><h3>Experience overview</h3><p className="prewrap">{s(a['Experience Overview'])}</p></>)}
-          {a['Resume Experience'] && (<><h3>Experience (from resume)</h3><p className="prewrap">{s(a['Resume Experience'])}</p><p className="hint">Read from the resume by the screening routine. Check the resume for anything that looks off.</p></>)}
-          {s(a.Source) === 'OLJ' && (
-            <>
-              <h3>OnlineJobs.ph</h3>
-              <p className="muted">Job post: {s(a['OLJ Job Post'])}{a['OLJ Email Requested At'] ? ` · Email requested ${formatDate(ymd(a['OLJ Email Requested At']))}` : ''}</p>
-              <p className="prewrap">{s(a['OLJ Summary'])}</p>
-              <EmailForm id={appId} current={s(a.Email)} />
-            </>
-          )}
-        </section>
-        <section className="panel">
-          <h2>Timeline</h2>
-          <ul className="timeline">
-            {events.map((e, i) => <li key={i}><span className="when">{e.at.slice(0, 16)}</span> {e.text}{e.who ? <span className="muted"> · {e.who}</span> : null}</li>)}
-          </ul>
-          <h2>Status emails</h2>
-          <StatusEmailLog emails={mail} />
-          <h2>Notes</h2>
-          {a.Notes ? <p className="prewrap">{s(a.Notes)}</p> : <p className="muted">No notes yet.</p>}
-          <NoteForm id={appId} />
-        </section>
+      {notices}
+      <div className="profile">
+        <div className="col">{facts}</div>
+        <div className="col">{conversation}</div>
+        <div className="col">{actions}</div>
       </div>
     </>
   );

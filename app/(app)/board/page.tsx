@@ -26,6 +26,7 @@ export default async function BoardPage({ searchParams }: { searchParams: Promis
       return {
         id: s(a['Applicant ID']), name: fullName(a) || '(no name)', stage: s(a.Stage), position: s(a.Position), source: s(a.Source),
         fit: s(a['Screen Tag']), session: a['Interview Date'] ? formatDate(ymd(a['Interview Date'])).replace(/, \d{4}$/, '') : '',
+        changed: [s(a['Applied At (PT)']), s(a['Stage Updated At']), s(a['Confirmed At'])],
         score: sc.count ? sc.average.toFixed(1) : '', arrival: s(a.Arrival), test: isTest(a), zoom: live.get(s(a['Applicant ID']))
       };
     });
@@ -46,7 +47,7 @@ export default async function BoardPage({ searchParams }: { searchParams: Promis
         <span className="spacer" />
         <UndoButton />
       </form>
-      <Board stages={BOARD_STAGES} cards={list} />
+      <div data-tour="board"><Board stages={BOARD_STAGES} cards={list} /></div>
     </>
   );
 }

@@ -999,3 +999,21 @@ test('re-invite no-shows: No Show and No Confirmation from one session move to t
   // running it again finds nobody (they are no longer No Show / No Confirmation)
   assert.equal(env.api({ action: 'reinviteNoShows', by: 'Am', session: '2026-10-21', date: '2026-11-04' }).data.reinvited, 0);
 });
+
+test('preview shows the invite or reply without queuing anything; presence lists the others viewing', () => {
+  const env = invitedEnv({ EMAIL_SENDING: 'ON', AUTO_INVITES: 'OFF' });
+  env.ctx.tick();
+  const before = env.rows('Outbox').length;
+  const inv = env.api({ action: 'preview', by: 'Am', kind: 'invite', id: 'F-2' });
+  assert.equal(inv.ok, true, inv.error);
+  assert.match(inv.data.subject, /Pre-Interview invite/);
+  assert.match(inv.data.body, /email-banner\.png/);
+  assert.match(inv.data.session, /^\d{4}-\d{2}-\d{2}$/);
+  const rep = env.api({ action: 'preview', by: 'Am', kind: 'reply', id: 'F-2', text: 'Hello <b>there</b>' });
+  assert.match(rep.data.body, /Hello &lt;b&gt;there&lt;\/b&gt;/, 'reply text is escaped');
+  assert.match(env.api({ action: 'preview', by: 'Am', kind: 'reinvite', id: 'F-2', date: '2026-10-29' }).error, /not a Wednesday/);
+  assert.equal(env.rows('Outbox').length, before, 'a preview never queues an email');
+  assert.match(env.api({ action: 'preview', by: 'Stranger', kind: 'invite', id: 'F-2' }).error, /unknown user/);
+  assert.deepEqual(env.api({ action: 'presence', by: 'Am', id: 'F-2' }).data.others, []);
+  assert.deepEqual(env.api({ action: 'presence', by: 'Camille', id: 'F-2' }).data.others, ['Am']);
+});

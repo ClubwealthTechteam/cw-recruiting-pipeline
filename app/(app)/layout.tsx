@@ -1,6 +1,8 @@
 import Logo from '@/components/Logo';
 import NavLinks from '@/components/NavLinks';
 import ChatBubble from '@/components/ChatBubble';
+import SearchButton from '@/components/SearchButton';
+import Tour from '@/components/Tour';
 import Freshness from '@/components/Freshness';
 import AutoRefresh from '@/components/AutoRefresh';
 import NewVersionNotice from '@/components/NewVersionNotice';
@@ -39,13 +41,13 @@ export default async function AppLayout({ children, panel }: { children: React.R
     <div className="shell">
       <Suspense fallback={null}><TopProgress /></Suspense>
       <aside className="sidebar">
-        <Logo />
+        <Logo tone="light" />
         <div className="product">Club Wealth Recruiting Pipeline</div>
+        <SearchButton />
         <NavLinks open={open} approvals={approvals} />
-        <div className="kbd-hint">Press <kbd>Ctrl</kbd> + <kbd>K</kbd> to find anyone</div>
-        <div className="sidebar-foot">
+        <div className="sidebar-foot" data-tour="me">
           {mode !== 'LIVE' && <div className="test-mode">TEST MODE</div>}
-          <div>Signed in as {user === 'Am' ? 'Am Marbella' : user}</div>
+          <div className="side-me"><span className="av" style={{ background: '#1f5fbf' }}>{user.slice(0, 1)}</span><span>{user === 'Am' ? 'Am Marbella' : user}</span></div>
           <form action="/api/logout" method="post"><button className="link">Sign out</button></form>
         </div>
       </aside>
@@ -57,6 +59,7 @@ export default async function AppLayout({ children, panel }: { children: React.R
       <CommandBar people={people} />
       <AutoRefresh />
       <NewVersionNotice />
+      <Tour user={user} />
     </div>
   );
 }

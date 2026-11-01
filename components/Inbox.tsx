@@ -1,6 +1,7 @@
 'use client';
 import { useState } from 'react';
 import { useAction } from './useAction';
+import SendPreview from './SendPreview';
 import type { ThreadItem } from '@/lib/sheet';
 
 const LABEL: Record<string, string> = {
@@ -16,19 +17,26 @@ export default function Inbox({ id, thread, hasEmail, isOlj, emailReady, only, o
   const [channel, setChannel] = useState<'OLJ' | 'Email'>(only || channels[0] || 'Email');
   const [text, setText] = useState('');
   const { run, busy, error } = useAction();
+  const [preview, setPreview] = useState(false);
   const shown = thread.filter((m) => (channel === 'OLJ' ? m.channel === 'OLJ' : m.channel !== 'OLJ'));
 
   async function send(e: React.FormEvent) {
     e.preventDefault();
     if (!text.trim()) return;
-    const where = channel === 'OLJ' ? 'OnlineJobs.ph' : 'email (from CareersCW)';
-    if (!confirm(`Send this to the applicant by ${where}?`)) return;
+    if (channel === 'OLJ') { if (!confirm(`Send this on OnlineJobs.ph?\n\n${text.trim()}`)) return; }
+    else { setPreview(true); return; }
+    await deliver();
+  }
+
+  async function deliver() {
+    setPreview(false);
     const ok = await run(channel === 'OLJ' ? { action: 'sendOljMessage', id, text } : { action: 'sendReply', id, text });
     if (ok) { setText(''); onSent?.(); }
   }
 
   return (
-    <div className="inbox">
+    <div className="inbox" data-tour="reply">
+      {preview && <SendPreview req={{ kind: 'reply', id, text }} title="Email reply" onClose={() => setPreview(false)} onSend={deliver} />}
       {channels.length > 1 && (
         <div className="seg">{channels.map((c) => <button key={c} type="button" className={c === channel ? 'on' : ''} onClick={() => setChannel(c)}>{c}</button>)}</div>
       )}
@@ -47,7 +55,7 @@ export default function Inbox({ id, thread, hasEmail, isOlj, emailReady, only, o
       </div>
       {channels.length === 0 ? <p className="hint">No email address or OLJ conversation to reply to.</p> : (
         <form className="stack-form" onSubmit={send}>
-          <textarea rows={3} value={text} onChange={(e) => setText(e.target.value)}
+          <textarea id="reply-box" rows={3} value={text} onChange={(e) => setText(e.target.value)}
             placeholder={channel === 'OLJ' ? 'Write an OLJ message…' : 'Write an email reply… (the Club Wealth sign-off and banner are added for you)'} />
           <button className="btn primary" disabled={busy || !text.trim() || (channel === 'Email' && !emailReady)}>
             {busy ? 'Sending…' : channel === 'OLJ' ? 'Send on OLJ' : 'Send email'}

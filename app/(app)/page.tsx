@@ -3,6 +3,9 @@ import { getData } from '@/lib/sheet';
 import { metrics, pct, formatDate, STAGES, s as str, ymd, positionCounts, daysAgoPT, upcomingWednesday, isTest } from '@/lib/pipeline';
 import { WeeklyBars, RateTrend, HBars } from '@/components/Charts';
 import DataError from '@/components/DataError';
+import AskBar from '@/components/AskBar';
+import { currentUser } from '@/lib/auth';
+import { sessionTimes, todayPT, fullName, scoreSummary } from '@/lib/pipeline';
 
 type Q = { session?: string; days?: string };
 const PERIODS = [['30', 'Last 30 days'], ['60', 'Last 60 days'], ['90', 'Last 90 days'], ['all', 'All time']];
@@ -25,10 +28,66 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
   const forNext = active.filter((a) => ymd(a['Interview Date']) === nextSession);
   const nextByPosition = new Map(positionCounts(forNext).map((x) => [x.position, x.count]));
 
+  // ---- Home: greeting and "Needs you today" ----
+  const user = (await currentUser()) || 'Miguel';
+  const name = user === 'Am' ? 'Am' : user;
+  const hour = Number(new Intl.DateTimeFormat('en-US', { timeZone: 'America/Los_Angeles', hour: 'numeric', hourCycle: 'h23' }).format(new Date()));
+  const greet = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
+  const today = new Date().toLocaleDateString('en-US', { timeZone: 'America/Los_Angeles', weekday: 'long', month: 'long', day: 'numeric' });
+  const invitedNext = everyone.filter((a) => ymd(a['Interview Date']) === nextSession && str(a.Stage) !== 'Applied');
+  const confirmedNext = invitedNext.filter((a) => a['Confirmed At'] || str(a.Stage) === 'Confirmed').length;
+  const oljNext = invitedNext.filter((a) => str(a.Source) === 'OLJ').length;
+  const week = daysAgoPT(7);
+  const newWeek = everyone.filter((a) => ymd(a['Applied At (PT)']) > week);
+  const ratedWeek = newWeek.filter((a) => ['Great', 'Good', 'Not Fit'].includes(str(a['Screen Tag'])));
+  const fitShare = ratedWeek.length ? ratedWeek.filter((a) => str(a['Screen Tag']) !== 'Not Fit').length / ratedWeek.length : null;
+  const month = todayPT().slice(0, 7);
+  const hiredMonth = d.history.filter((h) => ['Hired', 'Onboarded'].includes(str(h['To Stage'])) && str(h['Timestamp (PT)']).startsWith(month)).length;
+  const openFlags = d.flags.filter((f) => str(f.Status) === 'Open').length;
+  const approvals = d.outbox.filter((e) => str(e.Status) === 'Pending approval').length;
+  const mismatches = everyone.filter((a) => a['Resume Warning']);
+  const scored = new Set((d.scores || []).map((x) => str(x['Applicant ID'])));
+  const unrated = everyone.filter((a) => str(a.Stage) === 'Interview Completed' && !scored.has(str(a['Applicant ID']))).length;
+  const notRatedYet = newWeek.filter((a) => !str(a['Screen Tag'])).length;
+  void scoreSummary;
+
   return (
     <>
+      <p className="home-hi">{greet}, {name}</p>
+      <p className="home-sub">{today} · Next pre-interview: Wednesday, {formatDate(nextSession)}, {sessionTimes(nextSession)}</p>
+      <AskBar />
+      <section className="tiles" data-tour="home-numbers">
+        <Tile label="New applicants (7 days)" value={String(newWeek.length)} note={`${notRatedYet} not rated yet`} href="/candidates?stage=All" />
+        <Tile label={`Invited to ${short(nextSession)}`} value={String(invitedNext.length)} note={`${confirmedNext} confirmed`} href={`/session?date=${nextSession}`} />
+        <Tile label="Great / Good fit (7 days)" value={pct(fitShare)} note={`of ${ratedWeek.length} rated`} />
+        <Tile label="Hired this month" value={String(hiredMonth)} note="Hired or Onboarded" />
+      </section>
+      <div className="home-cols">
+        <section className="panel" data-tour="home-todo">
+          <h2>Needs you today</h2>
+          <ul className="todo">
+            {openFlags > 0 && <li><span className="badge red">Check</span><span className="grow">{openFlags} open item{openFlags > 1 ? 's' : ''} (bounced emails, reschedule requests, unmatched replies)</span><Link className="btn" href="/attention">Open</Link></li>}
+            {approvals > 0 && <li><span className="badge amber">Approve</span><span className="grow">{approvals} status email{approvals > 1 ? 's' : ''} waiting for approval</span><Link className="btn" href="/approvals">Review</Link></li>}
+            {unrated > 0 && <li><span className="badge violet">Rate</span><span className="grow">{unrated} interviewed applicant{unrated > 1 ? 's' : ''} without a scorecard</span><Link className="btn" href="/candidates?stage=Interview+Completed">Rate</Link></li>}
+            {mismatches.slice(0, 3).map((a) => <li key={str(a['Applicant ID'])}><span className="badge amber">Experience</span><span className="grow">{fullName(a)}: {str(a['Resume Warning'])}</span><Link className="btn" href={`/candidates/${encodeURIComponent(str(a['Applicant ID']))}`}>Open</Link></li>)}
+            {invitedNext.length - confirmedNext > 0 && <li><span className="badge blue">Follow up</span><span className="grow">{invitedNext.length - confirmedNext} invited to {short(nextSession)} have not confirmed yet</span><Link className="btn" href={`/session?date=${nextSession}`}>See who</Link></li>}
+            {openFlags + approvals + unrated + mismatches.length === 0 && invitedNext.length === confirmedNext && <li className="muted">All clear. Nothing needs you right now.</li>}
+          </ul>
+        </section>
+        <section className="panel" data-tour="home-session">
+          <h2>Wednesday, {formatDate(nextSession)}</h2>
+          <p className="muted small" style={{ margin: '0 0 10px' }}>{sessionTimes(nextSession)}</p>
+          <div className="kv-row"><span>Confirmed</span><b>{confirmedNext} / {invitedNext.length}</b></div>
+          <div className="meter"><i style={{ width: `${invitedNext.length ? (confirmedNext / invitedNext.length) * 100 : 0}%` }} /></div>
+          <div className="kv-row"><span>Invited by email</span><b>{invitedNext.length - oljNext}</b></div>
+          <div className="kv-row"><span>Invited on OLJ</span><b>{oljNext}</b></div>
+          <div className="kv-row"><span>Reminder</span><span className="muted">Wednesday 6:00 AM PT</span></div>
+          <p style={{ marginTop: 12, display: 'flex', gap: 8 }}><Link className="btn primary" href={`/session?date=${nextSession}`}>Open session</Link></p>
+        </section>
+      </div>
+
       <header className="page-head">
-        <h1>Dashboard</h1>
+        <h2 className="section-title">Insights</h2>
         <p className="sub">{session ? `Showing the ${formatDate(session)} session only.` : `Rates use the last ${m.sessionCount || 0} interview session${m.sessionCount === 1 ? '' : 's'} tracked by the system.`} Applicants invited by hand before the system started are not included in rates.</p>
       </header>
 
