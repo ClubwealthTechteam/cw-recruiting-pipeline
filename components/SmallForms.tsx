@@ -7,7 +7,7 @@ export function NoteForm({ id }: { id: string }) {
   const { run, busy, error } = useAction();
   return (
     <form className="stack-form" onSubmit={async (e) => { e.preventDefault(); if (note.trim() && await run({ action: 'addNote', id, note })) setNote(''); }}>
-      <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={3} placeholder="Add a note for the team" />
+      <textarea id="note-box" value={note} onChange={(e) => setNote(e.target.value)} rows={3} placeholder="Add a note for the team" />
       <button className="btn" disabled={busy || !note.trim()}>{busy ? 'Saving…' : 'Add note'}</button>
       {error && <span className="error">{error}</span>}
     </form>

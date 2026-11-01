@@ -1548,7 +1548,13 @@ function api_(req) {
       fields.forEach(function (k) { if (a[k] !== '' && a[k] !== undefined) o[k] = a[k]; });
       return o;
     };
-    if (req.slim) rows = rows.map(function (a) { return pick(a, old[a['Applicant ID']] ? OLD_FIELDS : LIST_FIELDS); });
+    if (req.slim) rows = rows.map(function (a) {
+      var o = pick(a, old[a['Applicant ID']] ? OLD_FIELDS : LIST_FIELDS);
+      // Home's "Needs you today": only the form-vs-resume warning line, not the whole resume summary
+      var warn = String(a['Resume Experience'] || '').split('\n').filter(function (l) { return l.indexOf('\u26a0') === 0; })[0];
+      if (warn && !old[a['Applicant ID']]) o['Resume Warning'] = warn.replace(/^\u26a0\s*/, '');
+      return o;
+    });
     return {
       applicants: plain_(rows),
       history: plain_(table_(SH.HISTORY).rows.filter(mine)),
@@ -1591,6 +1597,8 @@ function api_(req) {
   if (req.action === 'chatGet') return chatGet_(req.id);
   if (req.action === 'chatAnswer') return chatAnswer_(req.id, req.answer);
   if (MANUAL_BY.indexOf(req.by) === -1) throw new Error('unknown user');
+  if (req.action === 'preview') return preview_(req);
+  if (req.action === 'presence') return presence_(req);
   var lock = LockService.getScriptLock();
   lock.waitLock(30000);
   try {
@@ -2023,4 +2031,54 @@ function api_(req) {
   } finally {
     lock.releaseLock();
   }
+}
+
+// ---------- site: preview before sending, and who else is viewing (Miguel, 2026-11-02) ----------
+
+/**
+ * Exactly what an email would look like, without queuing anything: the site shows it before the Send click.
+ * kind: invite (next Wednesday, as "Send invite" uses), reinvite (req.date), reply (req.text). Read only.
+ */
+function preview_(req) {
+  var st = settings_();
+  var a = req.id ? indexBy_(table_(SH.APPLICANTS).rows, 'Applicant ID')[req.id] : null;
+  if (!a) throw new Error('not found');
+  var test = st.get('MODE') !== 'LIVE';
+  var to = test ? st.get('TEST_EMAIL') + ' (test mode)' : String(a.Email || '').trim();
+  var mail, session = '';
+  if (req.kind === 'invite') { session = interviewDateFor(new Date()); mail = inviteEmail(session, new Date()); }
+  else if (req.kind === 'reinvite') {
+    session = String(req.date || '');
+    var bad = sessionDateProblem(session, new Date());
+    if (bad) throw new Error(bad + '.');
+    mail = inviteEmail(session, new Date());
+  } else if (req.kind === 'reply') {
+    var text = String(req.text || '').trim();
+    if (!text) throw new Error('Type a message first.');
+    mail = replyEmail(text);
+  } else throw new Error('bad preview');
+  if (req.channel === 'olj') to = 'OnlineJobs.ph message to ' + [a['First Name'], a['Last Name']].join(' ').trim();
+  return {
+    to: to, subject: (test ? '[TEST] ' : '') + mail.subject, body: mail.body, session: session,
+    name: [a['First Name'], a['Last Name']].join(' ').trim(), doNotInvite: doNotInvite_(st, a) || ''
+  };
+}
+
+/** Marks req.by as viewing applicant req.id for 90 seconds and returns who else is viewing it now. */
+function presence_(req) {
+  var id = String(req.id || '');
+  if (!id) return { others: [] };
+  var cache = CacheService.getScriptCache();
+  var key = 'viewing:' + id;
+  var now = Date.now();
+  var seen = {};
+  try { seen = JSON.parse(cache.get(key) || '{}'); } catch (e) { seen = {}; }
+  seen[req.by] = now;
+  var others = [];
+  Object.keys(seen).forEach(function (u) {
+    if (now - seen[u] > 60000) delete seen[u];
+    else if (u !== req.by) others.push(u);
+  });
+  cache.put(key, JSON.stringify(seen), 90);
+  return { others: others };
 }

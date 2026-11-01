@@ -33,7 +33,7 @@ export default function StageForm({ ids, current, onDone }: { ids: string[]; cur
   }
   return (
     <form onSubmit={submit} className="inline-form">
-      <select value={stage} onChange={(e) => setStage(e.target.value)} disabled={!ids.length || busy}>
+      <select id={ids.length === 1 ? 'stage-select' : undefined} value={stage} onChange={(e) => setStage(e.target.value)} disabled={!ids.length || busy}>
         <option value="">Move {ids.length > 1 ? `${ids.length} selected` : ''} to…</option>
         {STAGES.filter((x) => x !== current).map((x) => <option key={x} value={x}>{x}</option>)}
       </select>

@@ -6,7 +6,8 @@ import StageBadge from '@/components/StageBadge';
 import DataError from '@/components/DataError';
 import ReinviteNoShows from '@/components/ReinviteNoShows';
 import NonNegotiables from '@/components/NonNegotiables';
-import { todayPT } from '@/lib/pipeline';
+import { todayPT, sessionTimes } from '@/lib/pipeline';
+import QuickDecide from '@/components/QuickDecide';
 
 export default async function Session({ searchParams }: { searchParams: Promise<{ date?: string }> }) {
   const p = await searchParams;
@@ -26,13 +27,15 @@ export default async function Session({ searchParams }: { searchParams: Promise<
   const inNow = roster.filter((a) => live.get(s(a['Applicant ID']))?.inNow);
   const leftZoom = roster.filter((a) => { const z = live.get(s(a['Applicant ID'])); return z && !z.inNow; });
   const notYet = roster.filter((a) => !live.get(s(a['Applicant ID'])) && (a['Confirmed At'] || s(a.Stage) === 'Confirmed'));
-  const noShows = counted.filter((a) => ['No Show', 'No Confirmation'].includes(s(a.Stage))).length;
+  const noShowRows = counted.filter((a) => ['No Show', 'No Confirmation'].includes(s(a.Stage)));
+  const noShows = noShowRows.length;
   const unmatchedZoom = d.zoom.filter((z) => ymd(z['Interview Date']) === date && !z['Matched Applicant ID']);
 
   return (
     <>
       <header className="page-head">
-        <h1>Session: Wednesday, {formatDate(date)}, 2:00 PM PT</h1>
+        <h1>Session: Wednesday, {formatDate(date)}</h1>
+        <p className="sub">{sessionTimes(date)}</p>
         <p className="sub">
           <Link href={`/session?date=${prev.toISOString().slice(0, 10)}`}>← Previous week</Link> · <Link href={`/session?date=${next.toISOString().slice(0, 10)}`}>Next week →</Link>
         </p>
@@ -42,6 +45,7 @@ export default async function Session({ searchParams }: { searchParams: Promise<
         <div className="tile"><div className="tile-label">Confirmed</div><div className="tile-value">{confirmed}</div></div>
         <div className="tile"><div className="tile-label">Reminder sent</div><div className="tile-value">{reminded}</div><div className="tile-note">Wednesday 6:00 AM PT</div></div>
       </section>
+      {isToday && <div className="session-day" data-tour="session-day"><span className="dot-live" /><span><b>Session day mode.</b> Decide right from the list: Pass, Not Fit, Left Zoom or Did not finish. Each one can be undone from the message at the bottom.</span></div>}
       {isToday && live.size > 0 && (
         <section className="panel live-zoom">
           <h2><span className="dot-live" /> Live in Zoom <span className="muted small">updates every few minutes during the session</span></h2>
@@ -52,17 +56,17 @@ export default async function Session({ searchParams }: { searchParams: Promise<
           </div>
         </section>
       )}
-      <NonNegotiables open={isToday} />
-      {noShows > 0 && <section className="panel"><h2>After the session</h2><ReinviteNoShows session={date} count={noShows} /></section>}
-      <section className="panel">
+      <div data-tour="nonneg"><NonNegotiables open={isToday} /></div>
+      {noShows > 0 && <section className="panel"><h2>After the session</h2><ReinviteNoShows session={date} count={noShows} sampleId={s(noShowRows[0]?.['Applicant ID'])} /></section>}
+      <section className="panel" data-tour="roster">
         <table className="table">
-          <thead><tr><th>Name</th><th>Position</th><th>Stage</th><th>Confirmed</th><th>Reminder</th><th>Arrival</th><th>Zoom minutes</th></tr></thead>
+          <thead><tr><th>Name</th><th>Position</th><th>Stage</th><th>Confirmed</th><th>Reminder</th><th>Arrival</th><th>Zoom minutes</th>{isToday && <th>Decide</th>}</tr></thead>
           <tbody>
             {roster.map((a) => (
               <tr key={s(a['Applicant ID'])}>
                 <td><Link href={`/candidates/${encodeURIComponent(s(a['Applicant ID']))}`}>{fullName(a)}</Link></td>
                 <td>{s(a.Position)}</td><td><StageBadge stage={s(a.Stage)} /><ZoomBadge z={live.get(s(a['Applicant ID']))} />{isTest(a) && <span className="tag">Test · not counted</span>}</td>
-                <td>{a['Confirmed At'] ? 'Yes' : 'No'}</td><td>{a['Reminder Sent At'] ? 'Sent' : '—'}</td><td><Arrival a={a} /></td><td>{s(a['Zoom Minutes']) || '—'}</td>
+                <td>{a['Confirmed At'] ? 'Yes' : 'No'}</td><td>{a['Reminder Sent At'] ? 'Sent' : '—'}</td><td><Arrival a={a} /></td><td>{s(a['Zoom Minutes']) || '—'}</td>{isToday && <td><QuickDecide id={s(a['Applicant ID'])} name={fullName(a)} stage={s(a.Stage)} /></td>}
               </tr>
             ))}
           </tbody>

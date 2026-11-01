@@ -18,7 +18,7 @@ const ICON: Record<string, string> = {
   '/help': 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zm-2.5-11a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6v.6M12 17v.5'
 };
 const LINKS = [
-  { href: '/', label: 'Dashboard' },
+  { href: '/', label: 'Home' },
   { href: '/candidates', label: 'Candidates' },
   { href: '/board', label: 'Pipeline Board' },
   { href: '/session', label: "This Week's Session" },
@@ -60,7 +60,7 @@ export default function NavLinks({ open, approvals = 0 }: { open: number; approv
         {LINKS.map((l) => {
           const active = l.href === '/' ? path === '/' : path.startsWith(l.href);
           const link = (
-            <Link key={l.href} href={l.href} prefetch className={active && !openBox ? 'active' : ''} title={l.label}>
+            <Link key={l.href} href={l.href} prefetch className={active && !openBox ? 'active' : ''} title={l.label} data-tour={`nav${l.href === '/' ? '-home' : l.href.replace('/', '-')}`}>
               <svg className="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d={ICON[l.href]} /></svg>
               <span className="nav-label">{l.label}</span>
               {l.href === '/attention' && open > 0 && <span className="count">{open}</span>}
@@ -76,7 +76,7 @@ export default function NavLinks({ open, approvals = 0 }: { open: number; approv
                 <button type="button" className="nav-caret" onClick={() => setInboxes((v) => !v)} aria-expanded={inboxes} title={inboxes ? 'Hide inboxes' : 'Show inboxes'}>{inboxes ? '▾' : '▸'}</button>
               </div>
               {inboxes && (['olj', 'email'] as const).map((c) => (
-                <button key={c} type="button" className={`nav-sub${openBox === c ? ' active' : ''}`} aria-current={openBox === c ? 'true' : undefined} onClick={() => openInbox(c)} title={c === 'olj' ? 'OLJ Inbox' : 'Email Inbox'}>
+                <button key={c} type="button" className={`nav-sub${openBox === c ? ' active' : ''}`} aria-current={openBox === c ? 'true' : undefined} onClick={() => openInbox(c)} title={c === 'olj' ? 'OLJ Inbox' : 'Email Inbox'} data-tour={`nav-inbox-${c}`}>
                   <svg className="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d={INBOX_ICON} /></svg>
                   <span className="nav-label">{c === 'olj' ? 'OLJ Inbox' : 'Email Inbox'}</span>
                 </button>

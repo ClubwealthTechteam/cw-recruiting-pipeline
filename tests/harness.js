@@ -104,6 +104,7 @@ function load({ now, formRows = [], mode = 'TEST', settings = {}, rejected = [],
     },
     Utilities: { formatDate: fmt, sleep: () => {}, base64Decode: (s) => Array.from(Buffer.from(s, 'base64')), newBlob: (s) => ({ getBytes: () => Array.from(Buffer.from(String(s))) }) },
     LockService: { getScriptLock: () => ({ tryLock: () => true, waitLock: () => {}, releaseLock: () => {} }) },
+    CacheService: (() => { const m = {}; return { getScriptCache: () => ({ get: (k) => (k in m ? m[k] : null), put: (k, v) => { m[k] = v; } }) }; })(),
     // secrets and hook URLs read as 's3cret'; anything the script stores itself (setProperty) reads back as stored
     PropertiesService: { getScriptProperties: () => ({ getProperty: (k) => (k in props ? props[k] : /_AT$/.test(k) ? null : 's3cret'), setProperty: (k, v) => { props[k] = String(v); } }) },
     ContentService: { createTextOutput: (s) => ({ s, setMimeType() { return this; } }), MimeType: { JSON: 'json' } },

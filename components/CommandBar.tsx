@@ -2,9 +2,10 @@
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
+export const OPEN_COMMAND_EVENT = 'cw-open-command';
 export type CommandItem = { id: string; name: string; position: string; stage: string };
 const PAGES = [
-  { label: 'Dashboard', href: '/' }, { label: 'Candidates', href: '/candidates' }, { label: 'Pipeline board', href: '/board' },
+  { label: 'Home', href: '/' }, { label: 'Candidates', href: '/candidates' }, { label: 'Pipeline board', href: '/board' },
   { label: "This Week's Session", href: '/session' }, { label: 'Talent pool', href: '/talent' }, { label: 'Reports', href: '/reports' },
   { label: 'Needs Attention', href: '/attention' }, { label: 'Help: what the CRM does', href: '/help' }
 ];
@@ -22,8 +23,10 @@ export default function CommandBar({ people }: { people: CommandItem[] }) {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); setOpen((o) => !o); setQ(''); setSel(0); }
       else if (e.key === 'Escape') setOpen(false);
     };
+    const onOpen = () => { setOpen(true); setQ(''); setSel(0); };
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    window.addEventListener(OPEN_COMMAND_EVENT, onOpen);
+    return () => { window.removeEventListener('keydown', onKey); window.removeEventListener(OPEN_COMMAND_EVENT, onOpen); };
   }, []);
   useEffect(() => { if (open) setTimeout(() => input.current?.focus(), 0); }, [open]);
 

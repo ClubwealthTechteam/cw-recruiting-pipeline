@@ -8,17 +8,23 @@ import FitBadge from './FitBadge';
 import { InlineStage, QuickNote } from './InlineActions';
 import UndoButton from './UndoButton';
 import ZoomBadge from './ZoomBadge';
+import { useSince, isNew } from './useSince';
 import type { ZoomLive } from '@/lib/pipeline';
 
 export type CandidateRow = {
   id: string; name: string; email: string; stage: string; source: string; position: string;
   applied: string; interview: string; confirmed: string; minutes: string; invites: string; historical: boolean;
   fit: string; fitTrack: string; fitSummary: string; hold?: string;
-  score?: string; scoreSuggestion?: string; tags?: string[]; test?: boolean; zoom?: ZoomLive;
+  changed?: string[]; score?: string; scoreSuggestion?: string; tags?: string[]; test?: boolean; zoom?: ZoomLive;
 };
+
+const AV = ['#1f5fbf', '#6941c6', '#1d7a43', '#c4320a', '#0e7490', '#9a6200', '#b42318', '#475467'];
+export const initials = (n: string) => n.split(' ').filter(Boolean).slice(0, 2).map((x) => x[0]).join('').toUpperCase() || '?';
+export const avatarColor = (id: string) => AV[(id.charCodeAt(id.length - 1) || 0) % AV.length];
 
 export default function CandidatesTable({ rows }: { rows: CandidateRow[] }) {
   const [sel, setSel] = useState<string[]>([]);
+  const since = useSince();
   const [tip, setTip] = useState<{ x: number; y: number; row: CandidateRow } | null>(null);
   const all = rows.length > 0 && sel.length === rows.length;
   const toggle = (id: string) => setSel((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
@@ -42,7 +48,9 @@ export default function CandidatesTable({ rows }: { rows: CandidateRow[] }) {
               onMouseLeave={() => setTip(null)}>
               <td className="check"><input type="checkbox" checked={sel.includes(r.id)} onChange={() => toggle(r.id)} aria-label={`Select ${r.name}`} /></td>
               <td>
-                <Link href={`/candidates/${encodeURIComponent(r.id)}`}>{r.name || '(no name)'}</Link><div className="muted small">{r.email}</div>
+                <div className="name-cell"><span className={`new-dot${isNew(since, ...(r.changed || [])) ? '' : ' hidden'}`} title="New or changed since your last visit" />
+                  <span className="av" style={{ background: AV[(r.id.charCodeAt(r.id.length - 1) || 0) % AV.length] }}>{initials(r.name)}</span>
+                  <div><Link href={`/candidates/${encodeURIComponent(r.id)}`}>{r.name || '(no name)'}</Link><div className="muted small">{r.email}</div></div></div>
                 {r.tags && r.tags.length > 0 && <div className="row-tags">{r.tags.map((t) => <Link key={t} href={`/candidates?stage=All&tag=${encodeURIComponent(t)}`} className="mini-tag">{t}</Link>)}</div>}
               </td>
               <td><FitBadge tag={r.fit} track={r.fitTrack} hold={r.hold} summary={r.fitSummary} old={r.historical} /></td>

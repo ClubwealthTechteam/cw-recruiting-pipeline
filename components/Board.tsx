@@ -5,13 +5,16 @@ import { REASON_REQUIRED, type ZoomLive } from '@/lib/pipeline';
 import ZoomBadge from './ZoomBadge';
 import { useAction } from './useAction';
 import { InlineStage } from './InlineActions';
+import { useSince, isNew } from './useSince';
+import { initials, avatarColor } from './CandidatesTable';
 
-export type BoardCard = { id: string; name: string; stage: string; position: string; source: string; fit: string; session: string; score: string; arrival: string; test?: boolean; zoom?: ZoomLive };
+export type BoardCard = { id: string; name: string; stage: string; position: string; source: string; fit: string; session: string; score: string; arrival: string; changed?: string[]; test?: boolean; zoom?: ZoomLive };
 const PER_COLUMN = 60;
 const FIT_TONE: Record<string, string> = { Great: 'green', Good: 'blue', 'Not Fit': 'grey' };
 
 export default function Board({ stages, cards }: { stages: string[]; cards: BoardCard[] }) {
   const { run, busy } = useAction();
+  const since = useSince();
   const [dragging, setDragging] = useState<BoardCard | null>(null);
   const [over, setOver] = useState('');
   const [moved, setMoved] = useState<Record<string, string>>({}); // shows the move at once, before the sheet confirms
@@ -70,7 +73,11 @@ export default function Board({ stages, cards }: { stages: string[]; cards: Boar
             {col.slice(0, PER_COLUMN).map((c) => (
               <article key={c.id} className={`card ${busy && dragging?.id === c.id ? 'busy' : ''}`} draggable
                 onDragStart={() => setDragging(c)} onDragEnd={() => { setDragging(null); setOver(''); }}>
-                <Link href={`/candidates/${encodeURIComponent(c.id)}`} className="card-name" draggable={false}>{c.name}</Link>
+                <div className="card-top">
+                  <span className="av" style={{ background: avatarColor(c.id) }}>{initials(c.name)}</span>
+                  <Link href={`/candidates/${encodeURIComponent(c.id)}`} className="card-name" draggable={false}>{c.name}</Link>
+                  {isNew(since, ...(c.changed || [])) && <span className="new-dot" title="New or changed since your last visit" style={{ marginLeft: 'auto' }} />}
+                </div>
                 <div className="muted small">{c.position} · {c.source}{c.session ? ` · ${c.session}` : ''}</div>
                 <div className="card-move" onMouseDown={(e) => e.stopPropagation()}><InlineStage id={c.id} stage={stageOf(c)} /></div>
                 <div className="card-badges">

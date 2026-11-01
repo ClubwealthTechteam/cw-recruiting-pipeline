@@ -260,3 +260,36 @@ export function statusEmails(outbox: Row[], applicantId?: string) {
     }))
     .sort((x, y) => y.queuedAt.localeCompare(x.queuedAt));
 }
+
+// ---------- Philippine time next to Pacific time (Miguel, 2026-11-02) ----------
+
+/** The real instant of a Pacific wall-clock time ("YYYY-MM-DD", "HH:mm"), daylight saving included. */
+function ptInstant(day: string, hhmm: string): Date | null {
+  const [y, m, d] = day.slice(0, 10).split('-').map(Number);
+  const [h, mi] = hhmm.split(':').map(Number);
+  if (!y || isNaN(h)) return null;
+  const guess = Date.UTC(y, m - 1, d, h, mi || 0);
+  // how far Pacific is from UTC at that moment (-7 or -8 hours)
+  const asPT = new Date(new Intl.DateTimeFormat('sv-SE', { timeZone: 'America/Los_Angeles', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date(guess)).replace(' ', 'T') + ':00Z').getTime();
+  return new Date(guess + (guess - asPT));
+}
+
+/** "Thu 6:00 AM PHT" (or "Nov 12, 6:00 AM PHT" with withDate) for a Pacific day and time. */
+export function phtOf(day: string, hhmm = '14:00', withDate = false): string {
+  const t = ptInstant(day, hhmm);
+  if (!t) return '';
+  const f = (o: Intl.DateTimeFormatOptions) => new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Manila', ...o }).format(t);
+  return `${withDate ? f({ month: 'short', day: 'numeric' }) + ',' : f({ weekday: 'short' })} ${f({ hour: 'numeric', minute: '2-digit' })} PHT`;
+}
+
+/** "2:00 PM PT · Thu 6:00 AM PHT" for a session day. */
+export const sessionTimes = (day: string) => `2:00 PM PT · ${phtOf(day)}`;
+
+/** A Pacific stamp "YYYY-MM-DD HH:mm:ss" shown in Philippine time, e.g. "Oct 31, 8:14 AM PHT". */
+export function stampPht(stamp: string): string {
+  const m = /^(\d{4}-\d{2}-\d{2}) (\d{1,2}):(\d{2})/.exec(stamp);
+  return m ? phtOf(m[1], `${m[2]}:${m[3]}`, true) : '';
+}
+
+/** Now as a Pacific stamp "YYYY-MM-DD HH:mm:ss" (compares as text with sheet stamps). */
+export const nowStampPT = (now = new Date()) => ptStamp(now.toISOString());

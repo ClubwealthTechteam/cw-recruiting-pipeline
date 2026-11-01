@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import TutorialList from '@/components/TutorialList';
 
 type Section = { title: string; href?: string; items: string[] };
 
@@ -47,9 +48,9 @@ const SECTIONS: Section[] = [
     ]
   },
   {
-    title: 'Dashboard',
+    title: 'Home',
     href: '/',
-    items: ['Confirmation, show-up and completion rates, applicants per week (Form, OLJ, Email, Referral), the pipeline by stage and by position. Click any bar to see the people.', 'Filter by session to see one Wednesday on its own (rates, pipeline and positions for that session\'s invitees), or change the applied period: last 30, 60 or 90 days, or all time.']
+    items: ['Greets whoever is signed in. "Needs you today" lists what to do now (open items, emails to approve, interviews to rate, form-vs-resume warnings, invitees who have not confirmed), each with a button to it. The next session card shows confirmed / invited in Pacific and Philippine time. The Ask bar sends a question to the assistant.', 'Under Insights: confirmation, show-up and completion rates, applicants per week (Form, OLJ, Email, Referral), the pipeline by stage and by position. Click any bar to see the people.', 'Filter by session to see one Wednesday on its own (rates, pipeline and positions for that session\'s invitees), or change the applied period: last 30, 60 or 90 days, or all time.']
   },
   {
     title: 'Candidates',
@@ -105,7 +106,19 @@ const SECTIONS: Section[] = [
       '« at the top of the sidebar shrinks it to icons.',
       'The blue bar at the top means a page is loading. A notice appears when a new version of the CRM is out.',
       'Test applicants are shown with a "Test · not counted" tag and never count in numbers or reports.',
-      'Ask (bottom right): ask a question about the pipeline.'
+      'Ask (bottom right) or the Ask bar on Home: ask a question about the pipeline.',
+      'On a profile: J next applicant, K previous, E write a reply, S move stage, N add a note, ? the list of shortcuts.'
+    ]
+  },
+  {
+    title: 'Working together safely',
+    items: [
+      'Every email, OLJ invite and re-invite shows a preview first (To, Subject, the email with the banner). Sends to more than one person show the count and need a tick before Send works.',
+      'Times show Pacific and Philippine time (PHT) side by side, e.g. "2:00 PM PT · Thu 6:00 AM PHT".',
+      '"Camille is viewing this now" appears on a profile someone else has open. A "Heads up" note shows when a teammate moved or messaged the applicant in the last hour.',
+      'Possible duplicates (same email or same full name) are flagged on the profile with links to the other record; "Not a duplicate" hides the warning.',
+      'A blue dot in Candidates and on the board marks applicants who are new or changed since your last visit on this computer.',
+      'Session day mode: on Wednesday the session list gets Pass, Not Fit, Left Zoom and Did not finish buttons for each person.'
     ]
   }
 ];
@@ -114,9 +127,11 @@ export default function Help() {
   return (
     <>
       <header className="page-head">
-        <h1>Help: what the CRM does</h1>
-        <p className="sub">Everything the Recruiting Pipeline does for Recruitment, and where to find it.</p>
+        <h1>Help</h1>
+        <p className="sub">Step-by-step tutorials first, then everything the CRM does and where to find it.</p>
       </header>
+      <TutorialList />
+      <h2 className="section-title">What the CRM does</h2>
       <div className="help-grid">
         {SECTIONS.map((sec) => (
           <section key={sec.title} className="panel">
