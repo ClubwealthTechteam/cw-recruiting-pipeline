@@ -1,3 +1,4 @@
+import Logo from '@/components/Logo';
 import NavLinks from '@/components/NavLinks';
 import ChatBubble from '@/components/ChatBubble';
 import Freshness from '@/components/Freshness';
@@ -38,8 +39,8 @@ export default async function AppLayout({ children, panel }: { children: React.R
     <div className="shell">
       <Suspense fallback={null}><TopProgress /></Suspense>
       <aside className="sidebar">
-        <div className="brand">Club Wealth</div>
-        <div className="product">Recruiting Pipeline</div>
+        <Logo />
+        <div className="product">Club Wealth Recruiting Pipeline</div>
         <NavLinks open={open} approvals={approvals} />
         <div className="kbd-hint">Press <kbd>Ctrl</kbd> + <kbd>K</kbd> to find anyone</div>
         <div className="sidebar-foot">
