@@ -1039,7 +1039,7 @@ function setup() {
   ensureTab_(SH.TEAM_UPDATES, TEAM_UPDATE_COLS);
   var ap = sheet_(SH.APPLICANTS);
   var aph = ap.getRange(1, 1, 1, ap.getLastColumn()).getValues()[0];
-  ['Invite Hold', 'Minutes Early', 'Arrival', 'Tags'].forEach(function (h) {
+  ['Invite Hold', 'Minutes Early', 'Arrival', 'Tags', 'Resume Experience'].forEach(function (h) {
     if (aph.indexOf(h) === -1) { ap.getRange(1, aph.length + 1).setValue(h).setFontWeight('bold'); aph.push(h); }
   });
   var oj = sheet_(SH.OLJ);

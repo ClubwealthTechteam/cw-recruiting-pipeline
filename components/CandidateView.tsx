@@ -118,6 +118,7 @@ export default async function CandidateView({ appId, panel = false }: { appId: s
             {LINKS.map((f) => { const u = safeUrl(a[f]); return u ? <Fragment key={f}><dt>{f.replace(' Link', '')}</dt><dd><a href={u} target="_blank" rel="noopener noreferrer">Open</a></dd></Fragment> : null; })}
           </dl>
           {a['Experience Overview'] && (<><h3>Experience overview</h3><p className="prewrap">{s(a['Experience Overview'])}</p></>)}
+          {a['Resume Experience'] && (<><h3>Experience (from resume)</h3><p className="prewrap">{s(a['Resume Experience'])}</p><p className="hint">Read from the resume by the screening routine. Check the resume for anything that looks off.</p></>)}
           {s(a.Source) === 'OLJ' && (
             <>
               <h3>OnlineJobs.ph</h3>
