@@ -1,3 +1,4 @@
+import Logo from '@/components/Logo';
 import { redirect } from 'next/navigation';
 import { USERS, setupProblem, userForCode, startSession, currentUser, isLocked, recordFailure, clearFailures } from '@/lib/auth';
 
@@ -24,8 +25,8 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
   return (
     <main className="login">
       <form action={login} className="login-card">
-        <div className="brand">Club Wealth</div>
-        <h1>Recruiting Pipeline</h1>
+        <Logo tone="light" />
+        <h1>Club Wealth Recruiting Pipeline</h1>
         <label>
           Name
           <select name="name" required defaultValue="">
