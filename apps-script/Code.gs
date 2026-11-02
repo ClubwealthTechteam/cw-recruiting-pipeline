@@ -93,6 +93,10 @@ function settings_() {
   var t = table_(SH.SETTINGS);
   var map = {};
   t.rows.forEach(function (r) { map[r.Key] = r; });
+  // every invite date (Send invite, automatic invites, re-invites, previews) skips the cancelled Wednesdays
+  var cv = map.CANCELLED_SESSIONS ? map.CANCELLED_SESSIONS.Value : '';
+  if (Object.prototype.toString.call(cv) === '[object Date]') cv = Utilities.formatDate(cv, TZ, 'yyyy-MM-dd');
+  if (typeof setCancelledSessions === 'function') setCancelledSessions(cv);
   return {
     // Sheets turns typed dates like 2026-10-28 into Date values; always hand back YYYY-MM-DD text.
     get: function (k) {
@@ -1566,7 +1570,8 @@ function api_(req) {
       views: optionalRows_(SH.VIEWS),
       withHistory: all,
       mode: st.get('MODE'),
-      emailSending: st.get('EMAIL_SENDING')
+      emailSending: st.get('EMAIL_SENDING'),
+      cancelledSessions: Object.keys(CANCELLED_SESSIONS).sort()
     };
   }
   if (req.action === 'applicant') {

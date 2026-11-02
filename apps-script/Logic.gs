@@ -70,7 +70,26 @@ function interviewDateFor(appliedAt) {
   var p = ptParts(appliedAt);
   var ahead = (3 - p.dow + 7) % 7;
   if (ahead === 0 && p.hh >= SAME_DAY_CUTOFF_HOUR) ahead = 7;
-  return addDays(ymd(p.y, p.m, p.d), ahead);
+  return skipCancelled(addDays(ymd(p.y, p.m, p.d), ahead));
+}
+
+// ---------- cancelled sessions (Miguel, 2026-11-02): Settings CANCELLED_SESSIONS, e.g. "2026-11-04, 2026-12-23" ----------
+
+var CANCELLED_SESSIONS = {};
+
+/** Loads the cancelled Wednesdays from the Settings value (comma, space or new-line separated YYYY-MM-DD). */
+function setCancelledSessions(value) {
+  CANCELLED_SESSIONS = {};
+  String(value || '').split(/[\s,;]+/).forEach(function (d) { if (/^\d{4}-\d{2}-\d{2}$/.test(d)) CANCELLED_SESSIONS[d] = true; });
+}
+
+function isCancelledSession(ymdStr) { return !!CANCELLED_SESSIONS[String(ymdStr || '')]; }
+
+/** The same Wednesday, or the next one that is not cancelled. */
+function skipCancelled(ymdStr) {
+  var d = ymdStr;
+  for (var i = 0; i < 52 && isCancelledSession(d); i++) d = addDays(d, 7);
+  return d;
 }
 
 /**
@@ -81,7 +100,7 @@ function reinviteDateFor(originalYmd, now) {
   var next = addDays(originalYmd, 7);
   var today = todayPT(now);
   while (next < today) next = addDays(next, 7);
-  return next;
+  return skipCancelled(next);
 }
 
 /**
@@ -95,6 +114,7 @@ function sessionDateProblem(ymdStr, now) {
   var t = ptParts(now || new Date());
   var today = ymd(t.y, t.m, t.d);
   if (ymdStr < today || (ymdStr === today && t.hh >= 14)) return 'The ' + longDate(ymdStr) + ' session has already started';
+  if (isCancelledSession(ymdStr)) return 'The ' + longDate(ymdStr) + ' session is cancelled';
   return '';
 }
 

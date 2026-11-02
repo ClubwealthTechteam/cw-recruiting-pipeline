@@ -1,6 +1,6 @@
 import 'server-only';
 import { unstable_cache, revalidateTag } from 'next/cache';
-import { ptStamp } from '@/lib/pipeline';
+import { ptStamp, setCancelledSessions } from '@/lib/pipeline';
 
 export type Row = Record<string, string | number>;
 /** One Active Team Members row: the Onboarding copy with site edits on top; edited = { field: value in the Onboarding sheet }. */
@@ -16,11 +16,13 @@ export type PipelineData = {
   team?: TeamMember[];
   mode: string;
   emailSending?: string;
+  cancelledSessions?: string[];
   fetchedAt?: number;
 };
 
 /** Applied times in one format (Pacific), so every page sorts and dates them the same way. */
 function normalize(d: PipelineData): PipelineData {
+  setCancelledSessions(d.cancelledSessions);
   for (const a of d.applicants) if (a['Applied At (PT)']) a['Applied At (PT)'] = ptStamp(a['Applied At (PT)']);
   return d;
 }
@@ -50,18 +52,22 @@ export const PIPELINE_TAG = 'pipeline';
  * also loads the fresh copy straight away) or anything is changed on the site; otherwise refreshed in the background.
  * Applicants from before the system come with a few fields only (enough for counts) and without their history.
  */
-export const getData = unstable_cache(
+const getDataCached = unstable_cache(
   async () => ({ ...normalize(await call<PipelineData>({ action: 'data', slim: true })), fetchedAt: Date.now() }),
   ['pipeline-data-v3'],
   { revalidate: 30, tags: [PIPELINE_TAG] }
 );
 
 /** Everything, including the ~2,000 applicants from before the system. Only for "Include applicants from before the system". */
-export const getDataWithHistory = unstable_cache(
+const getDataWithHistoryCached = unstable_cache(
   async () => ({ ...normalize(await call<PipelineData>({ action: 'data', slim: true, withHistory: true })), fetchedAt: Date.now() }),
   ['pipeline-data-all-v1'],
   { revalidate: 120, tags: [PIPELINE_TAG] }
 );
+
+/** Every read (cached or not) also sets the cancelled Wednesdays for the session helpers in lib/pipeline. */
+export async function getData(): Promise<PipelineData> { const d = await getDataCached(); setCancelledSessions(d.cancelledSessions); return d; }
+export async function getDataWithHistory(): Promise<PipelineData> { const d = await getDataWithHistoryCached(); setCancelledSessions(d.cancelledSessions); return d; }
 
 /** One message in an applicant's email or OLJ conversation, oldest first. */
 export type ThreadItem = {

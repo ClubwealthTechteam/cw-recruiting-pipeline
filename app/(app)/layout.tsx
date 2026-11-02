@@ -25,6 +25,7 @@ export default async function AppLayout({ children, panel }: { children: React.R
   let emailReady = false;
   let fetchedAt: number | undefined;
   let people: CommandItem[] = [];
+  let cancelled: string[] = [];
   try {
     const d = await getData();
     open = d.flags.filter((f) => s(f.Status) === 'Open').length;
@@ -32,6 +33,7 @@ export default async function AppLayout({ children, panel }: { children: React.R
     mode = d.mode;
     emailReady = d.emailSending === 'ON';
     fetchedAt = d.fetchedAt;
+    cancelled = d.cancelledSessions || [];
     people = d.applicants.filter((a) => s(a.Historical) !== 'Y')
       .map((a) => ({ id: s(a['Applicant ID']), name: fullName(a), position: s(a.Position), stage: s(a.Stage) }));
   } catch {
@@ -39,6 +41,8 @@ export default async function AppLayout({ children, panel }: { children: React.R
   }
   return (
     <div className="shell">
+      {/* cancelled Wednesdays for the session lists in the browser (lib/pipeline cancelledSessions) */}
+      <script dangerouslySetInnerHTML={{ __html: `window.__cwCancelled=${JSON.stringify(cancelled.filter((x) => /^\d{4}-\d{2}-\d{2}$/.test(x)))};` }} />
       <Suspense fallback={null}><TopProgress /></Suspense>
       <aside className="sidebar">
         <Logo tone="light" />
