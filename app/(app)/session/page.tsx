@@ -6,7 +6,7 @@ import StageBadge from '@/components/StageBadge';
 import DataError from '@/components/DataError';
 import ReinviteNoShows from '@/components/ReinviteNoShows';
 import NonNegotiables from '@/components/NonNegotiables';
-import { todayPT, sessionTimes } from '@/lib/pipeline';
+import { todayPT, sessionTimes, cancelledSessions } from '@/lib/pipeline';
 import QuickDecide from '@/components/QuickDecide';
 
 export default async function Session({ searchParams }: { searchParams: Promise<{ date?: string }> }) {
@@ -40,6 +40,7 @@ export default async function Session({ searchParams }: { searchParams: Promise<
           <Link href={`/session?date=${prev.toISOString().slice(0, 10)}`}>← Previous week</Link> · <Link href={`/session?date=${next.toISOString().slice(0, 10)}`}>Next week →</Link>
         </p>
       </header>
+      {cancelledSessions().includes(date) && <div className="panel warn"><strong>This session is cancelled.</strong> New invites go to the next session instead. To bring it back, remove {date} from CANCELLED_SESSIONS in the Settings tab.</div>}
       <section className="tiles">
         <div className="tile"><div className="tile-label">Invited</div><div className="tile-value">{counted.length}</div></div>
         <div className="tile"><div className="tile-label">Confirmed</div><div className="tile-value">{confirmed}</div></div>

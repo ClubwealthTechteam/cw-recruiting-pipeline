@@ -76,19 +76,35 @@ function addDays(d: string, n: number): string {
   return t.toISOString().slice(0, 10);
 }
 
-/** Today if it is Wednesday, otherwise the next Wednesday (Pacific). */
+/**
+ * Cancelled Wednesdays (Settings CANCELLED_SESSIONS in the sheet). The server sets them from each data load and the
+ * layout hands them to the browser, so every "next session" and session list skips them.
+ */
+export function cancelledSessions(): string[] {
+  const g = globalThis as { __cwCancelled?: string[] };
+  return Array.isArray(g.__cwCancelled) ? g.__cwCancelled : [];
+}
+export function setCancelledSessions(list: string[] | undefined) {
+  (globalThis as { __cwCancelled?: string[] }).__cwCancelled = Array.isArray(list) ? list : [];
+}
+const skipCancelled = (d: string) => { const c = cancelledSessions(); let x = d; for (let i = 0; i < 52 && c.includes(x); i++) x = addDays(x, 7); return x; };
+
+/** Today if it is Wednesday, otherwise the next Wednesday (Pacific), skipping cancelled sessions. */
 export function upcomingWednesday(now = new Date()): string {
   const t = todayPT(now);
   const dow = new Date(`${t}T12:00:00Z`).getUTCDay();
-  return addDays(t, (3 - dow + 7) % 7);
+  return skipCancelled(addDays(t, (3 - dow + 7) % 7));
 }
 
 /** The next n Wednesday sessions (Pacific) that have not started yet (2:00 PM PT), for "Move to another session". */
 export function upcomingSessions(n = 8, now = new Date()): string[] {
   let first = upcomingWednesday(now);
   const hour = Number(new Intl.DateTimeFormat('en-US', { timeZone: 'America/Los_Angeles', hour: 'numeric', hourCycle: 'h23' }).format(now));
-  if (first === todayPT(now) && hour >= 14) first = addDays(first, 7);
-  return Array.from({ length: n }, (_, i) => addDays(first, 7 * i));
+  if (first === todayPT(now) && hour >= 14) first = skipCancelled(addDays(first, 7));
+  const c = cancelledSessions();
+  const out: string[] = [];
+  for (let d = first; out.length < n; d = addDays(d, 7)) if (!c.includes(d)) out.push(d);
+  return out;
 }
 
 export function formatDate(d: string): string {

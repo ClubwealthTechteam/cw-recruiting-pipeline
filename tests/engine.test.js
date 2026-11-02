@@ -1017,3 +1017,20 @@ test('preview shows the invite or reply without queuing anything; presence lists
   assert.deepEqual(env.api({ action: 'presence', by: 'Am', id: 'F-2' }).data.others, []);
   assert.deepEqual(env.api({ action: 'presence', by: 'Camille', id: 'F-2' }).data.others, ['Am']);
 });
+
+test('cancelled sessions: Send invite and previews skip a cancelled Wednesday; moving to it is refused', () => {
+  // now is Tue 2026-10-27, so the next Wednesday is 2026-10-28; cancel it
+  const env = invitedEnv({ EMAIL_SENDING: 'ON', AUTO_INVITES: 'OFF', CANCELLED_SESSIONS: '2026-10-28' });
+  env.ctx.tick();
+  const pv = env.api({ action: 'preview', by: 'Am', kind: 'invite', id: 'F-2' });
+  assert.equal(pv.data.session, '2026-11-04', 'the preview shows the next open session');
+  assert.match(pv.data.body, /November 4, 2026/);
+  assert.doesNotMatch(pv.data.body, /October 28/);
+  const r = env.api({ action: 'sendInvite', by: 'Am', id: 'F-2', channel: 'email' });
+  assert.equal(r.ok, true, r.error);
+  assert.equal(r.data.session, '2026-11-04');
+  const q = env.rows('Outbox').filter((e) => e['Applicant ID'] === 'F-2' && e.Type === 'Invite' && e.Status === 'Queued');
+  assert.match(q[q.length - 1].Body, /November 4, 2026/);
+  assert.match(env.api({ action: 'moveSession', by: 'Am', ids: ['F-3'], date: '2026-10-28' }).error, /cancelled/);
+  assert.deepEqual(env.api({ action: 'data', slim: true }).data.cancelledSessions, ['2026-10-28']);
+});
