@@ -589,7 +589,10 @@ test('test applicants are never counted: no Slack alert, not in session results'
 
 test('Onboarded is a stage the site can move people to', () => {
   const env = invitedEnv();
-  assert.equal(env.api({ action: 'setStage', by: 'Am', ids: ['F-2'], stage: 'Onboarded' }).ok, true);
+  env.ctx.setup();
+  assert.match(env.api({ action: 'setStage', by: 'Am', ids: ['F-2'], stage: 'Onboarded' }).error, /Hired \| Homexa or Hired \| Clubwealth/);
+  const r = env.api({ action: 'setStage', by: 'Am', ids: ['F-2'], stage: 'Onboarded', company: 'Homexa', startDate: '2026-11-13' });
+  assert.equal(r.ok, true, r.error);
   assert.equal(env.rows('Applicants')[0].Stage, 'Onboarded');
 });
 
@@ -769,11 +772,12 @@ test('status emails wait for approval: moving queues one, moving again replaces 
   env.ctx.setup();
   const pending = () => env.rows('Outbox').filter((e) => e['Applicant ID'] === 'F-2' && e.Status === 'Pending approval');
   // Hired queues a Hired email for approval; nothing is sent
-  const r = env.api({ action: 'setStage', by: 'Am', ids: ['F-2'], stage: 'Hired' });
+  const r = env.api({ action: 'setStage', by: 'Am', ids: ['F-2'], stage: 'Hired', company: 'Club Wealth', startDate: '2026-11-12' });
   assert.equal(r.ok, true, r.error);
   assert.equal(pending().length, 1);
   assert.equal(pending()[0].Type, 'Hired');
-  assert.match(pending()[0].Subject, /PLACEHOLDER/);
+  assert.match(pending()[0].Subject, /Club Wealth \| Start Date: Thursday, November 12, 2026/);
+  assert.match(env.rows('Applicants').find((a) => a['Applicant ID'] === 'F-2').Tags, /Hired \| Clubwealth/);
   assert.equal(pending()[0]['Queued By'], 'Am');
   ctxCalls.posts = []; env.ctx.tick();
   assert.equal(ctxCalls.posts.filter((p) => /zapier/.test(p.url)).length, 0, 'nothing goes out before approval');
@@ -788,8 +792,9 @@ test('status emails wait for approval: moving queues one, moving again replaces 
   assert.equal(env.api({ action: 'skipEmail', by: 'Am', emailId: pending()[0]['Email ID'] }).ok, true);
   assert.equal(pending().length, 0);
   // Onboarded uses the Hired template; approve sends it
-  env.api({ action: 'setStage', by: 'Am', ids: ['F-2'], stage: 'Onboarded' });
+  env.api({ action: 'setStage', by: 'Am', ids: ['F-2'], stage: 'Onboarded', company: 'Homexa', startDate: '2026-11-13' });
   const h = pending()[0];
+  assert.match(h.Subject, /^\[TEST\] Homexa|^Homexa/);
   assert.equal(h.Type, 'Hired');
   assert.equal(env.api({ action: 'approveEmail', by: 'Camille', emailId: h['Email ID'] }).ok, true);
   const approved = env.rows('Outbox').find((e) => e['Email ID'] === h['Email ID']);
@@ -798,7 +803,7 @@ test('status emails wait for approval: moving queues one, moving again replaces 
   assert.equal(env.api({ action: 'approveEmail', by: 'Camille', emailId: h['Email ID'] }).ok, false, 'cannot approve twice');
   // the same type is never queued again for this applicant
   env.api({ action: 'setStage', by: 'Am', ids: ['F-2'], stage: 'Passed Interview' });
-  env.api({ action: 'setStage', by: 'Am', ids: ['F-2'], stage: 'Hired' });
+  env.api({ action: 'setStage', by: 'Am', ids: ['F-2'], stage: 'Hired', company: 'Homexa', startDate: '2026-11-13' });
   assert.equal(pending().length, 0);
   assert.match(env.rows('Applicants').find((a) => a['Applicant ID'] === 'F-2').Notes, /Hired email not queued again/);
   // a stage with no email queues nothing; undo cancels what the move queued
@@ -940,11 +945,11 @@ test('inbox templates: reminders queue once; Hired / Onboarding go to Needs Appr
   assert.equal(env.api({ action: 'sendTemplate', by: 'Am', id: 'O-c7', template: 'Reminder', channel: 'olj' }).ok, false);
   // status templates wait for approval
   for (const t of ['Hired', 'Onboarding']) {
-    const s = env.api({ action: 'sendTemplate', by: 'Am', id: 'F-2', template: t });
+    const s = env.api({ action: 'sendTemplate', by: 'Am', id: 'F-2', template: t, company: 'Homexa', startDate: '2026-11-13' });
     assert.equal(s.data.pending, true, s.error);
     assert.equal(env.rows('Outbox').find((e) => e['Email ID'] === s.data.emailId).Status, 'Pending approval');
   }
-  assert.match(env.api({ action: 'sendTemplate', by: 'Am', id: 'F-2', template: 'Hired' }).error, /already waiting/);
+  assert.match(env.api({ action: 'sendTemplate', by: 'Am', id: 'F-2', template: 'Hired', company: 'Homexa', startDate: '2026-11-13' }).error, /already waiting/);
   assert.equal(env.api({ action: 'sendTemplate', by: 'Am', id: 'F-2', template: 'Hired', channel: 'olj' }).ok, false);
   assert.match(env.api({ action: 'sendTemplate', by: 'Am', id: 'F-2', template: 'Nope' }).error, /Unknown template/);
   assert.equal(env.ctx.EMAIL_TYPES.includes('Onboarding'), true);
@@ -1033,4 +1038,36 @@ test('cancelled sessions: Send invite and previews skip a cancelled Wednesday; m
   assert.match(q[q.length - 1].Body, /November 4, 2026/);
   assert.match(env.api({ action: 'moveSession', by: 'Am', ids: ['F-3'], date: '2026-10-28' }).error, /cancelled/);
   assert.deepEqual(env.api({ action: 'data', slim: true }).data.cancelledSessions, ['2026-10-28']);
+});
+
+test('final status templates: Benched and Rejected wording, onboarding emails per company and start date', () => {
+  const env = invitedEnv({ EMAIL_SENDING: 'ON' });
+  env.ctx.setup();
+  const b = env.ctx.statusEmail('Benched', 'Maria');
+  assert.match(b.body, /^<p>Hi Maria,<\/p>/);
+  assert.match(b.body, /Tara was very impressed with your qualifications/);
+  assert.match(b.body, /email-banner\.png/);
+  const r = env.ctx.statusEmail('Rejected', 'Maria');
+  assert.match(r.body, /^<p>Hi!<\/p>/);
+  assert.match(r.body, /decided not to move forward/);
+  assert.match(r.body, /All the best,/);
+  assert.doesNotMatch(r.body, /Cheers/);
+  const cw = env.ctx.statusEmail('Hired', 'Maria', { company: 'Club Wealth', startDate: '2026-11-12' });
+  assert.match(cw.body, /Welcome to Club Wealth!/);
+  assert.match(cw.body, /First Day TO DO: Thursday, November 12, 2026/);
+  assert.match(cw.body, /forms\.gle\/NjSEBpYwNQ8Z4Niw8/);
+  assert.match(cw.body, /clubwealth-zoom-background\.png/);
+  const hx = env.ctx.statusEmail('Hired', 'Maria', { company: 'Homexa', startDate: '2026-11-13', position: 'Transaction Coordinator' });
+  assert.match(hx.subject, /Homexa \| Start Date: Friday, November 13, 2026/);
+  assert.match(hx.body, /BEFORE 8:00 AM Friday/);
+  assert.match(hx.body, /homexa-transaction-team\.jpg/);
+  assert.match(hx.body, /forms\.gle\/epjTUxnSUSbJBH1v8/);
+  assert.throws(() => env.ctx.statusEmail('Hired', 'Maria', { company: 'Homexa' }), /start date/);
+  // the move needs a company; the tag is set, and undo puts the old tags back
+  const mv = env.api({ action: 'setStage', by: 'Am', ids: ['F-2'], stage: 'Hired', company: 'Homexa', startDate: '2026-11-13' });
+  assert.equal(mv.ok, true, mv.error);
+  const tag = () => env.rows('Applicants').find((a) => a['Applicant ID'] === 'F-2').Tags;
+  assert.equal(tag(), 'Hired | Homexa');
+  env.api({ action: 'undoStage', by: 'Am', ...mv.data.undo });
+  assert.equal(tag(), '');
 });

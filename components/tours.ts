@@ -74,7 +74,7 @@ export const TOURS: TourDef[] = [
     summary: 'Scorecards, moving stages on the board, and approving status emails.',
     steps: [
       { path: '@first-candidate', target: 'scorecard', title: '1. Fill in the scorecard', body: 'Rate all five (1 = poor, 5 = excellent) and click Save my scorecard. Each interviewer saves their own; the average and a suggestion (Passed or Not Fit) appear on top.' },
-      { path: '@first-candidate', target: 'stage', title: '2. Move the stage', body: 'Pick the new stage. Not Fit, Did Not Complete and re-invites need a reason (pick a common one or type your own). Press S to jump here. Undo is in the message at the bottom.' },
+      { path: '@first-candidate', target: 'stage', title: '2. Move the stage', body: 'Pick the new stage. For a hire pick "Hired | Homexa" or "Hired | Clubwealth" and the start date: that tags them and prepares the right Welcome & Onboarding email. Not Fit, Did Not Complete and re-invites need a reason (pick a common one or type your own). Press S to jump here. Undo is in the message at the bottom.' },
       { path: '/board', target: 'board', title: '3. Or drag on the board', body: 'The Pipeline Board shows every stage as a column. Drag a card to another column to move it. Click a name to open the profile in a panel that slides in from the right.' },
       { path: '/approvals', target: 'nav-approvals', title: '4. Approve status emails', body: 'Moving someone to Hired, Not Fit or Benched prepares an email here. Read the exact email and click Approve & send, or Don\'t send. Nothing goes out without this step.' }
     ]

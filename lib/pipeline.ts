@@ -309,3 +309,17 @@ export function stampPht(stamp: string): string {
 
 /** Now as a Pacific stamp "YYYY-MM-DD HH:mm:ss" (compares as text with sheet stamps). */
 export const nowStampPT = (now = new Date()) => ptStamp(now.toISOString());
+
+// ---------- Hired | Homexa / Hired | Clubwealth (Miguel, 2026-11-05) ----------
+
+export const HIRE_COMPANIES = [{ company: 'Homexa', label: 'Homexa' }, { company: 'Club Wealth', label: 'Clubwealth' }] as const;
+const HIRING = ['Hired', 'Onboarded'];
+/** The stage list for pickers: Hired and Onboarded appear once per company ("Hired | Homexa", "Hired | Clubwealth"). */
+export const STAGE_CHOICES: string[] = STAGES.flatMap((st) => (HIRING.includes(st) ? HIRE_COMPANIES.map((c) => `${st} | ${c.label}`) : [st]));
+/** "Hired | Homexa" → { stage: 'Hired', company: 'Homexa' }; any other stage → { stage, company: '' }. */
+export function parseStageChoice(choice: string): { stage: string; company: string } {
+  const m = /^(Hired|Onboarded) \| (.+)$/.exec(choice);
+  if (!m) return { stage: choice, company: '' };
+  return { stage: m[1], company: HIRE_COMPANIES.find((c) => c.label === m[2])?.company || '' };
+}
+export const needsStartDate = (choice: string) => !!parseStageChoice(choice).company;

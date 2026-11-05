@@ -1117,7 +1117,7 @@ function ensureCols_(name, cols) {
  * one for the new stage as "Pending approval" (Miguel, 2026-10-29: never sent until Am or Camille approve it).
  * Returns the new email's id, or null. A type already sent (or approved) to this applicant is never queued again.
  */
-function statusEmailOnMove_(st, apps, a, stage, by) {
+function statusEmailOnMove_(st, apps, a, stage, by, opts) {
   ensureCols_(SH.OUTBOX, DECIDED_COLS);
   var out = table_(SH.OUTBOX);
   var id = a['Applicant ID'];
@@ -1128,11 +1128,11 @@ function statusEmailOnMove_(st, apps, a, stage, by) {
   });
   var type = STATUS_EMAIL_FOR_STAGE[stage];
   if (!type) return null;
-  return queueStatusEmail_(st, out, apps, a, type, by);
+  return queueStatusEmail_(st, out, apps, a, type, by, opts);
 }
 
 /** Prepares one status email for approval (Status "Pending approval"). Never twice: not when one was already sent. */
-function queueStatusEmail_(st, out, apps, a, type, by) {
+function queueStatusEmail_(st, out, apps, a, type, by, opts) {
   var id = a['Applicant ID'];
   var done = out.rows.filter(function (e) { return e['Applicant ID'] === id && e.Type === type && (e.Status === 'Sent' || e.Status === 'Queued'); })[0];
   if (done) {
@@ -1142,7 +1142,7 @@ function queueStatusEmail_(st, out, apps, a, type, by) {
   var test = st.get('MODE') !== 'LIVE';
   var to = test ? st.get('TEST_EMAIL') : String(a.Email || '').trim();
   if (!to) { flag_(id, 'No email address', type + ' email could not be prepared: no email address.'); return null; }
-  var mail = statusEmail(type, a['First Name']);
+  var mail = statusEmail(type, a['First Name'], opts || { company: companyFromTags(a.Tags), position: a.Position });
   return append_(out, {
     'Email ID': id_('E'), 'Applicant ID': id, Type: type, To: to, Subject: (test ? '[TEST] ' : '') + mail.subject, Body: mail.body,
     'Interview Date': ymdOf_(a['Interview Date']), 'Queued At': nowStr_(), Status: 'Pending approval', Test: test ? 'Y' : '', 'Queued By': by
@@ -1615,14 +1615,26 @@ function api_(req) {
       if (['Not Fit', 'Did Not Complete', 'Open for re-invite'].indexOf(req.stage) !== -1 && !req.reason) {
         throw new Error('A reason is required for ' + req.stage);
       }
+      // Hired / Onboarded (Miguel, 2026-11-05): pick the company (tag "Hired | Homexa" or "Hired | Clubwealth") and the
+      // start date; the Welcome & Onboarding email of that company is prepared for approval.
+      var hiring = req.stage === 'Hired' || req.stage === 'Onboarded';
+      if (hiring) {
+        if (!HIRED_TAGS[req.company]) throw new Error('Pick Hired | Homexa or Hired | Clubwealth.');
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(String(req.startDate || ''))) throw new Error('Pick the start date for the onboarding email.');
+      }
       var done = 0;
       var undo = { moves: [], queued: [] }; // what "Undo" needs to put back (see undoStage)
       (req.ids || []).forEach(function (id) {
         var a = byId[id];
         if (!a || a.Stage === req.stage) return;
-        undo.moves.push({ id: id, from: a.Stage, decision: String(a['Decision Reason'] || ''), reinvite: String(a['Re-invite Reason'] || '') });
-        setStage_(apps, a, req.stage, req.by, req.reason);
-        var pending = statusEmailOnMove_(st2, apps, a, req.stage, req.by);
+        undo.moves.push({ id: id, from: a.Stage, decision: String(a['Decision Reason'] || ''), reinvite: String(a['Re-invite Reason'] || ''), tags: String(a.Tags || '') });
+        setStage_(apps, a, req.stage, req.by, hiring ? (req.reason ? req.reason + ' · ' : '') + HIRED_TAGS[req.company] + ', starts ' + req.startDate : req.reason);
+        if (hiring) {
+          var keep = String(a.Tags || '').split(',').map(function (x) { return x.trim(); }).filter(function (x) { return x && x.indexOf('Hired |') !== 0; });
+          keep.push(HIRED_TAGS[req.company]);
+          update_(apps, a, { Tags: keep.join(', ') });
+        }
+        var pending = statusEmailOnMove_(st2, apps, a, req.stage, req.by, hiring ? { company: req.company, startDate: req.startDate, position: a.Position } : null);
         if (pending) undo.queued.push(pending);
         if (req.stage === 'Not Fit' || req.stage === 'Did Not Complete') update_(apps, a, { 'Decision Reason': req.reason });
         if (req.stage === 'Open for re-invite') {
@@ -1655,6 +1667,7 @@ function api_(req) {
         var f = {};
         if (String(a['Decision Reason'] || '') !== String(m.decision || '')) f['Decision Reason'] = m.decision || '';
         if (String(a['Re-invite Reason'] || '') !== String(m.reinvite || '')) f['Re-invite Reason'] = m.reinvite || '';
+        if (typeof m.tags === 'string' && String(a.Tags || '') !== m.tags) f.Tags = m.tags;
         if (Object.keys(f).length) update_(apps, a, f);
         back++;
       });
@@ -2000,7 +2013,8 @@ function api_(req) {
         var outS = table_(SH.OUTBOX);
         var waiting = outS.rows.some(function (e) { return e['Applicant ID'] === tp['Applicant ID'] && e.Type === tpl && e.Status === 'Pending approval'; });
         if (waiting) throw new Error('A ' + tpl + ' email for this applicant is already waiting in Needs Approval.');
-        var pid = queueStatusEmail_(st2, outS, apps, tp, tpl, req.by);
+        var sOpts = { company: req.company || companyFromTags(tp.Tags), startDate: req.startDate, position: tp.Position };
+        var pid = queueStatusEmail_(st2, outS, apps, tp, tpl, req.by, sOpts);
         if (!pid) throw new Error('Not prepared: a ' + tpl + ' email was already sent, or there is no email address (see Notes).');
         return { pending: true, emailId: pid, template: tpl };
       }
@@ -2057,6 +2071,8 @@ function preview_(req) {
     var bad = sessionDateProblem(session, new Date());
     if (bad) throw new Error(bad + '.');
     mail = inviteEmail(session, new Date());
+  } else if (req.kind === 'status') {
+    mail = statusEmail(String(req.type || ''), a['First Name'], { company: req.company || companyFromTags(a.Tags), startDate: req.startDate, position: a.Position });
   } else if (req.kind === 'reply') {
     var text = String(req.text || '').trim();
     if (!text) throw new Error('Type a message first.');
