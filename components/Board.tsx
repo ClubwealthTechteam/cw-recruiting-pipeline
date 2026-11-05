@@ -1,15 +1,15 @@
 'use client';
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
-import { REASON_REQUIRED, type ZoomLive } from '@/lib/pipeline';
+import { REASON_REQUIRED, HIRED_COLUMNS, parseStageChoice, type ZoomLive } from '@/lib/pipeline';
 import ZoomBadge from './ZoomBadge';
 import { useAction } from './useAction';
 import { InlineStage } from './InlineActions';
 import { useSince, isNew } from './useSince';
-import { hireFields } from './hirePrompt';
+import { hireFields, notFitFields } from './hirePrompt';
 import { initials, avatarColor } from './CandidatesTable';
 
-export type BoardCard = { id: string; name: string; stage: string; position: string; source: string; fit: string; session: string; score: string; arrival: string; changed?: string[]; test?: boolean; zoom?: ZoomLive };
+export type BoardCard = { id: string; name: string; stage: string; position: string; source: string; fit: string; session: string; score: string; arrival: string; changed?: string[]; company?: string; test?: boolean; zoom?: ZoomLive };
 const PER_COLUMN = 60;
 const FIT_TONE: Record<string, string> = { Great: 'green', Good: 'blue', 'Not Fit': 'grey' };
 
@@ -46,18 +46,30 @@ export default function Board({ stages, cards }: { stages: string[]; cards: Boar
     else speed.current = 0;
   }
 
-  async function drop(stage: string) {
+  async function drop(column: string) {
     const c = dragging;
     setDragging(null); setOver('');
-    if (!c || stageOf(c) === stage) return;
+    if (!c || stageOf(c) === column) return;
+    if (column === 'Hired | company not set') { alert('Drop on Hired | Homexa or Hired | Clubwealth to pick the company.'); return; }
+    // the split Hired columns: "Hired | Homexa" → stage Hired for Homexa (asks the start date)
+    if (HIRED_COLUMNS.includes(column)) {
+      const hire = hireFields(column, c.name);
+      if (!hire) return;
+      setMoved((m) => ({ ...m, [c.id]: column }));
+      const ok = await run({ action: 'setStage', ids: [c.id], ...hire }, { success: `${c.name} moved to ${column} ✓ Onboarding email waiting in Needs Approval` });
+      if (!ok) setMoved((m) => { const n = { ...m }; delete n[c.id]; return n; });
+      return;
+    }
+    const stage = column;
     let reason = '';
     if (REASON_REQUIRED.includes(stage)) {
       reason = prompt(`Reason for moving ${c.name} to ${stage}:`)?.trim() || '';
       if (!reason) return;
     }
-    // Hired / Onboarded: which company, and the start date for the onboarding email
+    // Hired / Onboarding: which company, and the start date for the onboarding email
     let hire: Record<string, string> | null = { stage };
-    if (stage === 'Hired' || stage === 'Onboarded') {
+    if (stage === 'Not Fit') { hire = notFitFields(c.name); if (!hire) return; hire = { stage, ...hire }; }
+    if (stage === 'Hired' || stage === 'Onboarding') {
       const which = prompt(`${c.name}: ${stage} for which company?\nType H for Homexa or C for Clubwealth.`)?.trim().toUpperCase() || '';
       if (which !== 'H' && which !== 'C') return;
       hire = hireFields(`${stage} | ${which === 'H' ? 'Homexa' : 'Clubwealth'}`, c.name);
@@ -88,17 +100,18 @@ export default function Board({ stages, cards }: { stages: string[]; cards: Boar
                   {isNew(since, ...(c.changed || [])) && <span className="new-dot" title="New or changed since your last visit" style={{ marginLeft: 'auto' }} />}
                 </div>
                 <div className="muted small">{c.position} · {c.source}{c.session ? ` · ${c.session}` : ''}</div>
-                <div className="card-move" onMouseDown={(e) => e.stopPropagation()}><InlineStage id={c.id} stage={stageOf(c)} /></div>
+                <div className="card-move" onMouseDown={(e) => e.stopPropagation()}><InlineStage id={c.id} stage={parseStageChoice(stageOf(c)).stage} /></div>
                 <div className="card-badges">
                   <ZoomBadge z={c.zoom} />
                   {c.test && <span className="badge grey">Test</span>}
                   {c.fit && <span className={`badge ${FIT_TONE[c.fit] || 'grey'}`}>{c.fit}</span>}
+                  {c.company && !stageOf(c).startsWith('Hired') && <span className="mini-tag">{c.company === 'Club Wealth' ? 'Clubwealth' : c.company}</span>}
                   {c.score && <span className="badge blue" title="Scorecard average">{c.score}/5</span>}
                   {c.arrival && <span className="muted small">{c.arrival.replace(/ \(on time\)/, '')}</span>}
                 </div>
               </article>
             ))}
-            {col.length > PER_COLUMN && <Link className="small" href={`/candidates?stage=${encodeURIComponent(st)}`}>+{col.length - PER_COLUMN} more in Candidates</Link>}
+            {col.length > PER_COLUMN && <Link className="small" href={`/candidates?stage=${encodeURIComponent(parseStageChoice(st).stage.replace(/ \| company not set$/, ""))}`}>+{col.length - PER_COLUMN} more in Candidates</Link>}
             {col.length === 0 && <p className="empty small">Drop here</p>}
           </section>
         );

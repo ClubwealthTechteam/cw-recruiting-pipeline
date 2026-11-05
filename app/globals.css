@@ -584,3 +584,13 @@ input:focus, select:focus, textarea:focus { outline: 3px solid #dbe7fb; border-c
 .tutorial b { font-size: 14px; }
 .tutorial .btn { align-self: flex-start; margin-top: auto; }
 .tour-card.in { opacity: 1; visibility: visible; }
+
+/* Needs Approval: edit a waiting email */
+.approval-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.edit-btn { display: inline-flex; align-items: center; gap: 5px; margin-left: auto; }
+.approval.editing { border-color: var(--accent); background: #f5f9ff; }
+.edit-subject { display: flex; align-items: center; gap: 8px; margin: 8px 0; font-weight: 500; }
+.edit-subject input { flex: 1; }
+.edit-tools { display: flex; gap: 6px; margin-bottom: 8px; }
+.edit-frame { height: 460px; border: 2px solid #cfe0fb; }
+.profile .inline-form select, .profile .inline-form input { max-width: 100%; }

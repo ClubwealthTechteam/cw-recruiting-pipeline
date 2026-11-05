@@ -1,9 +1,10 @@
 'use client';
 import { useAction } from './useAction';
+import { notFitFields } from './hirePrompt';
 
 const CHOICES: { stage: string; label: string; tone: string; reason?: boolean }[] = [
   { stage: 'Passed Pre-Interview', label: 'Pass', tone: 'pass' },
-  { stage: 'Not Fit', label: 'Not Fit', tone: 'fail', reason: true },
+  { stage: 'Not Fit', label: 'Not Fit', tone: 'fail' },
   { stage: 'Uninterested | Left Zoom', label: 'Left Zoom', tone: '' },
   { stage: 'Did Not Complete', label: 'Did not finish', tone: '', reason: true }
 ];
@@ -12,6 +13,11 @@ const CHOICES: { stage: string; label: string; tone: string; reason?: boolean }[
 export default function QuickDecide({ id, name, stage }: { id: string; name: string; stage: string }) {
   const { run, busy } = useAction();
   async function pick(c: (typeof CHOICES)[number]) {
+    if (c.stage === 'Not Fit') {
+      const nf = notFitFields(name);
+      if (nf) await run({ action: 'setStage', ids: [id], stage: 'Not Fit', ...nf }, { success: `${name}: Not Fit ✓` });
+      return;
+    }
     let reason = '';
     if (c.reason) {
       reason = prompt(`Reason for ${name} (${c.stage}):`)?.trim() || '';

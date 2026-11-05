@@ -21,7 +21,7 @@ var STAGES = [
   'Passed Interview',
   'Benched',
   'Hired',
-  'Onboarded',
+  'Onboarding',
   'Not Fit',
   'Banned'
 ];
@@ -419,8 +419,14 @@ function replyEmail(text) {
 
 // ---------- status emails (Hired / Rejected / Benched): queued for approval, never sent on their own ----------
 
-/** Which approval email a stage move queues (Miguel, 2026-10-29). Onboarded uses the Hired template. */
-var STATUS_EMAIL_FOR_STAGE = { 'Hired': 'Hired', 'Onboarded': 'Hired', 'Not Fit': 'Rejected', 'Benched': 'Benched' };
+/** Which approval email a stage move queues (Miguel, 2026-10-29). Onboarding uses the Hired template. */
+var STATUS_EMAIL_FOR_STAGE = { 'Hired': 'Hired', 'Onboarding': 'Hired', 'Not Fit': 'Rejected', 'Benched': 'Benched' };
+/** Why someone is Not Fit (Miguel, 2026-11-05). Only "general" sends the Rejected email (after approval). */
+var NOT_FIT_TYPES = {
+  internet: { label: 'Bad internet', email: false },
+  device: { label: 'Did not meet device requirements', email: false },
+  general: { label: 'General not fit', email: true }
+};
 var STATUS_EMAIL_TYPES = ['Hired', 'Rejected', 'Benched', 'Onboarding'];
 
 /** Hired for which company (Miguel, 2026-11-05): the tag "Hired | Homexa" or "Hired | Clubwealth" and the onboarding email. */
@@ -456,6 +462,15 @@ function homexaBackground(position) {
   return ['ISA Team', 'homexa-isa-team.png'];
 }
 
+/** The Zoom background shown in the email itself, with a link to download it (Miguel, 2026-11-05). */
+function zoomBackgroundBlock(file, label, w) {
+  w = w || 480;
+  var url = ASSET_BASE + '/onboarding/' + file;
+  return '<p><b>Your Zoom background' + (label ? ' (' + label + ')' : '') + '</b><br>Save this image and set it as your Zoom virtual background: ' +
+    '<a href="' + url + '">download it here</a>.</p>' +
+    '<p><a href="' + url + '"><img src="' + url + '" alt="Zoom background" width="' + w + '" style="display:block;width:' + w + 'px;max-width:100%;height:auto;border:1px solid #d0d5dd;border-radius:6px"></a></p>';
+}
+
 /** Welcome & Onboarding email (Camille's templates, 2026-10-16 Homexa and 2026-10-19 Club Wealth), for the start date. */
 function onboardingEmail(company, startYmd, position) {
   if (company !== 'Homexa' && company !== 'Club Wealth') throw new Error('Pick Hired | Homexa or Hired | Clubwealth first.');
@@ -471,9 +486,10 @@ function onboardingEmail(company, startYmd, position) {
         '<b>First Day TO DO: ' + first + '</b>' + lis_([
           'Please be on Zoom 6:00 AM PACIFIC for Onboarding docs checking and tools set up. After that, you will be following the Regular Schedule',
           'Assignment before Friday: Sign in to <a href="https://learning.clubwealth.com/">ClubWealthU.com</a> (use Google Account)',
-          'Use the <a href="' + ASSET_BASE + '/onboarding/clubwealth-zoom-background.png">Zoom Background</a> and have your name as First name(space)Last name(dash)Training',
+          'Use the Zoom Background below and have your name as First name(space)Last name(dash)Training',
           'Join Zoom link: <a href="http://clubwealthhelp.com/">ClubWealthHelp.com</a>'])]) +
-      '<p>Reminder: Be logged in and ready 5-10mins before the start time with everything you need (e.g., coffee, water) <b>DO NOT BE LATE</b></p>' + HR +
+      '<p>Reminder: Be logged in and ready 5-10mins before the start time with everything you need (e.g., coffee, water) <b>DO NOT BE LATE</b></p>' +
+      zoomBackgroundBlock('clubwealth-zoom-background.png', '', 366) + HR +
       '<p><b>Onboarding Instructions</b><br>To begin your first day of training, ALL onboarding tasks must be completed <b>BEFORE 6:00 AM of your 1st day</b> NO LATE SUBMISSIONS</p>' +
       '<p>1. Google Form Submission<br>Upload the following documents here: <a href="https://forms.gle/NjSEBpYwNQ8Z4Niw8">Google Form | New Hire Onboarding</a><br>Rename files as FirstName LastName_Filename (e.g., John Smith_Headshot)</p>' +
       '<p>2. Software Setup</p>' + lis_(['Install Zoom on your computer for daily use.', 'Have Pacific Standard Time as your PC time zone']) + HR +
@@ -492,9 +508,10 @@ function onboardingEmail(company, startYmd, position) {
       '<b>First Day TO DO: ' + first + '</b>' + lis_([
         'Please be on Zoom 8:00 AM Pacific',
         'Homework before ' + day + ': Sign in to <a href="https://learning.clubwealth.com/">ClubWealthU.com</a> (use Google Account) finish the course given yesterday',
-        'Use the <a href="' + ASSET_BASE + '/onboarding/' + bg[1] + '">Zoom Background (Homexa ' + bg[0] + ')</a>',
+        'Use the Zoom Background below (Homexa ' + bg[0] + ')',
         'Join Zoom link: <a href="http://homexahelp.com/">HomexaHelp.com</a>'])]) +
-    '<p>Reminder: Be logged in and ready 5-10mins before the start time with everything you need (e.g., coffee, water) <b>DO NOT BE LATE</b></p>' + HR +
+    '<p>Reminder: Be logged in and ready 5-10mins before the start time with everything you need (e.g., coffee, water) <b>DO NOT BE LATE</b></p>' +
+    zoomBackgroundBlock(bg[1], 'Homexa ' + bg[0]) + HR +
     '<p><b>Onboarding Instructions</b><br>To begin your first day of training, ALL onboarding tasks must be completed <b>BEFORE 8:00 AM ' + day + '</b> NO LATE SUBMISSIONS</p>' +
     '<p>1. Google Form Submission<br>Upload the following documents here: <a href="https://forms.gle/epjTUxnSUSbJBH1v8">Google Form | New Hire Onboarding</a><br>Rename files as FirstName LastName_Filename (e.g., John Smith_Headshot)</p>' +
     '<p>2. Software Setup</p>' + lis_(['Install Zoom on your computer for daily use.', 'Have Pacific Standard Time as your PC time zone']) + HR +
@@ -649,4 +666,14 @@ if (typeof module !== 'undefined') {
     slackNewApplicants: slackNewApplicants, slackAttention: slackAttention, slackLate: slackLate,
     slackSessionResults: slackSessionResults, slackWeekly: slackWeekly
   };
+}
+
+/** Removes anything active from edited email HTML: scripts, styles, frames, forms, event handlers, javascript: links. */
+function cleanEmailHtml(html) {
+  return String(html || '')
+    .replace(/<\s*(script|style|iframe|object|embed|form|button|textarea|select)\b[\s\S]*?<\s*\/\s*\1\s*>/gi, '')
+    .replace(/<\s*\/?\s*(script|style|iframe|object|embed|form|input|button|textarea|select|meta|link|base)\b[^>]*>/gi, '')
+    .replace(/\son[a-z]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, '')
+    .replace(/(href|src)\s*=\s*("|')\s*(javascript|vbscript|data):[^"']*\2/gi, '$1="#"')
+    .replace(/\s(contenteditable|spellcheck)="[^"]*"/gi, '');
 }

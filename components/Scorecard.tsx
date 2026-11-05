@@ -1,6 +1,7 @@
 'use client';
 import { useState } from 'react';
 import { useAction } from './useAction';
+import { notFitFields } from './hirePrompt';
 import { CRITERIA, CRITERIA_LABEL, scoreSummary, nextPassed } from '@/lib/pipeline';
 
 type Card = Record<string, string | number>;
@@ -16,7 +17,7 @@ export default function Scorecard({ id, me, stage, cards }: { id: string; me: st
   const { run, busy, error } = useAction();
   const s = scoreSummary(cards);
   const complete = CRITERIA.every((k) => scores[k] >= 1);
-  const decided = ['Passed Interview', 'Benched', 'Hired', 'Onboarded', 'Not Fit', 'Banned'].includes(stage);
+  const decided = ['Passed Interview', 'Benched', 'Hired', 'Onboarding', 'Not Fit', 'Banned'].includes(stage);
   const apply = s.suggestion === 'Passed' ? nextPassed(stage) : s.suggestion;
 
   return (
@@ -28,7 +29,7 @@ export default function Scorecard({ id, me, stage, cards }: { id: string; me: st
             : <div className="muted">Not rated yet. Scores start at 0 until someone rates all five.</div>}
           {s.count > 0 && !decided && (
             <button className="btn primary small-btn" disabled={busy}
-              onClick={() => run({ action: 'setStage', ids: [id], stage: apply, reason: `Scorecard ${s.average.toFixed(1)}/5` })}>
+              onClick={() => { if (apply === 'Not Fit') { const nf = notFitFields(); if (nf) run({ action: 'setStage', ids: [id], stage: apply, ...nf, reason: [nf.reason, `Scorecard ${s.average.toFixed(1)}/5`].filter(Boolean).join(' · ') }); } else run({ action: 'setStage', ids: [id], stage: apply, reason: `Scorecard ${s.average.toFixed(1)}/5` }); }}>
               Apply: {apply}
             </button>
           )}

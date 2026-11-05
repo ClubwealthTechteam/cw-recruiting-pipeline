@@ -2,17 +2,17 @@ import type { Row } from './sheet';
 
 export const STAGES = [
   'Applied', 'Invited', 'Confirmed', 'Open for re-invite', 'Interview Completed',
-  'Did Not Complete', 'Uninterested | Left Zoom', 'No Show', 'No Confirmation', 'Passed Pre-Interview', 'Passed Interview', 'Benched', 'Hired', 'Onboarded', 'Not Fit', 'Banned'
+  'Did Not Complete', 'Uninterested | Left Zoom', 'No Show', 'No Confirmation', 'Passed Pre-Interview', 'Passed Interview', 'Benched', 'Hired', 'Onboarding', 'Not Fit', 'Banned'
 ] as const;
 
 /** Board column order: the main flow first, then the side outcomes. */
 export const BOARD_STAGES = [
-  'Applied', 'Invited', 'Confirmed', 'Interview Completed', 'Passed Pre-Interview', 'Passed Interview', 'Benched', 'Hired', 'Onboarded',
+  'Applied', 'Invited', 'Confirmed', 'Interview Completed', 'Passed Pre-Interview', 'Passed Interview', 'Benched', 'Hired', 'Onboarding',
   'Open for re-invite', 'Did Not Complete', 'Uninterested | Left Zoom', 'No Show', 'No Confirmation', 'Not Fit', 'Banned'
 ];
 
-/** Hired or further along (Onboarded counts as hired everywhere). */
-export const HIRED = ['Hired', 'Onboarded'];
+/** Hired or further along (Onboarding counts as hired everywhere). */
+export const HIRED = ['Hired', 'Onboarding'];
 /** Where applications come from. Referral = added by hand for someone a team member referred (no form, OLJ or email). */
 export const SOURCES = ['Form', 'OLJ', 'Email', 'Referral'];
 export const SOURCE_LABEL: Record<string, string> = { Form: 'Application form', OLJ: 'OnlineJobs.ph', Email: 'Emailed to CareersCW', Referral: 'Referral' };
@@ -20,7 +20,7 @@ export const SOURCE_LABEL: Record<string, string> = { Form: 'Application form', 
 /** Passed comes in two steps, Passed Pre-Interview then Passed Interview, and after both the person is Hired. */
 export const PASSED = ['Passed Pre-Interview', 'Passed Interview', 'Benched'];
 /** Stages whose move queues an email that must be approved before it is sent (Miguel, 2026-10-29). */
-export const STATUS_EMAIL_FOR_STAGE: Record<string, string> = { Hired: 'Hired', Onboarded: 'Hired', 'Not Fit': 'Rejected', Benched: 'Benched' };
+export const STATUS_EMAIL_FOR_STAGE: Record<string, string> = { Hired: 'Hired', Onboarding: 'Hired', 'Not Fit': 'Rejected', Benched: 'Benched' };
 /** The next Passed step for someone at this stage (the scorecard's "Passed" suggestion applies this). */
 export const nextPassed = (stage: string) => (stage === 'Passed Pre-Interview' ? 'Passed Interview' : 'Passed Pre-Interview');
 export type Stage = (typeof STAGES)[number];
@@ -29,13 +29,13 @@ export type Stage = (typeof STAGES)[number];
 export const STAGE_TONE: Record<string, string> = {
   Applied: 'grey', Invited: 'blue', Confirmed: 'blue', 'Open for re-invite': 'amber',
   'Interview Completed': 'amber', 'Did Not Complete': 'red', 'Uninterested | Left Zoom': 'grey', 'No Show': 'red', 'No Confirmation': 'grey',
-  'Passed Pre-Interview': 'green', 'Passed Interview': 'green', Benched: 'blue', Hired: 'green', Onboarded: 'green', 'Not Fit': 'grey', Banned: 'red'
+  'Passed Pre-Interview': 'green', 'Passed Interview': 'green', Benched: 'blue', Hired: 'green', Onboarding: 'green', 'Not Fit': 'grey', Banned: 'red'
 };
 
 /** Screening tags (Claude): Great = clearly meets the rule (1+ year or highly relevant), Good = meets 6 months, Not Fit = does not or not enough info. */
 export const FIT_TONE: Record<string, string> = { Great: 'green', Good: 'blue', 'Not Fit': 'grey' };
 
-export const REASON_REQUIRED = ['Not Fit', 'Did Not Complete', 'Open for re-invite'];
+export const REASON_REQUIRED = ['Did Not Complete', 'Open for re-invite'];
 
 export const s = (v: unknown) => (v === undefined || v === null ? '' : String(v));
 /** Test applicants (Source "Test", e.g. T-MIGUEL) show in the CRM but are left out of every count, rate and report. */
@@ -313,13 +313,34 @@ export const nowStampPT = (now = new Date()) => ptStamp(now.toISOString());
 // ---------- Hired | Homexa / Hired | Clubwealth (Miguel, 2026-11-05) ----------
 
 export const HIRE_COMPANIES = [{ company: 'Homexa', label: 'Homexa' }, { company: 'Club Wealth', label: 'Clubwealth' }] as const;
-const HIRING = ['Hired', 'Onboarded'];
-/** The stage list for pickers: Hired and Onboarded appear once per company ("Hired | Homexa", "Hired | Clubwealth"). */
+const HIRING = ['Hired', 'Onboarding'];
+/** The stage list for pickers: Hired and Onboarding appear once per company ("Hired | Homexa", "Hired | Clubwealth"). */
 export const STAGE_CHOICES: string[] = STAGES.flatMap((st) => (HIRING.includes(st) ? HIRE_COMPANIES.map((c) => `${st} | ${c.label}`) : [st]));
 /** "Hired | Homexa" → { stage: 'Hired', company: 'Homexa' }; any other stage → { stage, company: '' }. */
 export function parseStageChoice(choice: string): { stage: string; company: string } {
-  const m = /^(Hired|Onboarded) \| (.+)$/.exec(choice);
+  const m = /^(Hired|Onboarding) \| (.+)$/.exec(choice);
   if (!m) return { stage: choice, company: '' };
   return { stage: m[1], company: HIRE_COMPANIES.find((c) => c.label === m[2])?.company || '' };
 }
 export const needsStartDate = (choice: string) => !!parseStageChoice(choice).company;
+
+/** Why someone is Not Fit (Miguel, 2026-11-05). Only "General not fit" prepares the Rejected email for approval. */
+export const NOT_FIT_TYPES = [
+  { key: 'internet', label: 'Bad internet', email: false },
+  { key: 'device', label: 'Did not meet device requirements', email: false },
+  { key: 'general', label: 'General not fit (Tara, Ron or Maggie decided)', email: true }
+] as const;
+
+/** "Homexa", "Club Wealth" or '' from an applicant's tags ("Hired | Homexa" / "Hired | Clubwealth"). */
+export function hiredCompany(tags: unknown): string {
+  const t = s(tags);
+  return t.includes('Hired | Homexa') ? 'Homexa' : t.includes('Hired | Clubwealth') ? 'Club Wealth' : '';
+}
+/** Board: the Hired column split by company, with one for people hired before the company was asked. */
+export const HIRED_COLUMNS = ['Hired | Homexa', 'Hired | Clubwealth', 'Hired | company not set'];
+export const BOARD_COLUMNS = BOARD_STAGES.flatMap((st) => (st === 'Hired' ? HIRED_COLUMNS : [st]));
+export function boardColumnOf(stage: string, tags: unknown): string {
+  if (stage !== 'Hired') return stage;
+  const c = hiredCompany(tags);
+  return c === 'Homexa' ? 'Hired | Homexa' : c === 'Club Wealth' ? 'Hired | Clubwealth' : 'Hired | company not set';
+}

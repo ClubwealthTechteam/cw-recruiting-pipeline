@@ -1,7 +1,7 @@
 'use client';
 import { useState } from 'react';
 import { STAGE_CHOICES, REASON_REQUIRED, parseStageChoice } from '@/lib/pipeline';
-import { hireFields } from './hirePrompt';
+import { hireFields, notFitFields } from './hirePrompt';
 import { useAction } from './useAction';
 
 /** Stage picker right in the list row. Stages that need a reason ask for it first. */
@@ -12,8 +12,9 @@ export function InlineStage({ id, stage }: { id: string; stage: string }) {
       onChange={async (e) => {
         const to = e.target.value;
         if (!to) return;
-        const hire = hireFields(to);
+        let hire = hireFields(to);
         if (!hire) return;
+        if (hire.stage === 'Not Fit') { const nf = notFitFields(); if (!nf) return; hire = { ...hire, ...nf }; await run({ action: 'setStage', ids: [id], ...hire }); return; }
         let reason = '';
         if (REASON_REQUIRED.includes(hire.stage)) {
           reason = prompt(`Reason for ${hire.stage}:`)?.trim() || '';
