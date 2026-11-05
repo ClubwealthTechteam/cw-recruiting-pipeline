@@ -1,0 +1,54 @@
+# Deploys apps-script/ to the "Recruitment Pipeline" Apps Script project after a merge to main (Miguel, 2026-11-05).
+# Touches only that one project and its existing web app deployment; see scripts/deploy-apps-script.mjs for the checks.
+name: Deploy Apps Script
+
+on:
+  push:
+    branches: [main]
+    paths: ['apps-script/**']
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Only run the checks (write nothing)'
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-apps-script
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Tests must pass first
+        run: npm test
+      - name: Did this push change appsscript.json?
+        id: manifest
+        run: |
+          # 1 only when git can show appsscript.json really changed in this push; anything unclear keeps the live manifest
+          changed=0
+          if [ "${{ github.event_name }}" = "push" ]; then
+            git diff --quiet "${{ github.event.before }}" "${{ github.sha }}" -- apps-script/appsscript.json; rc=$?
+            if [ "$rc" = "1" ]; then changed=1; fi
+          fi
+          echo "changed=$changed" >> "$GITHUB_OUTPUT"
+      - name: Deploy (or dry run)
+        env:
+          CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+          SCRIPT_ID: ${{ secrets.SCRIPT_ID }}
+          DEPLOYMENT_ID: ${{ secrets.DEPLOYMENT_ID }}
+          MANIFEST_CHANGED: ${{ steps.manifest.outputs.changed }}
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run && '1' || '0' }}
+          GIT_SHA: ${{ github.sha }}
+        run: node scripts/deploy-apps-script.mjs
