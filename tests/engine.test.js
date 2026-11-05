@@ -587,13 +587,13 @@ test('test applicants are never counted: no Slack alert, not in session results'
   assert.match(JSON.parse(msg).text, /No confirmation: 2/); // 3 unconfirmed invitees, one of them a test applicant
 });
 
-test('Onboarded is a stage the site can move people to', () => {
+test('Onboarding is a stage the site can move people to', () => {
   const env = invitedEnv();
   env.ctx.setup();
-  assert.match(env.api({ action: 'setStage', by: 'Am', ids: ['F-2'], stage: 'Onboarded' }).error, /Hired \| Homexa or Hired \| Clubwealth/);
-  const r = env.api({ action: 'setStage', by: 'Am', ids: ['F-2'], stage: 'Onboarded', company: 'Homexa', startDate: '2026-11-13' });
+  assert.match(env.api({ action: 'setStage', by: 'Am', ids: ['F-2'], stage: 'Onboarding' }).error, /Hired \| Homexa or Hired \| Clubwealth/);
+  const r = env.api({ action: 'setStage', by: 'Am', ids: ['F-2'], stage: 'Onboarding', company: 'Homexa', startDate: '2026-11-13' });
   assert.equal(r.ok, true, r.error);
-  assert.equal(env.rows('Applicants')[0].Stage, 'Onboarded');
+  assert.equal(env.rows('Applicants')[0].Stage, 'Onboarding');
 });
 
 test('undo: a stage move goes back, its queued re-invite is cancelled; a note is removed', () => {
@@ -791,8 +791,8 @@ test('status emails wait for approval: moving queues one, moving again replaces 
   // Don't send
   assert.equal(env.api({ action: 'skipEmail', by: 'Am', emailId: pending()[0]['Email ID'] }).ok, true);
   assert.equal(pending().length, 0);
-  // Onboarded uses the Hired template; approve sends it
-  env.api({ action: 'setStage', by: 'Am', ids: ['F-2'], stage: 'Onboarded', company: 'Homexa', startDate: '2026-11-13' });
+  // Onboarding uses the Hired template; approve sends it
+  env.api({ action: 'setStage', by: 'Am', ids: ['F-2'], stage: 'Onboarding', company: 'Homexa', startDate: '2026-11-13' });
   const h = pending()[0];
   assert.match(h.Subject, /^\[TEST\] Homexa|^Homexa/);
   assert.equal(h.Type, 'Hired');
@@ -807,7 +807,7 @@ test('status emails wait for approval: moving queues one, moving again replaces 
   assert.equal(pending().length, 0);
   assert.match(env.rows('Applicants').find((a) => a['Applicant ID'] === 'F-2').Notes, /Hired email not queued again/);
   // a stage with no email queues nothing; undo cancels what the move queued
-  const u = env.api({ action: 'setStage', by: 'Am', ids: ['F-3'], stage: 'Not Fit', reason: 'Internet below 50 Mbps' });
+  const u = env.api({ action: 'setStage', by: 'Am', ids: ['F-3'], stage: 'Not Fit', notFitType: 'general', reason: 'Communication skills' });
   assert.equal(env.rows('Outbox').filter((e) => e['Applicant ID'] === 'F-3' && e.Status === 'Pending approval' && e.Type === 'Rejected').length, 1);
   env.api({ action: 'undoStage', by: 'Am', ...u.data.undo });
   assert.equal(env.rows('Outbox').filter((e) => e['Applicant ID'] === 'F-3' && e.Status === 'Pending approval').length, 0);
@@ -1070,4 +1070,57 @@ test('final status templates: Benched and Rejected wording, onboarding emails pe
   assert.equal(tag(), 'Hired | Homexa');
   env.api({ action: 'undoStage', by: 'Am', ...mv.data.undo });
   assert.equal(tag(), '');
+});
+
+test('Not Fit needs a why; only General not fit prepares the Rejected email', () => {
+  const env = invitedEnv({ EMAIL_SENDING: 'ON' });
+  env.ctx.setup();
+  const rejected = (id) => env.rows('Outbox').filter((e) => e['Applicant ID'] === id && e.Type === 'Rejected' && e.Status === 'Pending approval');
+  assert.match(env.api({ action: 'setStage', by: 'Am', ids: ['F-2'], stage: 'Not Fit', reason: 'x' }).error, /Pick why/);
+  assert.equal(env.api({ action: 'setStage', by: 'Am', ids: ['F-2'], stage: 'Not Fit', notFitType: 'internet' }).ok, true);
+  assert.equal(rejected('F-2').length, 0, 'bad internet: no email');
+  assert.equal(env.rows('Applicants').find((a) => a['Applicant ID'] === 'F-2')['Decision Reason'], 'Bad internet');
+  env.api({ action: 'setStage', by: 'Am', ids: ['F-3'], stage: 'Not Fit', notFitType: 'device', reason: 'i3 7th gen' });
+  assert.equal(rejected('F-3').length, 0, 'device: no email');
+  assert.equal(env.rows('Applicants').find((a) => a['Applicant ID'] === 'F-3')['Decision Reason'], 'Did not meet device requirements - i3 7th gen');
+  env.api({ action: 'setStage', by: 'Am', ids: ['F-4'], stage: 'Not Fit', notFitType: 'general' });
+  assert.equal(rejected('F-4').length, 1, 'general not fit: Rejected email waits for approval');
+});
+
+test('Onboarded rows are renamed to Onboarding once; a hire can be re-tagged to a company', () => {
+  const env = invitedEnv({ EMAIL_SENDING: 'ON' });
+  env.ctx.setup();
+  const A = env.sheets.Applicants.data, h = A[0];
+  A.find((r) => r[0] === 'F-2')[h.indexOf('Stage')] = 'Onboarded';
+  A.find((r) => r[0] === 'F-3')[h.indexOf('Stage')] = 'Hired';
+  env.ctx.tick();
+  const row = (id) => env.rows('Applicants').find((a) => a['Applicant ID'] === id);
+  assert.equal(row('F-2').Stage, 'Onboarding');
+  // F-3 was Hired before companies existed: setting the company works although the stage stays Hired
+  const r = env.api({ action: 'setStage', by: 'Am', ids: ['F-3'], stage: 'Hired', company: 'Club Wealth', startDate: '2026-11-12' });
+  assert.equal(r.data.updated, 1);
+  assert.equal(row('F-3').Tags, 'Hired | Clubwealth');
+  assert.equal(env.api({ action: 'setStage', by: 'Am', ids: ['F-3'], stage: 'Hired', company: 'Club Wealth', startDate: '2026-11-12' }).data.updated, 0, 'same company again: nothing');
+  env.api({ action: 'undoStage', by: 'Am', ...r.data.undo });
+  assert.equal(row('F-3').Tags, '');
+  assert.equal(row('F-3').Stage, 'Hired');
+});
+
+test('a waiting email can be edited: subject and body saved, scripts removed, banner kept', () => {
+  const env = invitedEnv({ EMAIL_SENDING: 'ON' });
+  env.ctx.setup();
+  env.api({ action: 'setStage', by: 'Am', ids: ['F-2'], stage: 'Benched' });
+  const e = env.rows('Outbox').find((x) => x.Type === 'Benched' && x.Status === 'Pending approval');
+  const r = env.api({ action: 'editPendingEmail', by: 'Camille', emailId: e['Email ID'], subject: 'Update on your application',
+    body: '<p onclick="x()">Hi Maria, new text</p><script>alert(1)</script><a href="javascript:alert(1)">x</a>' });
+  assert.equal(r.ok, true, r.error);
+  const after = env.rows('Outbox').find((x) => x['Email ID'] === e['Email ID']);
+  assert.equal(after.Subject, 'Update on your application');
+  assert.match(after.Body, /Hi Maria, new text/);
+  assert.doesNotMatch(after.Body, /script|onclick|javascript:/i);
+  assert.match(after.Body, /email-banner\.png/, 'banner put back');
+  assert.equal(after['Edited By'], 'Camille');
+  assert.equal(after.Status, 'Pending approval');
+  env.api({ action: 'approveEmail', by: 'Am', emailId: e['Email ID'] });
+  assert.match(env.api({ action: 'editPendingEmail', by: 'Am', emailId: e['Email ID'], subject: 'x', body: '<p>y</p>' }).error, /Only emails waiting/);
 });

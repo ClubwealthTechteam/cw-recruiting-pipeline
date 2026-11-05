@@ -42,7 +42,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
   const ratedWeek = newWeek.filter((a) => ['Great', 'Good', 'Not Fit'].includes(str(a['Screen Tag'])));
   const fitShare = ratedWeek.length ? ratedWeek.filter((a) => str(a['Screen Tag']) !== 'Not Fit').length / ratedWeek.length : null;
   const month = todayPT().slice(0, 7);
-  const hiredMonth = d.history.filter((h) => ['Hired', 'Onboarded'].includes(str(h['To Stage'])) && str(h['Timestamp (PT)']).startsWith(month)).length;
+  const hiredMonth = d.history.filter((h) => ['Hired', 'Onboarding'].includes(str(h['To Stage'])) && str(h['Timestamp (PT)']).startsWith(month)).length;
   const openFlags = d.flags.filter((f) => str(f.Status) === 'Open').length;
   const approvals = d.outbox.filter((e) => str(e.Status) === 'Pending approval').length;
   const mismatches = everyone.filter((a) => a['Resume Warning']);
@@ -60,7 +60,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
         <Tile label="New applicants (7 days)" value={String(newWeek.length)} note={`${notRatedYet} not rated yet`} href="/candidates?stage=All" />
         <Tile label={`Invited to ${short(nextSession)}`} value={String(invitedNext.length)} note={`${confirmedNext} confirmed`} href={`/session?date=${nextSession}`} />
         <Tile label="Great / Good fit (7 days)" value={pct(fitShare)} note={`of ${ratedWeek.length} rated`} />
-        <Tile label="Hired this month" value={String(hiredMonth)} note="Hired or Onboarded" />
+        <Tile label="Hired this month" value={String(hiredMonth)} note="Hired or Onboarding" />
       </section>
       <div className="home-cols">
         <section className="panel" data-tour="home-todo">

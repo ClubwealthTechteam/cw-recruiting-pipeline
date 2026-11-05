@@ -948,7 +948,7 @@ function weeklyReport() {
   if (!days.length) return;
   var day = days[days.length - 1];
   var inv = apps.filter(function (a) { return ymdOf_(a['Interview Date']) === day && a.Stage !== 'Applied'; });
-  var done = function (a) { return ['Interview Completed', 'Passed Pre-Interview', 'Passed Interview', 'Hired', 'Onboarded'].indexOf(a.Stage) !== -1; };
+  var done = function (a) { return ['Interview Completed', 'Passed Pre-Interview', 'Passed Interview', 'Hired', 'Onboarding'].indexOf(a.Stage) !== -1; };
   var joined = function (a) { return Number(a['Zoom Minutes']) > 0 || done(a) || a.Stage === 'Did Not Complete' || a.Stage === 'Uninterested | Left Zoom'; };
   var group = function (key) {
     var m = {};
@@ -1004,6 +1004,7 @@ function tick() {
   if (!lock.tryLock(30000)) return;
   try {
     var st = settings_();
+    renameStageOnce_(st, 'Onboarded', 'Onboarding', 'STAGE_RENAMED_ONBOARDING');
     var c = {
       intake: importNewFormRows_(st),
       manualInvites: syncManualInvites_(st),
@@ -1127,7 +1128,7 @@ function statusEmailOnMove_(st, apps, a, stage, by, opts) {
     }
   });
   var type = STATUS_EMAIL_FOR_STAGE[stage];
-  if (!type) return null;
+  if (!type || (opts && opts.noEmail)) return null;
   return queueStatusEmail_(st, out, apps, a, type, by, opts);
 }
 
@@ -1612,12 +1613,17 @@ function api_(req) {
     var byId = indexBy_(apps.rows, 'Applicant ID');
     if (req.action === 'setStage') {
       if (STAGES.indexOf(req.stage) === -1) throw new Error('bad stage');
-      if (['Not Fit', 'Did Not Complete', 'Open for re-invite'].indexOf(req.stage) !== -1 && !req.reason) {
+      if (['Did Not Complete', 'Open for re-invite'].indexOf(req.stage) !== -1 && !req.reason) {
         throw new Error('A reason is required for ' + req.stage);
       }
-      // Hired / Onboarded (Miguel, 2026-11-05): pick the company (tag "Hired | Homexa" or "Hired | Clubwealth") and the
+      // Hired / Onboarding (Miguel, 2026-11-05): pick the company (tag "Hired | Homexa" or "Hired | Clubwealth") and the
       // start date; the Welcome & Onboarding email of that company is prepared for approval.
-      var hiring = req.stage === 'Hired' || req.stage === 'Onboarded';
+      var hiring = req.stage === 'Hired' || req.stage === 'Onboarding';
+      // Not Fit (Miguel, 2026-11-05): why, from three choices. Only "General not fit" (Tara, Ron or Maggie decided)
+      // prepares the Rejected email for approval; bad internet and device requirements get no email.
+      var notFit = req.stage === 'Not Fit' ? NOT_FIT_TYPES[req.notFitType] : null;
+      if (req.stage === 'Not Fit' && !notFit) throw new Error('Pick why: Bad internet, Did not meet device requirements, or General not fit.');
+      if (notFit) req.reason = notFit.label + (req.reason && req.reason !== notFit.label ? ' - ' + req.reason : '');
       if (hiring) {
         if (!HIRED_TAGS[req.company]) throw new Error('Pick Hired | Homexa or Hired | Clubwealth.');
         if (!/^\d{4}-\d{2}-\d{2}$/.test(String(req.startDate || ''))) throw new Error('Pick the start date for the onboarding email.');
@@ -1626,7 +1632,8 @@ function api_(req) {
       var undo = { moves: [], queued: [] }; // what "Undo" needs to put back (see undoStage)
       (req.ids || []).forEach(function (id) {
         var a = byId[id];
-        if (!a || a.Stage === req.stage) return;
+        // already Hired: allowed again only to set or change the company (board: "Hired | company not set" → a company)
+        if (!a || (a.Stage === req.stage && !(hiring && companyFromTags(a.Tags) !== req.company))) return;
         undo.moves.push({ id: id, from: a.Stage, decision: String(a['Decision Reason'] || ''), reinvite: String(a['Re-invite Reason'] || ''), tags: String(a.Tags || '') });
         setStage_(apps, a, req.stage, req.by, hiring ? (req.reason ? req.reason + ' · ' : '') + HIRED_TAGS[req.company] + ', starts ' + req.startDate : req.reason);
         if (hiring) {
@@ -1634,7 +1641,7 @@ function api_(req) {
           keep.push(HIRED_TAGS[req.company]);
           update_(apps, a, { Tags: keep.join(', ') });
         }
-        var pending = statusEmailOnMove_(st2, apps, a, req.stage, req.by, hiring ? { company: req.company, startDate: req.startDate, position: a.Position } : null);
+        var pending = statusEmailOnMove_(st2, apps, a, req.stage, req.by, hiring ? { company: req.company, startDate: req.startDate, position: a.Position } : notFit && !notFit.email ? { noEmail: true } : null);
         if (pending) undo.queued.push(pending);
         if (req.stage === 'Not Fit' || req.stage === 'Did Not Complete') update_(apps, a, { 'Decision Reason': req.reason });
         if (req.stage === 'Open for re-invite') {
@@ -1661,8 +1668,9 @@ function api_(req) {
       var back = 0;
       (req.moves || []).forEach(function (m) {
         var a = byId[m.id];
-        if (!a || STAGES.indexOf(m.from) === -1 || a.Stage === m.from) return;
-        setStage_(apps, a, m.from, req.by, 'Undo');
+        if (!a || STAGES.indexOf(m.from) === -1) return;
+        if (a.Stage === m.from && !(typeof m.tags === 'string' && String(a.Tags || '') !== m.tags)) return;
+        if (a.Stage !== m.from) setStage_(apps, a, m.from, req.by, 'Undo');
         statusEmailOnMove_(st2, apps, a, '(undo)', req.by); // cancels anything still waiting; an undo never queues a new email
         var f = {};
         if (String(a['Decision Reason'] || '') !== String(m.decision || '')) f['Decision Reason'] = m.decision || '';
@@ -1770,6 +1778,7 @@ function api_(req) {
       update_(apps, ap, f2);
       return { updated: said.length, resume: f2['Resume Link'] || '' };
     }
+    if (req.action === 'editPendingEmail') return editPendingEmail_(req);
     if (req.action === 'approveEmail') return decideStatusEmail_(st2, req, true);
     if (req.action === 'skipEmail') return decideStatusEmail_(st2, req, false);
     if (req.action === 'updateTeam') {
@@ -2102,4 +2111,42 @@ function presence_(req) {
   });
   cache.put(key, JSON.stringify(seen), 90);
   return { others: others };
+}
+
+/** One-time stage rename (Miguel, 2026-11-05: "Onboarded" is now "Onboarding"), on Applicants and History. */
+function renameStageOnce_(st, from, to, flag) {
+  if (st.get(flag) === 'DONE') return 0;
+  var n = 0;
+  var apps = table_(SH.APPLICANTS);
+  apps.rows.forEach(function (a) { if (a.Stage === from) { update_(apps, a, { Stage: to }); n++; } });
+  var hist = table_(SH.HISTORY);
+  hist.rows.forEach(function (h) {
+    var f = {};
+    if (h['To Stage'] === from) f['To Stage'] = to;
+    if (h['From Stage'] === from) f['From Stage'] = to;
+    if (Object.keys(f).length) { update_(hist, h, f); n++; }
+  });
+  st.set(flag, 'DONE');
+  return n;
+}
+
+/**
+ * Edit a status email while it waits in Needs Approval (Miguel, 2026-11-05: pencil icon on the site). Only the subject
+ * and body change; scripts, styles, frames and event handlers are removed, and the banner is put back if it was deleted.
+ */
+function editPendingEmail_(req) {
+  ensureCols_(SH.OUTBOX, DECIDED_COLS.concat(['Edited By', 'Edited At']));
+  var out = table_(SH.OUTBOX);
+  var e = out.rows.filter(function (r) { return r['Email ID'] === req.emailId; })[0];
+  if (!e) throw new Error('Email not found.');
+  if (e.Status !== 'Pending approval') throw new Error('Only emails waiting for approval can be edited (this one is ' + e.Status + ').');
+  var subject = String(req.subject || '').replace(/[\r\n]+/g, ' ').trim();
+  var body = cleanEmailHtml(String(req.body || ''));
+  if (!subject) throw new Error('The subject cannot be empty.');
+  if (!body.replace(/<[^>]*>/g, '').trim()) throw new Error('The email cannot be empty.');
+  if (body.length > 60000) throw new Error('The email is too long.');
+  if (body.indexOf(BANNER_URL) === -1) body += SIGNATURE_HTML.replace('<p>Cheers,<br>Club Wealth</p>', '');
+  var prefix = e.Test === 'Y' && subject.indexOf('[TEST] ') !== 0 ? '[TEST] ' : '';
+  update_(out, e, { Subject: prefix + subject, Body: body, 'Edited By': req.by, 'Edited At': nowStr_() });
+  return { saved: true };
 }
