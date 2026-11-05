@@ -1,6 +1,6 @@
 'use client';
 import { useState } from 'react';
-import { STAGES, REASON_REQUIRED } from '@/lib/pipeline';
+import { STAGE_CHOICES, REASON_REQUIRED, parseStageChoice } from '@/lib/pipeline';
 import { useAction } from './useAction';
 
 /** Follow-up reasons Recruitment picks most often; free text is still allowed. */
@@ -23,31 +23,37 @@ const PRESETS: Record<string, string[]> = {
 export default function StageForm({ ids, current, onDone }: { ids: string[]; current?: string; onDone?: () => void }) {
   const [stage, setStage] = useState('');
   const [reason, setReason] = useState('');
+  const [startDate, setStartDate] = useState('');
   const { run, busy, error } = useAction();
-  const needReason = REASON_REQUIRED.includes(stage);
+  const pick = parseStageChoice(stage); // "Hired | Homexa" → Hired + company
+  const needReason = REASON_REQUIRED.includes(pick.stage);
+  const needStart = !!pick.company;
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!stage || (needReason && !reason.trim())) return;
-    const ok = await run({ action: 'setStage', ids, stage, reason });
-    if (ok) { setStage(''); setReason(''); onDone?.(); }
+    if (!stage || (needReason && !reason.trim()) || (needStart && !startDate)) return;
+    const ok = await run({ action: 'setStage', ids, stage: pick.stage, reason, ...(needStart ? { company: pick.company, startDate } : {}) },
+      needStart ? { success: `Moved to ${stage} ✓ Welcome & Onboarding email waiting in Needs Approval` } : {});
+    if (ok) { setStage(''); setReason(''); setStartDate(''); onDone?.(); }
   }
   return (
     <form onSubmit={submit} className="inline-form">
       <select id={ids.length === 1 ? 'stage-select' : undefined} value={stage} onChange={(e) => setStage(e.target.value)} disabled={!ids.length || busy}>
         <option value="">Move {ids.length > 1 ? `${ids.length} selected` : ''} to…</option>
-        {STAGES.filter((x) => x !== current).map((x) => <option key={x} value={x}>{x}</option>)}
+        {STAGE_CHOICES.filter((x) => parseStageChoice(x).stage !== current || parseStageChoice(x).company).map((x) => <option key={x} value={x}>{x}</option>)}
       </select>
-      {stage && PRESETS[stage] && (
-        <select value={PRESETS[stage].includes(reason) ? reason : ''} onChange={(e) => setReason(e.target.value)} aria-label="Common reasons">
+      {needStart && <label className="check-label">Start date <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} required aria-label="Start date" /></label>}
+      {stage && PRESETS[pick.stage] && (
+        <select value={PRESETS[pick.stage].includes(reason) ? reason : ''} onChange={(e) => setReason(e.target.value)} aria-label="Common reasons">
           <option value="">Common reasons…</option>
-          {PRESETS[stage].map((r) => <option key={r} value={r}>{r}</option>)}
+          {PRESETS[pick.stage].map((r) => <option key={r} value={r}>{r}</option>)}
         </select>
       )}
       {stage && (
         <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder={needReason ? 'Reason (required)' : 'Reason (optional)'} />
       )}
-      <button className="btn primary" disabled={!stage || busy || (needReason && !reason.trim())}>{busy ? 'Saving…' : 'Apply'}</button>
+      <button className="btn primary" disabled={!stage || busy || (needReason && !reason.trim()) || (needStart && !startDate)}>{busy ? 'Saving…' : 'Apply'}</button>
       {stage === 'Open for re-invite' && <span className="hint">A new invite is emailed for the following Wednesday.</span>}
+      {needStart && <span className="hint">Tags them &quot;{pick.stage === 'Hired' ? stage : `Hired | ${stage.split(' | ')[1]}`}&quot; and prepares the {pick.company === 'Homexa' ? 'Homexa' : 'Club Wealth'} Welcome &amp; Onboarding email for that start date. It waits in Needs Approval.</span>}
       {error && <span className="error">{error}</span>}
     </form>
   );

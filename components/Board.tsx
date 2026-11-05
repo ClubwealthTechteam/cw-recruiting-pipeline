@@ -6,6 +6,7 @@ import ZoomBadge from './ZoomBadge';
 import { useAction } from './useAction';
 import { InlineStage } from './InlineActions';
 import { useSince, isNew } from './useSince';
+import { hireFields } from './hirePrompt';
 import { initials, avatarColor } from './CandidatesTable';
 
 export type BoardCard = { id: string; name: string; stage: string; position: string; source: string; fit: string; session: string; score: string; arrival: string; changed?: string[]; test?: boolean; zoom?: ZoomLive };
@@ -54,8 +55,16 @@ export default function Board({ stages, cards }: { stages: string[]; cards: Boar
       reason = prompt(`Reason for moving ${c.name} to ${stage}:`)?.trim() || '';
       if (!reason) return;
     }
+    // Hired / Onboarded: which company, and the start date for the onboarding email
+    let hire: Record<string, string> | null = { stage };
+    if (stage === 'Hired' || stage === 'Onboarded') {
+      const which = prompt(`${c.name}: ${stage} for which company?\nType H for Homexa or C for Clubwealth.`)?.trim().toUpperCase() || '';
+      if (which !== 'H' && which !== 'C') return;
+      hire = hireFields(`${stage} | ${which === 'H' ? 'Homexa' : 'Clubwealth'}`, c.name);
+      if (!hire) return;
+    }
     setMoved((m) => ({ ...m, [c.id]: stage }));
-    const ok = await run({ action: 'setStage', ids: [c.id], stage, reason }, { success: `${c.name} moved to ${stage} ✓` });
+    const ok = await run({ action: 'setStage', ids: [c.id], reason, ...hire }, { success: `${c.name} moved to ${stage} ✓` });
     if (!ok) setMoved((m) => { const n = { ...m }; delete n[c.id]; return n; });
   }
 

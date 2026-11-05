@@ -423,21 +423,118 @@ function replyEmail(text) {
 var STATUS_EMAIL_FOR_STAGE = { 'Hired': 'Hired', 'Onboarded': 'Hired', 'Not Fit': 'Rejected', 'Benched': 'Benched' };
 var STATUS_EMAIL_TYPES = ['Hired', 'Rejected', 'Benched', 'Onboarding'];
 
+/** Hired for which company (Miguel, 2026-11-05): the tag "Hired | Homexa" or "Hired | Clubwealth" and the onboarding email. */
+var HIRED_TAGS = { 'Homexa': 'Hired | Homexa', 'Club Wealth': 'Hired | Clubwealth' };
+function companyFromTags(tags) {
+  var t = String(tags || '');
+  if (t.indexOf(HIRED_TAGS.Homexa) !== -1) return 'Homexa';
+  if (t.indexOf(HIRED_TAGS['Club Wealth']) !== -1) return 'Club Wealth';
+  return '';
+}
+
+var ASSET_BASE = 'https://cwrecruitmentpipeline.vercel.app';
+var WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+function weekdayOf(ymdStr) { var p = String(ymdStr).split('-'); return WEEKDAYS[new Date(Date.UTC(+p[0], +p[1] - 1, +p[2])).getUTCDay()]; }
+function lis_(items) { return '<ul>' + items.map(function (x) { return '<li>' + x + '</li>'; }).join('') + '</ul>'; }
+var HR = '<hr style="border:0;border-top:1px solid #d0d5dd;margin:16px 0">';
+var CHECKLIST = '<p><b>Onboarding Checklist</b><br>Copy the following into your reply email and add your initials beside each item to confirm compliance:</p><ol>' +
+  ['Read onboarding information and dress code details.', 'Use a front-facing camera and remain on the helpdesk during work hours.', 'Comply with the dress code.',
+   'Keep cell phones in another room with the ringer off; no personal phone use during work hours.', 'Read and agree to all Time and Attendance policies.',
+   'Use Facebook Messenger for work communication only (no personal use during work hours).',
+   'Follow Tech protocols:' + lis_(['Attempt basic troubleshooting first.', 'Contact your Squad leader for assistance; SLs will coordinate with Tech Team if necessary'])]
+    .map(function (x) { return '<li>____ ' + x + '</li>'; }).join('') + '</ol>';
+var TIME_POLICY = ['Standard start time is 7:30 AM PST. Flex start times as early as 5:30 AM PST may occur with advance notice.', 'Late arrivals (even for 1 min) require taking the day off.',
+  'Two 10-minute paid breaks and a 30-minute unpaid lunch are provided.', 'Maintain accurate Time Doctor logs. Limit edits to three per day, with team leader approval.'];
+var QUOTE = '<p><i>"No SUCCESS in the WORLD can compensate for failure in the HOME"</i></p>';
+
+/** The Homexa Zoom background for the role (ISA, Transaction, Listing or Tech VA); ISA when the role is unclear. */
+function homexaBackground(position) {
+  var p = String(position || '').toLowerCase();
+  if (/listing/.test(p)) return ['Listing Team', 'homexa-listing-team.png'];
+  if (/transaction|\btc\b|tc\/lc|admin/.test(p)) return ['Transaction Team', 'homexa-transaction-team.jpg'];
+  if (/tech/.test(p)) return ['Tech VA', 'homexa-tech-va.png'];
+  return ['ISA Team', 'homexa-isa-team.png'];
+}
+
+/** Welcome & Onboarding email (Camille's templates, 2026-10-16 Homexa and 2026-10-19 Club Wealth), for the start date. */
+function onboardingEmail(company, startYmd, position) {
+  if (company !== 'Homexa' && company !== 'Club Wealth') throw new Error('Pick Hired | Homexa or Hired | Clubwealth first.');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(startYmd || ''))) throw new Error('Pick the start date first.');
+  var day = weekdayOf(startYmd);
+  var first = day + ', ' + longDate(startYmd);
+  var b;
+  if (company === 'Club Wealth') {
+    b = '<p><b>Welcome to Club Wealth!</b><br>We are excited to have you join the team as part of our Club Wealth Team. Below are your schedule, onboarding instructions, and key policies. Please read carefully and ensure that all tasks are completed on time.</p>' + HR +
+      '<p><b>Schedule</b></p>' + lis_([
+        'Regular Schedule: Monday-Thursday, 5:30 AM - 3:00 PM, and Friday, 5:30 AM - 9:30 AM (PST). <i>*Hours are subject to change, advanced notice will be given.*</i>' +
+          '<br>Start: 5:30 AM<br>1st Break: 8:30 AM<br>Lunch: 10:30 AM<br>Last Break: 12:30 PM<br>End: 3:00 PM',
+        '<b>First Day TO DO: ' + first + '</b>' + lis_([
+          'Please be on Zoom 6:00 AM PACIFIC for Onboarding docs checking and tools set up. After that, you will be following the Regular Schedule',
+          'Assignment before Friday: Sign in to <a href="https://learning.clubwealth.com/">ClubWealthU.com</a> (use Google Account)',
+          'Use the <a href="' + ASSET_BASE + '/onboarding/clubwealth-zoom-background.png">Zoom Background</a> and have your name as First name(space)Last name(dash)Training',
+          'Join Zoom link: <a href="http://clubwealthhelp.com/">ClubWealthHelp.com</a>'])]) +
+      '<p>Reminder: Be logged in and ready 5-10mins before the start time with everything you need (e.g., coffee, water) <b>DO NOT BE LATE</b></p>' + HR +
+      '<p><b>Onboarding Instructions</b><br>To begin your first day of training, ALL onboarding tasks must be completed <b>BEFORE 6:00 AM of your 1st day</b> NO LATE SUBMISSIONS</p>' +
+      '<p>1. Google Form Submission<br>Upload the following documents here: <a href="https://forms.gle/NjSEBpYwNQ8Z4Niw8">Google Form | New Hire Onboarding</a><br>Rename files as FirstName LastName_Filename (e.g., John Smith_Headshot)</p>' +
+      '<p>2. Software Setup</p>' + lis_(['Install Zoom on your computer for daily use.', 'Have Pacific Standard Time as your PC time zone']) + HR +
+      '<p><b>Key Policies &amp; Reminders</b></p>' + lis_([
+        'Time and Attendance:' + lis_(TIME_POLICY),
+        'Call-Outs:' + lis_(['Notify both Tara and Camille via group FB Messenger at least one hour before your shift.', 'Request OFF should be notified 2 weeks prior to Tara and Camille via EMAIL', 'NO call outs in the first two weeks, otherwise will result in termination.']),
+        'Communication:' + lis_(['Send a DM to <a href="https://www.facebook.com/tammcruz">Camille</a> (use this link) on Facebook Messenger', 'Slack communication: You will be added on Team and ISA channels',
+          'Once slack account is created, do a group chat with you, Camille and Tara (not channel, no group name needed)'])]) + HR + CHECKLIST + HR +
+      '<p>If you have any questions, feel free to reach out. We look forward to seeing you on your first day! 😊</p>' + QUOTE + SIGNATURE_HTML;
+    return { subject: 'Club Wealth | Start Date: ' + first + ' | Welcome & Onboarding', body: b };
+  }
+  var bg = homexaBackground(position);
+  b = '<p><b>Welcome to Homexa!</b><br>We are excited to have you join the team as part of our Homexa Team. Below are your schedule, onboarding instructions, and key policies. Please read carefully and ensure that all tasks are completed on time.</p>' + HR +
+    '<p><b>Schedule</b></p>' + lis_([
+      'Regular Schedule: Monday-Friday, 7:30 AM - 4:30 PM Pacific. <i>*Hours are subject to change, advanced notice will be given.*</i>',
+      '<b>First Day TO DO: ' + first + '</b>' + lis_([
+        'Please be on Zoom 8:00 AM Pacific',
+        'Homework before ' + day + ': Sign in to <a href="https://learning.clubwealth.com/">ClubWealthU.com</a> (use Google Account) finish the course given yesterday',
+        'Use the <a href="' + ASSET_BASE + '/onboarding/' + bg[1] + '">Zoom Background (Homexa ' + bg[0] + ')</a>',
+        'Join Zoom link: <a href="http://homexahelp.com/">HomexaHelp.com</a>'])]) +
+    '<p>Reminder: Be logged in and ready 5-10mins before the start time with everything you need (e.g., coffee, water) <b>DO NOT BE LATE</b></p>' + HR +
+    '<p><b>Onboarding Instructions</b><br>To begin your first day of training, ALL onboarding tasks must be completed <b>BEFORE 8:00 AM ' + day + '</b> NO LATE SUBMISSIONS</p>' +
+    '<p>1. Google Form Submission<br>Upload the following documents here: <a href="https://forms.gle/epjTUxnSUSbJBH1v8">Google Form | New Hire Onboarding</a><br>Rename files as FirstName LastName_Filename (e.g., John Smith_Headshot)</p>' +
+    '<p>2. Software Setup</p>' + lis_(['Install Zoom on your computer for daily use.', 'Have Pacific Standard Time as your PC time zone']) + HR +
+    '<p><b>Key Policies &amp; Reminders</b></p>' + lis_([
+      'Time and Attendance:' + lis_(TIME_POLICY),
+      'Callouts:' + lis_(['Notify leadership at least one hour before your shift.', 'Request off should be sent 2 weeks prior to your leadership', 'NO call outs in the first two weeks, otherwise will result in termination.']),
+      'Payroll: Every other Wednesday through WISE Account']) + HR + CHECKLIST + HR +
+    '<p>If you have any questions, feel free to reach out. We look forward to seeing you on your first day! 😊</p>' + QUOTE + SIGNATURE_HTML;
+  return { subject: 'Homexa | Start Date: ' + first + ' | Welcome & Onboarding', body: b };
+}
+
 /**
- * The status email for one applicant. PLACEHOLDER text until Miguel sends the final templates: the subject and body
- * say so plainly, so a placeholder can never pass as the real email. Same Club Wealth sign-off and banner as every email.
+ * The status email for one applicant (final templates from Recruitment, 2026-11-05). Hired and Onboarding send the
+ * Welcome & Onboarding email of the company in opts.company, for opts.startDate.
  */
-function statusEmail(type, firstName) {
-  var hi = '<p>Hi ' + escapeHtml(String(firstName || '').trim() || 'there') + ',</p>';
-  var text = {
-    Hired: '[PLACEHOLDER - Hired email. Miguel will send the final text.]',
-    Rejected: '[PLACEHOLDER - Rejected email. Miguel will send the final text.]',
-    Benched: '[PLACEHOLDER - Benched email (passed the interview, no job offer yet). Miguel will send the final text.]',
-    Onboarding: '[PLACEHOLDER - Onboarding email (first steps after the offer). Miguel will send the final text.]'
-  }[type];
-  if (!text) throw new Error('No status email for ' + type);
-  var subject = { Hired: 'ClubWealth | Welcome to the team', Rejected: 'ClubWealth | Your application', Benched: 'ClubWealth | Your application update', Onboarding: 'ClubWealth | Onboarding' }[type];
-  return { subject: subject + ' [PLACEHOLDER]', body: hi + '<p>' + text + '</p>' + SIGNATURE_HTML };
+function statusEmail(type, firstName, opts) {
+  opts = opts || {};
+  var name = escapeHtml(String(firstName || '').trim() || 'there');
+  if (type === 'Hired' || type === 'Onboarding') return onboardingEmail(opts.company, opts.startDate, opts.position);
+  if (type === 'Benched') {
+    return {
+      subject: 'ClubWealth | Your application update',
+      body: '<p>Hi ' + name + ',</p>' +
+        '<p>Thank you so much for taking the time to speak with us yesterday!<br>We truly enjoyed getting to know you and learning more about your experience.</p>' +
+        '<p>We are currently taking some time to finalize and assess our hiring needs to ensure we have the right structure and onboarding plan in place for this role. Because of that, we\'d like to ask for your patience as we complete this process.</p>' +
+        '<p>Tara was very impressed with your qualifications and believes you would be a great fit for both the role and our team culture. We are excited about the possibility of working together and would love to stay connected while we finalize next steps.</p>' +
+        '<p>Please hang tight, and we\'ll be sure to reach out as soon as we have completed our assessment and are ready to move forward with onboarding. In the meantime, feel free to reach out if you have any questions.</p>' +
+        '<p>Thank you again for your time and interest in joining our team. We look forward to reconnecting with you soon.</p>' + SIGNATURE_HTML
+    };
+  }
+  if (type === 'Rejected') {
+    return {
+      subject: 'ClubWealth | Your application',
+      body: '<p>Hi!</p>' +
+        '<p>Thank you for taking the time to speak with Tara yesterday and share more about your background and experience. After careful consideration, we’ve decided not to move forward with your application at this time.</p>' +
+        '<p>We truly appreciate the effort you put into the process and the opportunity to learn more about your skills. We wish you the very best in your job search and future endeavors.</p>' +
+        '<p>All the best,</p>' + SIGNATURE_HTML.replace('<p>Cheers,<br>Club Wealth</p>', '')
+    };
+  }
+  throw new Error('No status email for ' + type);
 }
 
 // ---------- Active Team Members (from the Onboarding sheet) ----------

@@ -1,6 +1,7 @@
 'use client';
 import { useState } from 'react';
-import { STAGES, REASON_REQUIRED } from '@/lib/pipeline';
+import { STAGE_CHOICES, REASON_REQUIRED, parseStageChoice } from '@/lib/pipeline';
+import { hireFields } from './hirePrompt';
 import { useAction } from './useAction';
 
 /** Stage picker right in the list row. Stages that need a reason ask for it first. */
@@ -11,15 +12,17 @@ export function InlineStage({ id, stage }: { id: string; stage: string }) {
       onChange={async (e) => {
         const to = e.target.value;
         if (!to) return;
+        const hire = hireFields(to);
+        if (!hire) return;
         let reason = '';
-        if (REASON_REQUIRED.includes(to)) {
-          reason = prompt(`Reason for ${to}:`)?.trim() || '';
+        if (REASON_REQUIRED.includes(hire.stage)) {
+          reason = prompt(`Reason for ${hire.stage}:`)?.trim() || '';
           if (!reason) return;
         }
-        await run({ action: 'setStage', ids: [id], stage: to, reason });
+        await run({ action: 'setStage', ids: [id], reason, ...hire });
       }}>
       <option value="">{busy ? 'Saving…' : 'Move…'}</option>
-      {STAGES.filter((x) => x !== stage).map((x) => <option key={x} value={x}>{x}</option>)}
+      {STAGE_CHOICES.filter((x) => x !== stage && !(parseStageChoice(x).stage === stage && !parseStageChoice(x).company)).map((x) => <option key={x} value={x}>{x}</option>)}
     </select>
   );
 }
