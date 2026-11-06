@@ -1016,6 +1016,7 @@ function tick() {
       emailApps: processEmailApps_(st),
       team: safeTeamSync_(st),
       banned: bannedSweep_(st),
+      zoomTracked: safeZoomTrack_(st),
       zoom: processZoom_(st),
       reminders: queueReminders_(st)
     };
@@ -1572,7 +1573,8 @@ function api_(req) {
       withHistory: all,
       mode: st.get('MODE'),
       emailSending: st.get('EMAIL_SENDING'),
-      cancelledSessions: Object.keys(CANCELLED_SESSIONS).sort()
+      cancelledSessions: Object.keys(CANCELLED_SESSIONS).sort(),
+      zoomTracking: zoomTrackingStatus_(st)
     };
   }
   if (req.action === 'applicant') {
@@ -1605,6 +1607,7 @@ function api_(req) {
   if (MANUAL_BY.indexOf(req.by) === -1) throw new Error('unknown user');
   if (req.action === 'preview') return preview_(req);
   if (req.action === 'presence') return presence_(req);
+  if (req.action === 'zoomTrackingStatus') return zoomTrackingStatus_(settings_());
   var lock = LockService.getScriptLock();
   lock.waitLock(30000);
   try {
@@ -1779,6 +1782,7 @@ function api_(req) {
       return { updated: said.length, resume: f2['Resume Link'] || '' };
     }
     if (req.action === 'editPendingEmail') return editPendingEmail_(req);
+    if (req.action === 'startZoomTracking') return startZoomTracking_(st2, req);
     if (req.action === 'approveEmail') return decideStatusEmail_(st2, req, true);
     if (req.action === 'skipEmail') return decideStatusEmail_(st2, req, false);
     if (req.action === 'updateTeam') {
@@ -2149,4 +2153,131 @@ function editPendingEmail_(req) {
   var prefix = e.Test === 'Y' && subject.indexOf('[TEST] ') !== 0 ? '[TEST] ' : '';
   update_(out, e, { Subject: prefix + subject, Body: body, 'Edited By': req.by, 'Edited At': nowStr_() });
   return { saved: true };
+}
+
+// ---------- Zoom attendance tracking started from the CRM (Miguel, 2026-11-06) ----------
+// "Open session" on the session day (from 30 minutes before the 2:00 PM start to the 3:30 PM end) starts tracking
+// once: Settings ZOOM_TRACKING_FOR = that day. Every tick then reads Zoom's live participant list for the Help Desk
+// meeting (read only), writes the Zoom Attendance rows (never Matched Applicant ID or Result: processZoom_ does that),
+// and after 3:30 PM sets ZOOM_FINALIZE, which sets the stages as before.
+// Needs Script Properties ZOOM_ACCOUNT_ID, ZOOM_CLIENT_ID, ZOOM_CLIENT_SECRET (the Server-to-Server Zoom app).
+
+var ZOOM_TRACK = { open: '13:30', start: '13:30', interview: '14:00', end: '15:30' };
+
+function zoomConfigured_() {
+  var p = PropertiesService.getScriptProperties();
+  return !!(p.getProperty('ZOOM_ACCOUNT_ID') && p.getProperty('ZOOM_CLIENT_ID') && p.getProperty('ZOOM_CLIENT_SECRET'));
+}
+
+/** A Zoom access token (Server-to-Server OAuth), cached for 50 minutes. Never logged. */
+function zoomToken_() {
+  var cache = CacheService.getScriptCache();
+  var t = cache.get('zoom-token');
+  if (t) return t;
+  var p = PropertiesService.getScriptProperties();
+  var r = UrlFetchApp.fetch('https://zoom.us/oauth/token?grant_type=account_credentials&account_id=' + encodeURIComponent(p.getProperty('ZOOM_ACCOUNT_ID')), {
+    method: 'post', muteHttpExceptions: true,
+    headers: { Authorization: 'Basic ' + Utilities.base64Encode(p.getProperty('ZOOM_CLIENT_ID') + ':' + p.getProperty('ZOOM_CLIENT_SECRET')) }
+  });
+  if (r.getResponseCode() !== 200) throw new Error('Zoom sign-in failed (' + r.getResponseCode() + ')');
+  t = JSON.parse(r.getContentText()).access_token;
+  cache.put('zoom-token', t, 3000);
+  return t;
+}
+
+/** Everyone in (or who was in) today's live Help Desk meeting. Read only. */
+function zoomLiveParticipants_(st) {
+  var tok = zoomToken_();
+  var meeting = st.get('ZOOM_MEETING_ID') || '99195738734';
+  var out = [], page = '';
+  for (var i = 0; i < 20; i++) {
+    var url = 'https://api.zoom.us/v2/metrics/meetings/' + encodeURIComponent(meeting) + '/participants?type=live&page_size=300' + (page ? '&next_page_token=' + encodeURIComponent(page) : '');
+    var r = UrlFetchApp.fetch(url, { headers: { Authorization: 'Bearer ' + tok }, muteHttpExceptions: true });
+    if (r.getResponseCode() !== 200) throw new Error('Zoom participants ' + r.getResponseCode());
+    var d = JSON.parse(r.getContentText());
+    out = out.concat(d.participants || []);
+    page = d.next_page_token || '';
+    if (!page) break;
+  }
+  return out;
+}
+
+/** Writes this day's computed rows into Zoom Attendance: updates each person's row, adds new ones. */
+function writeZoomRows_(day, rows) {
+  var z = table_(SH.ZOOM);
+  var key = function (n) { return String(n || '').replace(/\s+/g, ' ').trim().toLowerCase(); };
+  var have = {};
+  z.rows.forEach(function (r) { if (ymdOf_(r['Interview Date']) === day) have[key(r['Parsed Name'])] = r; });
+  var cols = ['Zoom Display Name', 'Parsed Position', 'Total Minutes', 'First Join', 'Last Leave', 'Segments'];
+  if (z.headers.indexOf('Arrival') !== -1) cols.push('Minutes Early', 'Arrival');
+  var n = 0;
+  rows.forEach(function (row) {
+    var old = have[key(row['Parsed Name'])];
+    var f = { 'Recorded At': nowStr_() };
+    cols.forEach(function (c) { f[c] = row[c]; });
+    if (old) {
+      if (old.Result) return; // finalized rows are never rewritten
+      update_(z, old, f);
+    } else {
+      f['Interview Date'] = day; f['Parsed Name'] = row['Parsed Name'];
+      append_(z, f);
+    }
+    n++;
+  });
+  return n;
+}
+
+/** "Open session" on the site: starts tracking once, on the session day, from 30 min before the start to the end. */
+function startZoomTracking_(st, req) {
+  var now = new Date();
+  var today = todayPT(now);
+  var day = String(req.date || '');
+  var hm = Utilities.formatDate(now, TZ, 'HH:mm');
+  var status = zoomTrackingStatus_(st);
+  if (day !== today) return { started: false, reason: 'not the session day', status: status };
+  if (hm < ZOOM_TRACK.open || hm >= ZOOM_TRACK.end) return { started: false, reason: 'outside ' + ZOOM_TRACK.open + '-' + ZOOM_TRACK.end + ' PT', status: status };
+  if (st.get('ZOOM_TRACKING_FOR') === today) return { started: false, reason: 'already on', status: status };
+  if (!zoomConfigured_()) throw new Error('Zoom is not connected to Apps Script yet (Script Properties ZOOM_ACCOUNT_ID, ZOOM_CLIENT_ID, ZOOM_CLIENT_SECRET).');
+  st.set('ZOOM_TRACKING_FOR', today);
+  st.set('ZOOM_TRACKING_SINCE', Utilities.formatDate(now, TZ, 'yyyy-MM-dd HH:mm:ss'));
+  st.set('ZOOM_TRACKING_BY', req.by);
+  log_('zoomTracking', 'started', { by: req.by }, today);
+  var first = 0;
+  try { first = zoomTrackTick_(st); } catch (e) { log_('zoomTracking', 'first poll failed', { error: String(e).slice(0, 200) }, today); }
+  return { started: true, rows: first, status: zoomTrackingStatus_(st) };
+}
+
+/** For the site: tracking state of today's (or the last tracked) session. */
+function zoomTrackingStatus_(st) {
+  return {
+    day: st.get('ZOOM_TRACKING_FOR'), since: st.get('ZOOM_TRACKING_SINCE'), by: st.get('ZOOM_TRACKING_BY'),
+    lastPoll: st.get('ZOOM_TRACKING_LAST'), done: st.get('ZOOM_TRACKING_DONE') === st.get('ZOOM_TRACKING_FOR') && !!st.get('ZOOM_TRACKING_FOR'),
+    configured: zoomConfigured_()
+  };
+}
+
+/** Every tick while tracking is on: read Zoom, write the rows; after the end time, finalize once. Returns rows written. */
+function zoomTrackTick_(st) {
+  var day = st.get('ZOOM_TRACKING_FOR');
+  if (!day || st.get('ZOOM_TRACKING_DONE') === day || !zoomConfigured_()) return 0;
+  var now = new Date();
+  var today = todayPT(now);
+  var ended = today > day || Utilities.formatDate(now, TZ, 'HH:mm') >= ZOOM_TRACK.end;
+  var n = 0;
+  if (today === day) {
+    var rows = zoomRowsFromParticipants(zoomLiveParticipants_(st), day, now.getTime(), ZOOM_TRACK);
+    n = writeZoomRows_(day, rows);
+    st.set('ZOOM_TRACKING_LAST', Utilities.formatDate(now, TZ, 'yyyy-MM-dd HH:mm:ss'));
+  }
+  if (ended) {
+    st.set('ZOOM_TRACKING_DONE', day);
+    st.set('ZOOM_FINALIZE', day); // processZoom_ (same tick) sets Interview Completed / Did Not Complete / No Show
+    log_('zoomTracking', 'finalized', { rows: n }, day);
+  }
+  return n;
+}
+
+/** The tick never fails because of Zoom: an error is logged and the next tick tries again. */
+function safeZoomTrack_(st) {
+  try { return zoomTrackTick_(st); } catch (e) { log_('zoomTracking', 'poll failed', { error: String(e).slice(0, 200) }, st.get('ZOOM_TRACKING_FOR')); return 0; }
 }

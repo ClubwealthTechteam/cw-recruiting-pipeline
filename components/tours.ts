@@ -54,6 +54,7 @@ export const TOURS: TourDef[] = [
     summary: 'Before, during and after the 2:00 PM PT call: rules, live Zoom, quick decisions, re-invites.',
     steps: [
       { path: '/session', target: 'nav-session', title: '1. This Week\'s Session', body: 'Open this before 2:00 PM PT on Wednesday. It lists everyone invited to that session. Use Previous / Next week at the top to see other weeks.' },
+      { path: '/session', target: 'tracking', optional: true, title: 'Attendance tracking', body: 'On session day, the first click on Open session (Home) from 1:30 PM PT starts Zoom attendance tracking, once. This line says when it started and the last Zoom check; results are set after 3:30 PM.' },
       { path: '/session', target: 'nonneg', title: '2. Non-negotiables', body: 'The rules to read out at the start of the call. Click the bar to open them. On session day they open by themselves.' },
       { path: '/session', target: 'session-day', optional: true, title: '3. Session day mode', body: 'On Wednesday the page switches to session day mode: each person gets Pass, Not Fit, Left Zoom and Did not finish buttons. Not Fit and Did not finish ask for a reason. A message at the bottom lets you Undo.' },
       { path: '/session', target: 'roster', title: '4. The roster', body: 'Everyone invited: whether they confirmed, got the reminder, when they joined (green = early, amber = less than 10 minutes early, red = late) and minutes in Zoom. Click a name to open their profile in a side panel.' },

@@ -4,6 +4,7 @@ import { metrics, pct, formatDate, STAGES, s as str, ymd, positionCounts, daysAg
 import { WeeklyBars, RateTrend, HBars } from '@/components/Charts';
 import DataError from '@/components/DataError';
 import AskBar from '@/components/AskBar';
+import OpenSessionButton from '@/components/OpenSessionButton';
 import { currentUser } from '@/lib/auth';
 import { sessionTimes, todayPT, fullName, scoreSummary } from '@/lib/pipeline';
 
@@ -82,7 +83,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
           <div className="kv-row"><span>Invited by email</span><b>{invitedNext.length - oljNext}</b></div>
           <div className="kv-row"><span>Invited on OLJ</span><b>{oljNext}</b></div>
           <div className="kv-row"><span>Reminder</span><span className="muted">Wednesday 6:00 AM PT</span></div>
-          <p style={{ marginTop: 12, display: 'flex', gap: 8 }}><Link className="btn primary" href={`/session?date=${nextSession}`}>Open session</Link></p>
+          <p style={{ marginTop: 12, display: 'flex', gap: 8 }}><OpenSessionButton date={nextSession} /></p>
         </section>
       </div>
 
