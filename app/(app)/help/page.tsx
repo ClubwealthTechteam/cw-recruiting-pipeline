@@ -39,6 +39,7 @@ const SECTIONS: Section[] = [
     title: 'Zoom attendance (Wednesdays)',
     href: '/session',
     items: [
+      'Tracking starts from the CRM: on the session day, the first click on Open session (Home) or Start attendance tracking (This Week\'s Session) from 1:30 PM PT starts it, once. Apps Script then reads the Help Desk meeting\'s participants every 5 minutes (read only), fills Zoom Attendance, and after 3:30 PM sets Interview Completed, Did Not Complete or No Show. The session page shows "Attendance tracking: on since …".',
       'From 1:40 PM, arrival (minutes early or late) and Zoom minutes update live on This Week\'s Session, about every 5 minutes.',
       'While the session runs, a green "In Zoom now" or grey "Left Zoom 2:13 PM" badge shows next to the stage on Candidates, the Board and the Session page. It disappears after the 3:30 wrap-up.',
       'The invite asks applicants to join 10 minutes early; green = on time, amber = under 10 minutes early, red = late.',

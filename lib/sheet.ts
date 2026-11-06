@@ -17,6 +17,7 @@ export type PipelineData = {
   mode: string;
   emailSending?: string;
   cancelledSessions?: string[];
+  zoomTracking?: { day?: string; since?: string; by?: string; lastPoll?: string; done?: boolean; configured?: boolean };
   fetchedAt?: number;
 };
 

@@ -677,3 +677,78 @@ function cleanEmailHtml(html) {
     .replace(/(href|src)\s*=\s*("|')\s*(javascript|vbscript|data):[^"']*\2/gi, '$1="#"')
     .replace(/\s(contenteditable|spellcheck)="[^"]*"/gi, '');
 }
+
+// ---------- Zoom attendance computed in Apps Script (Miguel, 2026-11-06: tracking started from the CRM) ----------
+
+/** UTC milliseconds of a Pacific wall-clock time on a day ("2026-11-11", "14:00"), daylight saving included. */
+function ptMs(day, hhmm) {
+  var d = String(day).split('-'), t = String(hhmm).split(':');
+  return Date.UTC(+d[0], +d[1] - 1, +d[2], +t[0], +(t[1] || 0)) + (isDaylight(day) ? 7 : 8) * 3600000;
+}
+/** "HH:MM" Pacific for UTC milliseconds on that day. */
+function ptHm(ms, day) {
+  var x = new Date(ms - (isDaylight(day) ? 7 : 8) * 3600000);
+  return ('0' + x.getUTCHours()).slice(-2) + ':' + ('0' + x.getUTCMinutes()).slice(-2);
+}
+
+/** Arrival against the start (the invite asks for 10 minutes early): [signed minutes early, label]. Same as the routine. */
+function zoomArrival(firstJoinMs, startMs) {
+  var early = Math.round((startMs - firstJoinMs) / 60000);
+  if (early >= 10) return [early, early + ' min early (on time)'];
+  if (early > 0) return [early, early + ' min early (' + (10 - early) + ' min short of the 10 min asked)'];
+  if (early === 0) return [0, 'Joined at the start time (10 min late for the 10-min-early rule)'];
+  return [early, (-early) + ' min late'];
+}
+
+/**
+ * Zoom Attendance rows from Zoom's participant list for the session day (the same rules as the old routine):
+ * strict "Name_Position" names only (never _Training), minutes inside the window (default 13:30-15:30 PT) with
+ * overlapping segments merged and rejoins added, arrival against the 2:00 PM start. A participant who renamed keeps the
+ * Name_Position name they used. nowMs caps open segments (people still in the meeting).
+ */
+function zoomRowsFromParticipants(participants, day, nowMs, opts) {
+  opts = opts || {};
+  var lo = ptMs(day, opts.start || '13:30'), hi = ptMs(day, opts.end || '15:30'), start = ptMs(day, opts.interview || '14:00');
+  var end = Math.min(nowMs, hi);
+  var parsedById = {};
+  (participants || []).forEach(function (p) {
+    var pid = p.participant_uuid || p.participant_user_id || p.id || p.user_name;
+    if (parseZoomName(p.user_name) && !parsedById[pid]) parsedById[pid] = String(p.user_name).trim();
+  });
+  var people = {};
+  (participants || []).forEach(function (p) {
+    var pid = p.participant_uuid || p.participant_user_id || p.id || p.user_name;
+    var display = parseZoomName(p.user_name) ? String(p.user_name).trim() : parsedById[pid];
+    var parsed = parseZoomName(display);
+    var j = Date.parse(p.join_time || '');
+    if (!parsed || isNaN(j)) return;
+    var l = p.leave_time ? Date.parse(p.leave_time) : end;
+    var k = parsed.name.replace(/\s+/g, ' ').toLowerCase();
+    var e = people[k] || (people[k] = { display: display, name: parsed.name, position: parsed.position, segs: [] });
+    e.segs.push([j, l]);
+  });
+  var rows = [];
+  Object.keys(people).forEach(function (k) {
+    var e = people[k];
+    var iv = e.segs.map(function (s) { return [Math.max(s[0], lo), Math.min(s[1], end)]; })
+      .filter(function (s) { return s[1] > s[0]; }).sort(function (a, b) { return a[0] - b[0]; });
+    var total = 0, cur = null;
+    iv.forEach(function (s) {
+      if (cur && s[0] <= cur[1]) cur[1] = Math.max(cur[1], s[1]);
+      else { if (cur) total += cur[1] - cur[0]; cur = s.slice(); }
+    });
+    if (cur) total += cur[1] - cur[0];
+    var mins = total / 60000;
+    if (mins <= 0) return;
+    var segs = e.segs.slice().sort(function (a, b) { return a[0] - b[0]; });
+    var inside = segs.filter(function (s) { return s[1] > lo; });
+    var arr = zoomArrival(inside[0][0], start);
+    rows.push({
+      'Interview Date': day, 'Zoom Display Name': e.display, 'Parsed Name': e.name, 'Parsed Position': e.position,
+      'Total Minutes': Math.round(mins * 10) / 10, 'First Join': ptHm(inside[0][0], day),
+      'Last Leave': ptHm(Math.max.apply(null, segs.map(function (s) { return s[1]; })), day), Segments: segs.length,
+      'Minutes Early': arr[0], Arrival: arr[1]
+    });
+  });
+  return rows;
+}

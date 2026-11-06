@@ -1124,3 +1124,52 @@ test('a waiting email can be edited: subject and body saved, scripts removed, ba
   env.api({ action: 'approveEmail', by: 'Am', emailId: e['Email ID'] });
   assert.match(env.api({ action: 'editPendingEmail', by: 'Am', emailId: e['Email ID'], subject: 'x', body: '<p>y</p>' }).error, /Only emails waiting/);
 });
+
+test('Zoom tracking from the site: starts once in the window, polls Zoom, writes rows, finalizes the stages', () => {
+  const env = invitedEnv({ EMAIL_SENDING: 'ON' });
+  env.ctx.setup();
+  const A = env.sheets.Applicants.data, h = A[0];
+  const set = (id, k, v) => { A.find((r) => r[0] === id)[h.indexOf(k)] = v; };
+  ['F-2', 'F-3', 'F-4'].forEach((id) => { set(id, 'Interview Date', '2026-10-28'); set(id, 'Stage', 'Confirmed'); });
+  // fake Zoom: Maria stays the whole session, Jose leaves at 2:20, Ana never joins
+  const zoomCalls = [];
+  const participants = [
+    { participant_uuid: 'a', user_name: 'Maria Clara Santos_Collections VA', join_time: '2026-10-28T20:50:00Z' },
+    { participant_uuid: 'b', user_name: 'Jose Dela Cruz_ISA', join_time: '2026-10-28T20:55:00Z', leave_time: '2026-10-28T21:20:00Z' },
+    { participant_uuid: 'c', user_name: 'Staff Person', join_time: '2026-10-28T20:00:00Z' }
+  ];
+  env.ctx.Utilities.base64Encode = (s) => Buffer.from(String(s)).toString('base64');
+  env.ctx.UrlFetchApp = { fetch: (url) => {
+    zoomCalls.push(url);
+    const body = /oauth\/token/.test(url) ? { access_token: 'tok' } : { participants };
+    return { getResponseCode: () => 200, getContentText: () => JSON.stringify(body) };
+  } };
+  // outside the window: nothing happens
+  env.setNow(pdt('2026-10-28T12:00:00'));
+  assert.equal(env.api({ action: 'startZoomTracking', by: 'Am', date: '2026-10-28' }).data.started, false);
+  assert.equal(env.api({ action: 'startZoomTracking', by: 'Am', date: '2026-10-29' }).data.started, false, 'not the session day');
+  assert.equal(zoomCalls.length, 0);
+  // 1:41 PM: starts, polls once right away
+  env.setNow(pdt('2026-10-28T13:41:00'));
+  const s = env.api({ action: 'startZoomTracking', by: 'Am', date: '2026-10-28' });
+  assert.equal(s.ok, true, s.error);
+  assert.equal(s.data.started, true);
+  assert.equal(s.data.status.day, '2026-10-28');
+  assert.equal(env.api({ action: 'startZoomTracking', by: 'Camille', date: '2026-10-28' }).data.started, false, 'only once');
+  // ticks during the session keep the rows current; matching is done by the engine
+  env.setNow(pdt('2026-10-28T14:30:00')); env.ctx.tick();
+  const z = () => env.rows('Zoom Attendance').filter((r) => r['Interview Date'] === '2026-10-28');
+  assert.equal(z().length, 2, 'only Name_Position participants');
+  assert.equal(z().find((r) => /Maria/.test(r['Parsed Name']))['Matched Applicant ID'], 'F-2');
+  assert.equal(z().find((r) => /Maria/.test(r['Parsed Name']))['Total Minutes'], 40);
+  // after 3:30 PM: final poll, then stages
+  env.setNow(pdt('2026-10-28T15:35:00')); env.ctx.tick();
+  const st = (id) => env.rows('Applicants').find((a) => a['Applicant ID'] === id).Stage;
+  assert.equal(z().find((r) => /Maria/.test(r['Parsed Name']))['Total Minutes'], 100);
+  assert.deepEqual([st('F-2'), st('F-3'), st('F-4')], ['Interview Completed', 'Did Not Complete', 'No Show']);
+  const settings = Object.fromEntries(env.rows('Settings').map((r) => [r.Key, r.Value]));
+  assert.equal(settings.ZOOM_TRACKING_DONE, '2026-10-28');
+  const calls = zoomCalls.length; env.setNow(pdt('2026-10-28T15:40:00')); env.ctx.tick();
+  assert.equal(zoomCalls.length, calls, 'no more Zoom calls after the session');
+  assert.ok(zoomCalls.filter((u) => /zoom/.test(u)).every((u) => /^https:\/\/(zoom\.us\/oauth\/token|api\.zoom\.us\/v2\/metrics\/meetings\/)/.test(u)), 'only the token and the read-only participant list');
+});

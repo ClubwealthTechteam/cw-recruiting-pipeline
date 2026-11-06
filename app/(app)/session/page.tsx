@@ -8,6 +8,7 @@ import ReinviteNoShows from '@/components/ReinviteNoShows';
 import NonNegotiables from '@/components/NonNegotiables';
 import { todayPT, sessionTimes, cancelledSessions } from '@/lib/pipeline';
 import QuickDecide from '@/components/QuickDecide';
+import OpenSessionButton from '@/components/OpenSessionButton';
 
 export default async function Session({ searchParams }: { searchParams: Promise<{ date?: string }> }) {
   const p = await searchParams;
@@ -46,6 +47,7 @@ export default async function Session({ searchParams }: { searchParams: Promise<
         <div className="tile"><div className="tile-label">Confirmed</div><div className="tile-value">{confirmed}</div></div>
         <div className="tile"><div className="tile-label">Reminder sent</div><div className="tile-value">{reminded}</div><div className="tile-note">Wednesday 6:00 AM PT</div></div>
       </section>
+      {isToday && <TrackingStatus date={date} z={d.zoomTracking} />}
       {isToday && <div className="session-day" data-tour="session-day"><span className="dot-live" /><span><b>Session day mode.</b> Decide right from the list: Pass, Not Fit, Left Zoom or Did not finish. Each one can be undone from the message at the bottom.</span></div>}
       {isToday && live.size > 0 && (
         <section className="panel live-zoom">
@@ -92,4 +94,20 @@ function Arrival({ a }: { a: Record<string, unknown> }) {
   const early = Number(a['Minutes Early']);
   const tone = early < 0 ? 'red' : early < 10 ? 'amber' : 'green';
   return <span className={`badge ${tone}`}>{label}</span>;
+}
+
+/** "Attendance tracking: on since 1:41 PM" / "not started" for today's session (Zoom tracking started by Open session). */
+function TrackingStatus({ date, z }: { date: string; z?: { day?: string; since?: string; by?: string; lastPoll?: string; done?: boolean; configured?: boolean } }) {
+  const hm = (stamp?: string) => { const m = /(\d{2}):(\d{2})/.exec(String(stamp || '').slice(11)); if (!m) return ''; const h = Number(m[1]); return `${h % 12 || 12}:${m[2]} ${h < 12 ? 'AM' : 'PM'}`; };
+  const on = z?.day === date;
+  let text = 'Attendance tracking: not started. It starts when someone clicks Open session from 1:30 PM PT.';
+  if (on && z?.done) text = `Attendance tracking: finished. Started ${hm(z.since)} by ${z.by}; stages were set from the Zoom minutes.`;
+  else if (on) text = `Attendance tracking: on since ${hm(z?.since)}${z?.by ? ` (${z.by})` : ''}${z?.lastPoll ? ` · last Zoom check ${hm(z.lastPoll)}` : ''}. Updates every 5 minutes; results are set after 3:30 PM.`;
+  else if (z && z.configured === false) text = 'Attendance tracking: Zoom is not connected to Apps Script yet.';
+  return (
+    <div className={`panel ${on ? 'info' : ''}`} data-tour="tracking" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+      <span style={{ flex: 1 }}>{text}</span>
+      {!on && <OpenSessionButton date={date} label="Start attendance tracking" className="btn small-btn" navigate={false} />}
+    </div>
+  );
 }
