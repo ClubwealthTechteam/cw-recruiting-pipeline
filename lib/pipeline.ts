@@ -344,3 +344,26 @@ export function boardColumnOf(stage: string, tags: unknown): string {
   const c = hiredCompany(tags);
   return c === 'Homexa' ? 'Hired | Homexa' : c === 'Club Wealth' ? 'Hired | Clubwealth' : 'Hired | company not set';
 }
+
+/**
+ * The Pacific date range [from, to] (inclusive, YYYY-MM-DD) for the Candidates "Applied" filter, or null for any time.
+ * Weeks start on Monday, like the dashboard.
+ */
+export function appliedRange(key: string | undefined, from?: string, to?: string, now = new Date()): [string, string] | null {
+  const today = todayPT(now);
+  const dow = (new Date(`${today}T12:00:00Z`).getUTCDay() + 6) % 7; // 0 = Monday
+  const monday = addDays(today, -dow);
+  const ok = (d?: string) => /^\d{4}-\d{2}-\d{2}$/.test(d || '');
+  switch (key) {
+    case 'today': return [today, today];
+    case 'yesterday': return [addDays(today, -1), addDays(today, -1)];
+    case '3d': return [addDays(today, -2), today];
+    case '7d': return [addDays(today, -6), today];
+    case '14d': return [addDays(today, -13), today];
+    case '30d': return [addDays(today, -29), today];
+    case 'thisweek': return [monday, today];
+    case 'lastweek': return [addDays(monday, -7), addDays(monday, -1)];
+    case 'custom': return ok(from) || ok(to) ? [ok(from) ? from! : '0000-01-01', ok(to) ? to! : '9999-12-31'] : null;
+    default: return null;
+  }
+}
