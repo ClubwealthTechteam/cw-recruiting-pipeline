@@ -75,7 +75,7 @@ export default function MassSend({ people, templates, stages }: { people: Recipi
         )}
         {channel === 'email' && <input value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="Subject (blank = RE: ClubWealth | Pre-Interview invite)" />}
         <textarea rows={8} value={text} onChange={(e) => setText(e.target.value)} placeholder={'Hi {first_name},\n\n…'} />
-        <p className="hint" style={{ margin: 0 }}>{channel === 'olj' ? 'Plain text on OnlineJobs.ph, sent at the next OLJ run (4 times a day).' : 'Club Wealth sign-off and banner are added. Sent from CareersCW, about 6 every 5 minutes.'} {'{first_name}'} becomes each person&apos;s name.</p>
+        <p className="hint" style={{ margin: 0 }}>{channel === 'olj' ? 'Plain text on OnlineJobs.ph, sent at the next OLJ run (4 times a day).' : 'Club Wealth sign-off and banner are added. Sent from CareersCW, about 6 every 5 minutes.'} [First Name], [Name] and [Position] are filled in for each person.</p>
         <div><button className="btn primary" disabled={!ids.length || !text.trim() || busy} onClick={() => setPreview(true)}>Preview and send to {ids.length}</button></div>
       </div>
       {preview && ids[0] && (

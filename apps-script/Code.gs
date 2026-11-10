@@ -1972,7 +1972,7 @@ function api_(req) {
       if (!ar.Email) throw new Error('This applicant has no email address.');
       var blockedR = doNotInvite_(st2, ar);
       if (blockedR) throw new Error('Do not contact: ' + blockedR + '.');
-      var q = queueEmail_(st2, ar, 'Reply', replyEmail(text), ymdOf_(ar['Interview Date']), req.by);
+      var q = queueEmail_(st2, ar, 'Reply', replyEmail(personalize(text, ar)), ymdOf_(ar['Interview Date']), req.by);
       return { queued: !!q };
     }
     if (req.action === 'replyToEmail') {
