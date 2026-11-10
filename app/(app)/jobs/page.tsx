@@ -10,21 +10,23 @@ export default async function JobAds() {
   try { d = await getData(); } catch (e) { return <DataError error={e} />; }
   const ads = d.jobAds || [];
   const since = daysAgoPT(7);
-  const stats: Record<string, { week: number; held: number; waiting: number }> = {};
+  const stats: Record<string, { week: number; held: number; waiting: number; ids: string[] }> = {};
   for (const ad of ads) {
     const mine = d.applicants.filter((a) => s(a.Position) === ad.position && s(a.Historical) !== 'Y');
     stats[ad.position] = {
       week: mine.filter((a) => ymd(a['Applied At (PT)']) > since).length,
       held: mine.filter((a) => s(a['Invite Hold']).startsWith('Job ad paused')).length,
-      // who gets the "Position on hold" email if this ad is paused
-      waiting: mine.filter((a) => ['Applied', 'Invited', 'Confirmed'].includes(s(a.Stage)) && !/Position on hold/.test(s(a.Tags)) && s(a.Source) !== 'Test').length
+      waiting: 0, ids: []
     };
+    // who gets the "Position on hold" email if this ad is paused
+    stats[ad.position].ids = mine.filter((a) => ['Applied', 'Invited', 'Confirmed'].includes(s(a.Stage)) && !/Position on hold/.test(s(a.Tags)) && s(a.Source) !== 'Test').map((a) => s(a['Applicant ID']));
+    stats[ad.position].waiting = stats[ad.position].ids.length;
   }
   return (
     <>
       <header className="page-head"><h1>Job Ads</h1><p className="sub">Tick the ads that are running now. Untick an ad when it is taken down (e.g. TC/LC or Collections).</p></header>
       <section className="panel"><InvitesSwitch on={d.autoInvites !== 'OFF'} /><p className="hint" style={{ margin: '6px 0 0' }}>Pauses every automatic invite, for all positions (e.g. during an event). Invites sent by hand from a profile still work.</p></section>
-      {ads.length ? <JobAdsForm ads={ads} stats={stats} /> : <section className="panel"><p className="muted">Paste the new Code.gs to see the job ads here.</p></section>}
+      {ads.length ? <JobAdsForm ads={ads} stats={stats} template={(() => { const t = (d.emailTemplates || []).find((x) => s(x.Name).trim().toLowerCase() === 'position on hold'); return t ? { subject: s(t.Subject), body: s(t.Body) } : undefined; })()} /> : <section className="panel"><p className="muted">Paste the new Code.gs to see the job ads here.</p></section>}
     </>
   );
 }

@@ -1335,6 +1335,13 @@ test('job ads: pausing a position emails its Applied / Invited / Confirmed appli
   assert.equal(env.rows('Outbox').slice(before).length, 1);
   env.api({ action: 'setActivePositions', by: 'Am', shown, active: shown });
   assert.doesNotMatch(env.rows('Applicants').find((a) => a['Applicant ID'] === 'F-4').Tags, /Position on hold/);
+  // the wording edited in the preview is the one that goes out
+  const b2 = env.rows('Outbox').length;
+  env.api({ action: 'setActivePositions', by: 'Am', shown, active: shown.filter((p) => p !== 'Inside Sales Agent (ISA)'), subject: 'Edited subject', text: 'Hi [First Name], edited.' });
+  const e2 = env.rows('Outbox').slice(b2).filter((e) => e.Status === 'Queued');
+  assert.deepEqual(e2.map((e) => [e['Applicant ID'], e.Subject]), [['F-4', 'Edited subject']]);
+  assert.match(e2[0].Body, /Hi Ana, edited\./);
+  env.api({ action: 'setActivePositions', by: 'Am', shown, active: shown });
   assert.equal(env.ctx.inviteHoldReason({ Position: 'Inside Sales Agent (ISA)' }), '');
 });
 
