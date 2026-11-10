@@ -28,7 +28,7 @@ export default function SessionForm({ ids, current, onDone, compact = false }: {
   }
   return (
     <form onSubmit={submit} className="inline-form">
-      {preview && ids[0] && <SendPreview req={{ kind: 'reinvite', id: ids[0], date }} count={ids.length} title={`Move to Wednesday, ${formatDate(date)} and send a new invite`} onClose={() => setPreview(false)} onSend={move} />}
+      {preview && ids[0] && <SendPreview req={{ kind: 'reinvite', id: ids[0], date }} ids={ids} count={ids.length} title={`Move to Wednesday, ${formatDate(date)} and send a new invite`} onClose={() => setPreview(false)} onSend={move} />}
       <select value={date} onChange={(e) => setDate(e.target.value)} disabled={!ids.length || busy} aria-label="Session">
         <option value="">{compact ? 'Session…' : 'Move to session…'}</option>
         {options.map((d) => <option key={d} value={d}>Wed, {formatDate(d)} · 2:00 PM PT</option>)}

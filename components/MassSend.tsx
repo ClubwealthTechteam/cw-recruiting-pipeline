@@ -79,7 +79,7 @@ export default function MassSend({ people, templates, stages }: { people: Recipi
         <div><button className="btn primary" disabled={!ids.length || !text.trim() || busy} onClick={() => setPreview(true)}>Preview and send to {ids.length}</button></div>
       </div>
       {preview && ids[0] && (
-        <SendPreview req={{ kind: 'reply', id: ids[0], text, subject, channel }} count={ids.length}
+        <SendPreview req={{ kind: 'reply', id: ids[0], text, subject, channel }} ids={ids} count={ids.length}
           title={channel === 'olj' ? 'Mass OLJ message' : 'Mass email'} onClose={() => setPreview(false)} onSend={send} />
       )}
     </section>
