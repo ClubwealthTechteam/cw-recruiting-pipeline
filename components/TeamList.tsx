@@ -48,7 +48,7 @@ export default function TeamList({ team }: { team: TeamMember[] }) {
         <section key={x} className="panel">
           <h2>{x} <span className="muted small">{rows.filter((m) => m.Department === x).length}</span></h2>
           <table className="table team-table">
-            <thead><tr><th>Name</th><th>Position</th><th>Company</th><th>Status</th><th>Start date</th><th>Days</th><th>Heard about us</th><th>Mobile</th><th /></tr></thead>
+            <thead><tr><th>Name</th><th>Position</th><th>Company</th><th>Status</th><th>Start date</th><th>Days</th><th>Heard about us</th><th>Mobile</th><th>Emergency contact</th><th /></tr></thead>
             <tbody>{rows.filter((m) => m.Department === x).map((m) => <Member key={m.Email || m.Name} m={m} />)}</tbody>
           </table>
         </section>
@@ -79,10 +79,11 @@ function Member({ m }: { m: TeamMember }) {
         <td>{m.Position}{mark('Position')}</td><td>{m.Company}</td>
         <td>{m.Status || <span className="muted">no status</span>}{mark('Status')}</td>
         <td>{m['Start Date']}</td><td>{m.Days}</td><td>{m['Heard About Us']}</td><td>{m.Mobile}</td>
+        <td>{m['Emergency Mobile'] || <span className="muted">—</span>}{m['Emergency Contact'] && <div className="muted small">{m['Emergency Contact']}</div>}</td>
         <td><button className="btn small-btn ghost" onClick={() => setEdit(!edit)}>{edit ? 'Close' : 'Edit'}</button></td>
       </tr>
       {edit && (
-        <tr><td colSpan={9}>
+        <tr><td colSpan={10}>
           <div className="inline-form">
             <label className="small">Department <select value={v.Department} onChange={(e) => setV({ ...v, Department: e.target.value })}>{DEPARTMENTS.map((x) => <option key={x}>{x}</option>)}</select></label>
             <label className="small">Status <select value={v.Status} onChange={(e) => setV({ ...v, Status: e.target.value })}><option value="">(no status)</option>{[...new Set([...STATUSES, m.Status].filter(Boolean))].map((x) => <option key={x}>{x}</option>)}</select></label>

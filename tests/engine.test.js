@@ -1238,3 +1238,16 @@ test("Don't send puts the applicant back in the stage before the move; templates
   env.api({ action: 'deleteTemplate', by: 'Am', name: 'Reschedule' });
   assert.equal(env.rows('Email Templates').length, 0);
 });
+
+test('Active Team Members: emergency contact name and mobile are copied; address and birthday still are not', () => {
+  const header = ['Timestamp', 'Email Address', 'First and Last Name', 'Mobile Number', 'Full Address', 'Date of Birth', 'Position Hired For', 'Start date',
+    'Emergency Contact information (Name and Relationship)', 'Emergency Contact information (Mobile number)'];
+  const env = load({ mode: 'LIVE', now: pdt('2026-10-29T08:00:00'),
+    onboarding: { PFL: [header, ['x', 'jo@example.com', 'Jo Cruz', '0917', 'SECRET ADDRESS', '1/1/1990', 'Loan Processor', '10/16/2026', 'Ana Cruz (mother)', '0918 555 0000']] } });
+  env.ctx.setup();
+  env.ctx.syncTeamNow();
+  const m = env.rows('Team (Onboarding)').find((r) => r.Email === 'jo@example.com');
+  assert.equal(m['Emergency Contact'], 'Ana Cruz (mother)');
+  assert.equal(m['Emergency Mobile'], '0918 555 0000');
+  assert.doesNotMatch(JSON.stringify(m), /SECRET ADDRESS|1990/);
+});
