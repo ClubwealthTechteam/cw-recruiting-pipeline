@@ -596,3 +596,18 @@ input:focus, select:focus, textarea:focus { outline: 3px solid #dbe7fb; border-c
 .profile .inline-form select, .profile .inline-form input { max-width: 100%; }
 .ai-suggest { display: flex; gap: 8px; padding: 10px; background: var(--violet-bg); border-radius: 10px; }
 .ai-suggest input { background: #fff; }
+
+/* Candidates: spreadsheet-style filters on the column headers */
+.hf { position: relative; display: inline-block; }
+.hf-btn { border: 0; background: none; font: inherit; font-weight: 500; color: var(--muted); padding: 2px 4px; margin: -2px -4px; border-radius: 5px; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+.hf-btn:hover { background: var(--grey-bg); color: var(--ink); }
+.hf-btn.on { color: var(--accent); background: var(--blue-bg); }
+.hf-caret { font-size: 9px; }
+.hf-menu { position: absolute; top: calc(100% + 6px); left: -6px; z-index: 30; min-width: 200px; max-height: 360px; overflow-y: auto; background: #fff; border: 1px solid var(--line-2); border-radius: 10px; box-shadow: 0 12px 30px rgba(16,24,40,.16); padding: 6px; display: flex; flex-direction: column; text-transform: none; letter-spacing: 0; }
+.hf-menu > button { border: 0; background: none; text-align: left; font: inherit; font-weight: 400; color: var(--ink); padding: 6px 10px; border-radius: 6px; cursor: pointer; white-space: nowrap; }
+.hf-menu > button:hover { background: var(--grey-bg); }
+.hf-menu > button.on { background: var(--blue-bg); color: var(--accent); font-weight: 600; }
+.hf-dates { display: flex; gap: 6px; align-items: center; padding: 6px 8px 4px; border-top: 1px solid var(--line); margin-top: 4px; }
+.hf-dates input { width: 132px; padding: 4px 6px; font-size: 12px; }
+.table.candidates thead th { overflow: visible; }
+.mass-list { max-height: 260px; overflow-y: auto; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; }

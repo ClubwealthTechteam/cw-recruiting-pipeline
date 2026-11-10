@@ -1251,3 +1251,21 @@ test('Active Team Members: emergency contact name and mobile are copied; address
   assert.equal(m['Emergency Mobile'], '0918 555 0000');
   assert.doesNotMatch(JSON.stringify(m), /SECRET ADDRESS|1990/);
 });
+
+test('mass email and mass OLJ message: one personal copy each, skips who cannot get it', () => {
+  const env = batchEnv();
+  addRow(env, 'OLJ', { 'Conversation Key': 'm1', 'Job Post': 'Collections Virtual Assistant', 'Applicant Name': 'Lito Lapid', Summary: 'Interested' });
+  env.ctx.tick();
+  const before = env.rows('Outbox').length;
+  const r = env.api({ action: 'bulkMessage', by: 'Am', channel: 'email', ids: ['F-2', 'F-3', 'O-m1'], subject: 'Quick update', text: 'Hi {first_name}, new date soon.' });
+  assert.equal(r.ok, true, r.error);
+  const sent = env.rows('Outbox').slice(before).filter((e) => e.Type === 'Reply');
+  assert.equal(sent.length, r.data.queued);
+  assert.ok(sent.some((e) => /Hi Maria Clara, new date soon/.test(e.Body)));
+  assert.ok(sent.every((e) => e.Subject === 'Quick update' && /email-banner/.test(e.Body)));
+  const o = env.api({ action: 'bulkMessage', by: 'Am', channel: 'olj', ids: ['F-2', 'O-m1'], text: 'Hi {first_name}!' });
+  assert.equal(o.data.queued, 1);
+  assert.match(o.data.skipped[0], /not from OnlineJobs/);
+  assert.equal(env.rows('Outbox').filter((e) => e.Type === 'OLJ Message' && e.Body === 'Hi Lito!').length, 1);
+  assert.match(env.api({ action: 'bulkMessage', by: 'Am', channel: 'email', ids: [], text: 'x' }).error, /Select/);
+});

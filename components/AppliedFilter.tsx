@@ -1,11 +1,7 @@
 'use client';
 import { useState } from 'react';
-
-export const APPLIED_OPTIONS: [string, string][] = [
-  ['', 'Applied: any time'], ['today', 'Applied today'], ['yesterday', 'Applied yesterday'], ['3d', 'Applied in the last 3 days'],
-  ['7d', 'Applied in the last 7 days'], ['14d', 'Applied in the last 14 days'], ['30d', 'Applied in the last 30 days'],
-  ['thisweek', 'Applied this week (Mon–Sun)'], ['lastweek', 'Applied last week'], ['custom', 'Applied between dates…']
-];
+import { APPLIED_OPTIONS } from '@/lib/pipeline';
+export { APPLIED_OPTIONS };
 
 /** The "when did they apply" dropdown on Candidates; "between…" shows two date boxes (Pacific dates). */
 export default function AppliedFilter({ value, from, to }: { value?: string; from?: string; to?: string }) {
