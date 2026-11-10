@@ -11,7 +11,7 @@ export async function POST(req: Request) {
   const b = await req.json().catch(() => null);
   if (!b || !['invite', 'reinvite', 'reply'].includes(b.kind) || typeof b.id !== 'string') return NextResponse.json({ ok: false, error: 'Bad request' }, { status: 400 });
   try {
-    const data = await read<Preview>('preview', { by: user, kind: b.kind, id: b.id, date: b.date, text: b.text, channel: b.channel });
+    const data = await read<Preview>('preview', { by: user, kind: b.kind, id: b.id, date: b.date, text: b.text, subject: b.subject, channel: b.channel });
     return NextResponse.json({ ok: true, data });
   } catch (e) {
     return NextResponse.json({ ok: false, error: e instanceof Error ? e.message : 'Error' }, { status: 400 });

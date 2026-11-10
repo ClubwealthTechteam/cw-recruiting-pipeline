@@ -1793,6 +1793,7 @@ function api_(req) {
     if (req.action === 'editPendingEmail') return editPendingEmail_(req);
     if (req.action === 'startZoomTracking') return startZoomTracking_(st2, req);
     if (req.action === 'setAutoInvites') return setAutoInvites_(st2, req);
+    if (req.action === 'bulkMessage') return bulkMessage_(st2, byId, req);
     if (req.action === 'setActivePositions') return setActivePositions_(st2, req);
     if (req.action === 'pauseInvites') return pauseInvites_(apps, byId, req);
     if (req.action === 'attachToEmail') return attachToEmail_(req);
@@ -2102,9 +2103,10 @@ function preview_(req) {
   } else if (req.kind === 'status') {
     mail = statusEmail(String(req.type || ''), a['First Name'], { company: req.company || companyFromTags(a.Tags), startDate: req.startDate, position: a.Position });
   } else if (req.kind === 'reply') {
-    var text = String(req.text || '').trim();
+    var text = personalize(String(req.text || '').trim(), a);
     if (!text) throw new Error('Type a message first.');
     mail = replyEmail(text);
+    if (String(req.subject || '').trim()) mail.subject = String(req.subject).trim().slice(0, 200);
   } else throw new Error('bad preview');
   if (req.channel === 'olj') to = 'OnlineJobs.ph message to ' + [a['First Name'], a['Last Name']].join(' ').trim();
   return {
@@ -2453,4 +2455,45 @@ function revertAfterSkip_(e, by) {
     update_(apps, a, { Tags: String(a.Tags || '').split(',').map(function (x) { return x.trim(); }).filter(function (x) { return x && x.indexOf('Hired |') !== 0; }).join(', ') });
   }
   return prev;
+}
+
+/**
+ * Mass email / mass OLJ message from the Candidates bulk bar (Miguel, 2026-11-10). Each selected applicant gets their
+ * own copy ({first_name} filled in). Email: Club Wealth sign-off and banner, from CareersCW (Zapier, 6 per 5 minutes).
+ * OLJ: queued for the OLJ routine, OLJ applicants only. Skipped: no email / not from OLJ, do-not-contact, Banned, test.
+ */
+function bulkMessage_(st, byId, req) {
+  var ids = (req.ids || []).slice(0, 300);
+  var channel = req.channel === 'olj' ? 'olj' : 'email';
+  var text = String(req.text || '').trim();
+  if (!ids.length) throw new Error('Select applicants first.');
+  if (!text) throw new Error('Type a message first.');
+  if (text.length > (channel === 'olj' ? 3000 : 5000)) throw new Error('The message is too long.');
+  if (channel === 'email' && st.get('EMAIL_SENDING') !== 'ON') throw new Error('Email sending is off (Settings EMAIL_SENDING).');
+  var subject = String(req.subject || '').trim().slice(0, 200);
+  var out = channel === 'olj' ? table_(SH.OUTBOX) : null;
+  var res = { queued: 0, skipped: [] };
+  ids.forEach(function (id) {
+    var a = byId[id];
+    if (!a) return;
+    var name = (a['First Name'] + ' ' + a['Last Name']).trim() || id;
+    var why = doNotInvite_(st, a) || (a.Stage === 'Banned' ? 'Banned' : '') ||
+      (channel === 'email' && !a.Email ? 'no email address' : '') || (channel === 'olj' && (a.Source !== 'OLJ' || !a['Source Ref']) ? 'not from OnlineJobs.ph' : '');
+    if (why) { res.skipped.push(name + ' (' + why + ')'); return; }
+    var body = personalize(text, a);
+    if (channel === 'email') {
+      var mail = replyEmail(body);
+      if (subject) mail.subject = subject;
+      if (queueEmail_(st, a, 'Reply', mail, ymdOf_(a['Interview Date']), req.by)) res.queued++;
+    } else {
+      append_(out, {
+        'Email ID': id_('E'), 'Applicant ID': a['Applicant ID'], Type: 'OLJ Message', To: 'OLJ:' + a['Source Ref'],
+        Subject: '(OnlineJobs.ph message)', Body: body, 'Interview Date': ymdOf_(a['Interview Date']), 'Queued At': nowStr_(),
+        Status: 'Queued', 'Queued By': req.by
+      });
+      res.queued++;
+    }
+  });
+  log_('bulkMessage', channel, { queued: res.queued, skipped: res.skipped.length, by: req.by }, '');
+  return res;
 }

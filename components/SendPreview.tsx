@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react';
 import type { Preview } from '@/app/api/preview/route';
 
-export type PreviewRequest = { kind: 'invite' | 'reinvite' | 'reply'; id: string; date?: string; text?: string; channel?: 'email' | 'olj' };
+export type PreviewRequest = { kind: 'invite' | 'reinvite' | 'reply'; id: string; date?: string; text?: string; subject?: string; channel?: 'email' | 'olj' };
 
 /**
  * Shows exactly what the applicant will receive before anything is queued (Miguel, 2026-11-02): who it goes to, the
@@ -33,7 +33,7 @@ export default function SendPreview({ req, count = 1, title, onSend, onClose }: 
           {p && (
             <>
               {p.doNotInvite && <p className="error"><b>Do not contact:</b> {p.doNotInvite}.</p>}
-              {count > 1 && <div className="bulk-warn">This goes to {count} people. Each gets their own copy with their own session date. Below is the copy for {p.name}.</div>}
+              {count > 1 && <div className="bulk-warn">This goes to {count} people. Each gets their own copy {req.kind === 'reply' ? 'with their own name' : 'with their own session date'}. Below is the copy for {p.name}.</div>}
               <div className="mail-meta">
                 <span>To</span><span>{p.to || '(no email address)'}</span>
                 {!olj && <><span>Subject</span><span>{p.subject}</span></>}

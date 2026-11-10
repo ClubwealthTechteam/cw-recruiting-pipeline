@@ -769,3 +769,10 @@ function zoomRowsFromParticipants(participants, day, nowMs, opts) {
   });
   return rows;
 }
+
+/** {first_name} (and {name}) in a typed message or template become the applicant's own name. */
+function personalize(text, a) {
+  var first = String(a && a['First Name'] || '').trim() || 'there';
+  var full = (String(a && a['First Name'] || '') + ' ' + String(a && a['Last Name'] || '')).trim() || first;
+  return String(text || '').replace(/\{\s*first[_ ]name\s*\}/gi, first).replace(/\{\s*name\s*\}/gi, full);
+}
