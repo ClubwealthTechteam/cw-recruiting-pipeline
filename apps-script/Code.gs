@@ -1200,7 +1200,7 @@ function bannedSweep_(st) {
 // ---------- Active Team Members: copy of the Onboarding sheet + edits made on the site ----------
 
 var ONBOARDING_SHEET_ID_DEFAULT = '1cZ8RXgdvQ32CzXQlLMwojNe16cm3jQuwllTWBWaQHqI';
-var TEAM_COLS = ['Email', 'Name', 'Company', 'Position', 'Department', 'Status', 'Start Date', 'Days', 'Heard About Us', 'Mobile', 'Facebook', 'Source Tab', 'Synced At'];
+var TEAM_COLS = ['Email', 'Name', 'Company', 'Position', 'Department', 'Status', 'Start Date', 'Days', 'Heard About Us', 'Mobile', 'Facebook', 'Source Tab', 'Synced At', 'Emergency Contact', 'Emergency Mobile'];
 var TEAM_UPDATE_COLS = ['Timestamp', 'Email', 'Field', 'Value', 'Action', 'By'];
 var TEAM_EDITABLE = ['Department', 'Status', 'Position', 'Notes'];
 var TEAM_TABS = { CW: 'Club Wealth', HOMEXA: 'Homexa', PFL: 'Perfect Fit Loans' };
@@ -1215,7 +1215,8 @@ var TEAM_OLDER_SOURCES = [
 
 /**
  * Copies the Onboarding sheets (2026, 2025 and 2023-2024; read only, never written) into "Team (Onboarding)", at most once an hour
- * (force = true from the editor). Only the fields the page needs: no address, birthday, ID, payment or emergency details.
+ * (force = true from the editor). Only the fields the page needs: no address, birthday, ID or payment details. Emergency contact
+ * name and mobile were added for the Active Team Members page (Miguel, 2026-11-10).
  */
 function syncTeam_(st, force) {
   var props = PropertiesService.getScriptProperties();
@@ -1236,7 +1237,8 @@ function syncTeam_(st, force) {
       var iRemarks = col(/^(remarks|status)$/) !== -1 ? col(/^(remarks|status)$/) : (/^column \d+$/.test(h[1] || '') ? 1 : -1);
       var iDays = col(/^lenght of stay|^length of stay/) !== -1 ? col(/^lenght of stay|^length of stay/) : (/^column \d+$/.test(h[0] || '') ? 0 : -1);
       var c = { email: col(/^email address$/), name: col(/^first and last name$/), mobile: col(/^mobile number$/), pos: col(/^position hired for$/),
-        start: col(/^start date/), heard: col(/^how did you hear/), fb: col(/^facebook profile link$/), company: col(/^company hired for$/) };
+        start: col(/^start date/), heard: col(/^how did you hear/), fb: col(/^facebook profile link$/), company: col(/^company hired for$/),
+        ecName: col(/^emergency contact.*name/), ecMobile: col(/^emergency contact.*(mobile|number|phone)/) };
       v.slice(1).forEach(function (r) {
         var email = fmt(r[c.email]).toLowerCase();
         var name = fmt(r[c.name]);
@@ -1253,7 +1255,8 @@ function syncTeam_(st, force) {
         if (/^term$/i.test(status)) status = 'Terminated';
         var row = [email, name, (c.company !== -1 && fmt(r[c.company])) || s.tabs[tab], pos, departmentOf(pos), status, startYmd || start, days,
           c.heard !== -1 ? fmt(r[c.heard]) : '', c.mobile !== -1 ? fmt(r[c.mobile]) : '', c.fb !== -1 ? fmt(r[c.fb]) : '',
-          s.label + (s.label === tab ? '' : ' · ' + tab), nowStr_()];
+          s.label + (s.label === tab ? '' : ' · ' + tab), nowStr_(),
+          c.ecName !== -1 ? fmt(r[c.ecName]) : '', c.ecMobile !== -1 ? fmt(r[c.ecMobile]) : ''];
         // the same person in several sheets or tabs (rehires): keep the most recent start; ties keep the newer sheet
         var key = email || normName(name);
         var prev = byKey[key];
