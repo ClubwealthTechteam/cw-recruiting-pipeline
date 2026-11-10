@@ -3,6 +3,9 @@ import { currentUser } from '@/lib/auth';
 import { read } from '@/lib/sheet';
 import { chatToken, fireChatRoutine } from '@/lib/chat';
 
+/** Google Sheets can take a while (Tara, 2026-11-10): give it up to a minute instead of failing early. */
+export const maxDuration = 60;
+
 export async function POST(req: Request) {
   const user = await currentUser();
   if (!user) return NextResponse.json({ ok: false, error: 'Please sign in again.' }, { status: 401 });

@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { getData, type Row } from '@/lib/sheet';
-import { s, ymd, pct, daysAgoPT, isTest, SOURCE_LABEL } from '@/lib/pipeline';
+import { s, ymd, pct, daysAgoPT, counted, SOURCE_LABEL } from '@/lib/pipeline';
 import DataError from '@/components/DataError';
 import { HBars } from '@/components/Charts';
 
@@ -25,7 +25,7 @@ export default async function Reports({ searchParams }: { searchParams: Promise<
   let d;
   try { d = await getData(); } catch (e) { return <DataError error={e} />; }
   const since = PERIODS[period].days ? daysAgoPT(PERIODS[period].days!) : '';
-  const apps = d.applicants.filter((a) => s(a.Historical) !== 'Y' && !isTest(a) && (!since || ymd(a['Applied At (PT)']) >= since));
+  const apps = d.applicants.filter((a) => s(a.Historical) !== 'Y' && counted(a) && (!since || ymd(a['Applied At (PT)']) >= since));
 
   const reached = new Map<string, Map<string, string>>(); // applicant -> stage -> first time
   for (const h of d.history) {

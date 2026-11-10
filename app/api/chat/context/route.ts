@@ -1,7 +1,10 @@
 import { NextResponse } from 'next/server';
 import { getData, read } from '@/lib/sheet';
 import { validChatToken } from '@/lib/chat';
-import { metrics, s, fullName, ymd, STAGES, isTest } from '@/lib/pipeline';
+import { metrics, s, fullName, ymd, STAGES, counted } from '@/lib/pipeline';
+
+/** Google Sheets can take a while (Tara, 2026-11-10): give it up to a minute instead of failing early. */
+export const maxDuration = 60;
 
 /**
  * Read-only pipeline context for the chat routine, for one pending question.
@@ -15,7 +18,7 @@ export async function GET(req: Request) {
   if (!chat.found || chat.status !== 'Pending') return NextResponse.json({ ok: false, error: 'not pending' }, { status: 410 });
   const d = await getData();
   const m = metrics(d.applicants, d.history, d.flags);
-  const current = d.applicants.filter((a) => s(a.Historical) !== 'Y' && !isTest(a));
+  const current = d.applicants.filter((a) => s(a.Historical) !== 'Y' && counted(a));
   const historical = d.applicants.filter((a) => s(a.Historical) === 'Y');
   const count = (rows: typeof d.applicants) => Object.fromEntries(STAGES.map((st) => [st, rows.filter((a) => s(a.Stage) === st).length]));
   return NextResponse.json({

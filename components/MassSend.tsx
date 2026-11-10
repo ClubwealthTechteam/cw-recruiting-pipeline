@@ -2,7 +2,7 @@
 import { useMemo, useState } from 'react';
 import { useAction } from './useAction';
 import { toast } from './Toaster';
-import SendPreview from './SendPreview';
+import SendPreview, { type SendEdits } from './SendPreview';
 import type { Template } from './Inbox';
 
 export type Recipient = { id: string; name: string; email: string; olj: boolean; stage: string; position: string; session: string; applied: string };
@@ -26,12 +26,14 @@ export default function MassSend({ people, templates, stages }: { people: Recipi
   const sessions = [...new Set(people.map((p) => p.session).filter(Boolean))].sort().reverse().slice(0, 12);
   const match = useMemo(() => people.filter((p) => (channel === 'olj' ? p.olj : !!p.email) &&
     (!f.stage || p.stage === f.stage) && (!f.position || p.position === f.position) && (!f.session || p.session === f.session) &&
-    (!f.after || p.applied.slice(0, 10) >= f.after)), [people, channel, f]);
+    (!f.after || p.applied.slice(0, 10) >= f.after))
+    // one message per person, even when they applied twice (Tara, 2026-11-10)
+    .filter((p, i, all) => !p.email || all.findIndex((x) => x.email.toLowerCase() === p.email.toLowerCase()) === i), [people, channel, f]);
   const ids = match.filter((p) => !left.includes(p.id)).map((p) => p.id);
   const filtered = !!(f.stage || f.position || f.session || f.after);
-  async function send() {
+  async function send(edits?: SendEdits) {
     setPreview(false);
-    const r = await run({ action: 'bulkMessage', channel, ids, subject, text }, { success: channel === 'olj' ? 'OLJ messages queued ✓ (sent on the next OLJ run)' : 'Emails queued ✓ (about 6 go out every 5 minutes)' });
+    const r = await run({ action: 'bulkMessage', channel, ids, subject: edits?.subject ?? subject, text: edits?.text ?? text }, { success: channel === 'olj' ? 'OLJ messages queued ✓ (sent on the next OLJ run)' : 'Emails queued ✓ (about 6 go out every 5 minutes)' });
     if (r && typeof r === 'object') {
       const d = r as { queued?: number; skipped?: string[] };
       toast(`${d.queued || 0} queued${d.skipped?.length ? ` · ${d.skipped.length} skipped: ${d.skipped.slice(0, 3).join(', ')}${d.skipped.length > 3 ? '…' : ''}` : ''}`);
@@ -80,7 +82,7 @@ export default function MassSend({ people, templates, stages }: { people: Recipi
       </div>
       {preview && ids[0] && (
         <SendPreview req={{ kind: 'reply', id: ids[0], text, subject, channel }} ids={ids} count={ids.length}
-          title={channel === 'olj' ? 'Mass OLJ message' : 'Mass email'} onClose={() => setPreview(false)} onSend={send} />
+          title={channel === 'olj' ? 'Mass OLJ message' : 'Mass email'} onClose={() => setPreview(false)} onSend={(e) => send(e)} />
       )}
     </section>
   );

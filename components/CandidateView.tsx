@@ -63,6 +63,8 @@ export default async function CandidateView({ appId, panel = false }: { appId: s
   const mail = statusEmails(d.outbox, appId);
   const cards = detail.scores.length ? detail.scores : (d.scores || []).filter((x) => s(x['Applicant ID']) === appId);
 
+  // computed on the cached list (lib/pipeline linkApplications): other positions, repeat application, former VA
+  const linked = d.applicants.find((x) => s(x['Applicant ID']) === appId);
   // Possible duplicates: same email, or same first + last name (Miguel, 2026-11-02). Hidden once tagged "Not duplicate".
   const norm = (v: unknown) => s(v).trim().toLowerCase().replace(/\s+/g, ' ');
   const myEmail = norm(a.Email);
@@ -102,6 +104,13 @@ export default async function CandidateView({ appId, panel = false }: { appId: s
           <strong>Possible duplicate:</strong>{' '}
           {dups.slice(0, 3).map((x, i) => <span key={s(x['Applicant ID'])}>{i > 0 && ', '}<a href={`/candidates/${encodeURIComponent(s(x['Applicant ID']))}`}>{fullName(x) || s(x['Applicant ID'])}</a> ({s(x.Source)}, {s(x.Stage)}, applied {formatDate(ymd(x['Applied At (PT)']))})</span>)}
           . Same {myEmail && dups.some((x) => norm(x.Email) === myEmail) ? 'email' : 'name'}. Keep one and move the other to Banned or Not Fit with the reason &quot;Duplicate&quot;, or <NotDuplicate id={appId} tags={s(a.Tags)} />
+        </div>
+      )}
+      {(linked?.['Other Positions'] || linked?.['Former VA'] || linked?.['Repeat Of']) && (
+        <div className="panel info" data-tour="applicant-notes">
+          {linked?.['Other Positions'] && <div><strong>Also applied for other position:</strong> {s(linked['Other Positions'])}.</div>}
+          {linked?.['Repeat Of'] && <div className="muted small">This is a second application from the same person, so it is not counted. The counted one is <a href={`/candidates/${encodeURIComponent(s(linked['Repeat Of']))}`}>{s(linked['Repeat Of'])}</a>.</div>}
+          {linked?.['Former VA'] && <div><strong>Applicant is previously a {s(linked['Former VA']).split(' · ')[0]}</strong>{s(linked['Former VA']).includes(' · ') ? ` (${s(linked['Former VA']).split(' · ').slice(1).join(', ')})` : ''}, from the team onboarding list.</div>}
         </div>
       )}
       {/^⚠/m.test(s(a['Resume Experience'])) && <div className="panel warn"><strong>Check experience:</strong> {s(a['Resume Experience']).split('\n').filter((l) => l.startsWith('⚠')).map((l) => l.replace(/^⚠\s*/, '')).join(' ')} Ask about it in the interview.</div>}

@@ -3,6 +3,9 @@ import { revalidateTag } from 'next/cache';
 import { timingSafeEqual } from 'node:crypto';
 import { PIPELINE_TAG, getData } from '@/lib/sheet';
 
+/** Google Sheets can take a while (Tara, 2026-11-10): give it up to a minute instead of failing early. */
+export const maxDuration = 60;
+
 /**
  * Called by the Apps Script whenever the sheet changes. Drops the cached copy and loads the fresh one right away,
  * so Am and Camille's next click is served from the cache instead of waiting for the sheet.

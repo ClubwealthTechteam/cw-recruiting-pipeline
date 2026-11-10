@@ -41,6 +41,66 @@ export const s = (v: unknown) => (v === undefined || v === null ? '' : String(v)
 /** Test applicants (Source "Test", e.g. T-MIGUEL) show in the CRM but are left out of every count, rate and report. */
 export const isTest = (a: Row) => s(a.Source) === 'Test';
 export const fullName = (a: Row) => `${s(a['First Name'])} ${s(a['Last Name'])}`.trim();
+
+/**
+ * One person, one count (Tara, 2026-11-10): an applicant can only apply for one position at a time, so a second
+ * application from the same person (same email, or same first + last name; any position) is listed but not counted.
+ * linkApplications sets, on every current (non-historical) applicant:
+ *  - "Repeat Of": the Applicant ID of the application that is counted (only on the ones that are not counted);
+ *  - "Other Positions": the other positions this person applied for ("; " separated);
+ *  - "Former VA": e.g. "Homexa VA · ISA · Terminated" when the email or name is on the team onboarding list.
+ * Tagging either application "Not duplicate" keeps them apart. The counted one is the application that got
+ * furthest (anything past Applied, and not Not Fit / Banned), else the earliest.
+ */
+export const isRepeat = (a: Row) => !!s(a['Repeat Of']);
+/** Counted in every number: not a test applicant and not a second application from the same person. */
+export const counted = (a: Row) => !isTest(a) && !isRepeat(a);
+
+const normKey = (v: unknown) => s(v).trim().toLowerCase().replace(/\s+/g, ' ');
+export function linkApplications(applicants: Row[], team: Record<string, string>[] = []) {
+  const current = applicants.filter((a) => s(a.Historical) !== 'Y' && !isTest(a));
+  const apart = (a: Row) => s(a.Tags).split(',').some((t) => t.trim() === 'Not duplicate');
+  // union-find over shared email / full name
+  const parent = new Map<Row, Row>();
+  const find = (a: Row): Row => { let r = a; while (parent.get(r) !== r) r = parent.get(r)!; parent.set(a, r); return r; };
+  const seen = new Map<string, Row>();
+  for (const a of current) {
+    parent.set(a, a);
+    if (apart(a)) continue;
+    const keys = [normKey(a.Email) && `e:${normKey(a.Email)}`, normKey(fullName(a)).includes(' ') && `n:${normKey(fullName(a))}`].filter(Boolean) as string[];
+    for (const k of keys) {
+      const other = seen.get(k);
+      if (other) parent.set(find(a), find(other)); else seen.set(k, a);
+    }
+  }
+  const groups = new Map<Row, Row[]>();
+  for (const a of current) { const r = find(a); groups.set(r, [...(groups.get(r) || []), a]); }
+  const progressed = (a: Row) => (['Applied', 'Not Fit', 'Banned'].includes(s(a.Stage)) ? 0 : 1);
+  for (const list of groups.values()) {
+    for (const a of list) { delete a['Repeat Of']; delete a['Other Positions']; }
+    if (list.length < 2) continue;
+    const main = [...list].sort((x, y) => progressed(y) - progressed(x) || s(x['Applied At (PT)']).localeCompare(s(y['Applied At (PT)'])))[0];
+    for (const a of list) {
+      if (a !== main) a['Repeat Of'] = s(main['Applicant ID']);
+      const others = [...new Set(list.filter((x) => x !== a).map((x) => s(x.Position)).filter((p) => p && p !== s(a.Position)))];
+      if (others.length) a['Other Positions'] = others.join('; ');
+    }
+  }
+  // former (or current) Homexa / Club Wealth VAs, from the team onboarding list
+  const byEmail = new Map<string, Record<string, string>>(), byName = new Map<string, Record<string, string>>();
+  for (const m of team) {
+    if (normKey(m.Email)) byEmail.set(normKey(m.Email), m);
+    if (normKey(m.Name).includes(' ')) byName.set(normKey(m.Name), m);
+  }
+  for (const a of current) {
+    delete a['Former VA'];
+    const m = byEmail.get(normKey(a.Email)) || byName.get(normKey(fullName(a)));
+    if (!m) continue;
+    const company = s(m.Company) || 'Club Wealth';
+    a['Former VA'] = [`${company} VA`, s(m.Position) || s(m.Department), s(m.Status)].filter(Boolean).join(' · ');
+  }
+  return applicants;
+}
 export const ymd = (v: unknown) => s(v).slice(0, 10);
 
 /**
@@ -141,7 +201,7 @@ export type SessionStats = { date: string; invited: number; confirmed: number; a
  * every rate; they still count in "applicants per week".
  */
 export function metrics(allApplicants: Row[], history: Row[], flags: Row[], now = new Date(), opts: { session?: string } = {}) {
-  const applicants = allApplicants.filter((a) => !isTest(a));
+  const applicants = allApplicants.filter(counted);
   const reached = new Map<string, Set<string>>();
   for (const h of history) {
     const id = s(h['Applicant ID']);

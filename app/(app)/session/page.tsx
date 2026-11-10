@@ -9,8 +9,11 @@ import NonNegotiables from '@/components/NonNegotiables';
 import { todayPT, sessionTimes, cancelledSessions } from '@/lib/pipeline';
 import QuickDecide from '@/components/QuickDecide';
 import OpenSessionButton from '@/components/OpenSessionButton';
+import HeaderFilter, { type FilterOption } from '@/components/HeaderFilter';
 
-export default async function Session({ searchParams }: { searchParams: Promise<{ date?: string }> }) {
+type Q = { date?: string; pos?: string; stage?: string; conf?: string; rem?: string; arr?: string; zoom?: string };
+
+export default async function Session({ searchParams }: { searchParams: Promise<Q> }) {
   const p = await searchParams;
   let d;
   try { d = await getData(); } catch (e) { return <DataError error={e} />; }
@@ -30,6 +33,20 @@ export default async function Session({ searchParams }: { searchParams: Promise<
   const notYet = roster.filter((a) => !live.get(s(a['Applicant ID'])) && (a['Confirmed At'] || s(a.Stage) === 'Confirmed'));
   const noShowRows = counted.filter((a) => ['No Show', 'No Confirmation'].includes(s(a.Stage)));
   const noShows = noShowRows.length;
+  // spreadsheet-style column filters (Tara, 2026-11-10); the tiles above still count the whole session
+  const opts = (vals: string[]): FilterOption[] => [...new Set(vals.filter(Boolean))].sort().map((v) => ({ value: v, label: v }));
+  const arrival = (a: Record<string, unknown>) => {
+    if (!s(a.Arrival)) return 'Not recorded';
+    const early = Number(a['Minutes Early']);
+    return early < 0 ? 'Late' : early < 10 ? 'Under 10 min early' : '10+ min early';
+  };
+  const joined = (a: Record<string, unknown>) => (Number(s(a['Zoom Minutes'])) > 0 || live.get(s(a['Applicant ID'])) ? 'Joined Zoom' : 'No Zoom minutes');
+  const rows = roster.filter((a) =>
+    (!p.pos || s(a.Position) === p.pos) && (!p.stage || s(a.Stage) === p.stage) &&
+    (!p.conf || (a['Confirmed At'] ? 'Yes' : 'No') === p.conf) && (!p.rem || (a['Reminder Sent At'] ? 'Sent' : 'Not sent') === p.rem) &&
+    (!p.arr || arrival(a) === p.arr) && (!p.zoom || joined(a) === p.zoom));
+  const filtered = rows.length !== roster.length || !!(p.pos || p.stage || p.conf || p.rem || p.arr || p.zoom);
+  const clear = `/session?date=${date}`;
   const unmatchedZoom = d.zoom.filter((z) => ymd(z['Interview Date']) === date && !z['Matched Applicant ID']);
 
   return (
@@ -63,9 +80,18 @@ export default async function Session({ searchParams }: { searchParams: Promise<
       {noShows > 0 && <section className="panel"><h2>After the session</h2><ReinviteNoShows session={date} count={noShows} sampleId={s(noShowRows[0]?.['Applicant ID'])} /></section>}
       <section className="panel" data-tour="roster">
         <table className="table">
-          <thead><tr><th>Name</th><th>Position</th><th>Stage</th><th>Confirmed</th><th>Reminder</th><th>Arrival</th><th>Zoom minutes</th>{isToday && <th>Decide</th>}</tr></thead>
+          <thead><tr>
+            <th>Name</th>
+            <th><HeaderFilter label="Position" filter={{ param: 'pos', options: opts(roster.map((a) => s(a.Position))) }} /></th>
+            <th><HeaderFilter label="Stage" filter={{ param: 'stage', options: opts(roster.map((a) => s(a.Stage))) }} /></th>
+            <th><HeaderFilter label="Confirmed" filter={{ param: 'conf', options: [{ value: 'Yes', label: 'Yes' }, { value: 'No', label: 'No' }] }} /></th>
+            <th><HeaderFilter label="Reminder" filter={{ param: 'rem', options: [{ value: 'Sent', label: 'Sent' }, { value: 'Not sent', label: 'Not sent' }] }} /></th>
+            <th><HeaderFilter label="Arrival" filter={{ param: 'arr', options: ['10+ min early', 'Under 10 min early', 'Late', 'Not recorded'].map((v) => ({ value: v, label: v })) }} /></th>
+            <th><HeaderFilter label="Zoom minutes" filter={{ param: 'zoom', options: [{ value: 'Joined Zoom', label: 'Joined Zoom' }, { value: 'No Zoom minutes', label: 'No Zoom minutes' }] }} /></th>
+            {isToday && <th>Decide</th>}
+          </tr></thead>
           <tbody>
-            {roster.map((a) => (
+            {rows.map((a) => (
               <tr key={s(a['Applicant ID'])}>
                 <td><Link href={`/candidates/${encodeURIComponent(s(a['Applicant ID']))}`}>{fullName(a)}</Link></td>
                 <td>{s(a.Position)}</td><td><StageBadge stage={s(a.Stage)} /><ZoomBadge z={live.get(s(a['Applicant ID']))} />{isTest(a) && <span className="tag">Test · not counted</span>}</td>
@@ -74,6 +100,7 @@ export default async function Session({ searchParams }: { searchParams: Promise<
             ))}
           </tbody>
         </table>
+        {filtered && <p className="muted small" style={{ marginTop: 8 }}>Showing {rows.length} of {roster.length}. <Link href={clear}>Clear filters</Link></p>}
         {roster.length === 0 && <p className="empty">No one is invited to this session yet.</p>}
       </section>
       {unmatchedZoom.length > 0 && (

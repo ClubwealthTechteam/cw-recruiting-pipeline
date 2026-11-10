@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { getData } from '@/lib/sheet';
-import { metrics, pct, formatDate, STAGES, s as str, ymd, positionCounts, daysAgoPT, upcomingWednesday, isTest } from '@/lib/pipeline';
+import { metrics, pct, formatDate, STAGES, s as str, ymd, positionCounts, daysAgoPT, upcomingWednesday, counted } from '@/lib/pipeline';
 import { WeeklyBars, RateTrend, HBars } from '@/components/Charts';
 import DataError from '@/components/DataError';
 import AskBar from '@/components/AskBar';
@@ -19,7 +19,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
   const session = /^\d{4}-\d{2}-\d{2}$/.test(p.session || '') ? p.session! : '';
   const period = PERIODS.some(([k]) => k === p.days) ? p.days! : '30';
   const m = metrics(d.applicants, d.history, d.flags, new Date(), { session });
-  const everyone = d.applicants.filter((a) => str(a.Historical) !== 'Y' && !isTest(a));
+  const everyone = d.applicants.filter((a) => str(a.Historical) !== 'Y' && counted(a));
   // Filtered to one session: the pipeline, positions and tiles are about that session's invitees only
   const active = session ? everyone.filter((a) => ymd(a['Interview Date']) === session) : everyone;
   const maxSession = Math.max(1, ...m.sessions.map((x) => x.invited));

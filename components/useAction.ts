@@ -1,7 +1,7 @@
 'use client';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
-import { toast } from './Toaster';
+import { toast, waitToast, waitDone } from './Toaster';
 import { pushUndo, dropUndo, type UndoEntry } from './undo';
 
 /** What the toast says after each action succeeds, unless the caller passes its own message. */
@@ -63,10 +63,28 @@ export async function runUndo(entry: UndoEntry, refresh: () => void) {
 }
 
 async function post(body: Body) {
-  const res = await fetch('/api/action', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-  const json = await res.json();
+  let res: Response;
+  try {
+    res = await fetch('/api/action', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  } catch {
+    throw new Error('No connection to the CRM. Check your internet and try again.');
+  }
+  const json = await res.json().catch(() => null);
+  if (!json) throw new Error(res.status === 504 ? 'This took too long and was cut off. Refresh the page to check whether it was saved before trying again.' : 'Something went wrong. Refresh the page to check whether it was saved.');
   if (!json.ok) throw new Error(json.error || 'Something went wrong');
   return json.data;
+}
+
+let pending = 0;
+/**
+ * Saves that take a moment show "Please wait" (Tara, 2026-11-10): after 1.5 seconds, and a clearer note after 12
+ * seconds, so nobody clicks twice. Gone as soon as the answer arrives.
+ */
+function showWaiting() {
+  const key = `act-${++pending}`;
+  const t1 = setTimeout(() => waitToast(key, 'Please wait, saving your request…'), 1500);
+  const t2 = setTimeout(() => waitToast(key, 'Still working: Google Sheets is busy (the 5-minute update may be running). Your request is queued, no need to click again.'), 12000);
+  return () => { clearTimeout(t1); clearTimeout(t2); waitDone(key); };
 }
 
 /** Posts one action to /api/action, shows a toast (with Undo where it can be undone), then refreshes the page data. */
@@ -77,8 +95,10 @@ export function useAction() {
   async function run(body: Body, opts: { success?: string } = {}) {
     setBusy(true);
     setError('');
+    const stopWaiting = showWaiting();
     try {
       const data = await post(body);
+      stopWaiting();
       const undo = undoFor(body, data);
       const message = opts.success || doneMessage(body);
       const entry = undo ? { label: message.replace(/ ✓.*$/, ''), body: undo, at: Date.now() } : null;
@@ -87,6 +107,7 @@ export function useAction() {
       router.refresh();
       return data ?? true;
     } catch (e) {
+      stopWaiting();
       const msg = e instanceof Error ? e.message : 'Something went wrong';
       setError(msg);
       toast(msg, 'error');

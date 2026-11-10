@@ -1,7 +1,7 @@
 'use client';
 import { useState } from 'react';
 import { useAction } from './useAction';
-import SendPreview from './SendPreview';
+import SendPreview, { type SendEdits } from './SendPreview';
 import type { ThreadItem } from '@/lib/sheet';
 
 const LABEL: Record<string, string> = {
@@ -30,15 +30,16 @@ export default function Inbox({ id, thread, hasEmail, isOlj, emailReady, only, o
     await deliver();
   }
 
-  async function deliver() {
+  async function deliver(edits?: SendEdits) {
     setPreview(false);
-    const ok = await run(channel === 'OLJ' ? { action: 'sendOljMessage', id, text } : { action: 'sendReply', id, text });
+    const body = edits?.text ?? text;
+    const ok = await run(channel === 'OLJ' ? { action: 'sendOljMessage', id, text: body } : { action: 'sendReply', id, text: body, ...(edits?.subject ? { subject: edits.subject } : {}) });
     if (ok) { setText(''); onSent?.(); }
   }
 
   return (
     <div className="inbox" data-tour="reply">
-      {preview && <SendPreview req={{ kind: 'reply', id, text }} title="Email reply" onClose={() => setPreview(false)} onSend={deliver} />}
+      {preview && <SendPreview req={{ kind: 'reply', id, text }} title="Email reply" onClose={() => setPreview(false)} onSend={(e) => deliver(e)} />}
       {channels.length > 1 && (
         <div className="seg">{channels.map((c) => <button key={c} type="button" className={c === channel ? 'on' : ''} onClick={() => setChannel(c)}>{c}</button>)}</div>
       )}

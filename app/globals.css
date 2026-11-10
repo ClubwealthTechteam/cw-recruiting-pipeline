@@ -611,3 +611,13 @@ input:focus, select:focus, textarea:focus { outline: 3px solid #dbe7fb; border-c
 .hf-dates input { width: 132px; padding: 4px 6px; font-size: 12px; }
 .table.candidates thead th { overflow: visible; }
 .mass-list { max-height: 260px; overflow-y: auto; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; }
+
+/* "Please wait" toast (Tara, 2026-11-10) */
+.toast.wait { background: #344054; }
+.toast .spinner { width: 12px; height: 12px; border: 2px solid rgba(255,255,255,.35); border-top-color: #fff; border-radius: 50%; animation: cw-spin .8s linear infinite; flex: none; }
+@keyframes cw-spin { to { transform: rotate(360deg); } }
+
+/* Candidate notes: other positions applied for, former VA (Tara, 2026-11-10) */
+.row-notes { margin-top: 4px; display: flex; flex-wrap: wrap; gap: 4px; }
+.note-chip { font-size: 11px; line-height: 1.4; padding: 1px 7px; border-radius: 10px; background: #eef4ff; color: #3538cd; max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.note-chip.warn { background: #fef6ee; color: #b93815; }

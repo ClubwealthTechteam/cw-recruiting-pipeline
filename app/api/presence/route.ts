@@ -2,6 +2,9 @@ import { NextResponse } from 'next/server';
 import { currentUser } from '@/lib/auth';
 import { read } from '@/lib/sheet';
 
+/** Google Sheets can take a while (Tara, 2026-11-10): give it up to a minute instead of failing early. */
+export const maxDuration = 60;
+
 /** Marks the signed-in person as viewing an applicant and returns who else is viewing it. */
 export async function POST(req: Request) {
   const user = await currentUser();

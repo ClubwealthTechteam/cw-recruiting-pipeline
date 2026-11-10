@@ -18,6 +18,8 @@ export type CandidateRow = {
   applied: string; interview: string; confirmed: string; minutes: string; invites: string; historical: boolean;
   fit: string; fitTrack: string; fitSummary: string; hold?: string;
   changed?: string[]; score?: string; scoreSuggestion?: string; tags?: string[]; test?: boolean; zoom?: ZoomLive;
+  /** Notes (Tara, 2026-11-10): a second application from the same person, other positions applied for, former VA. */
+  repeat?: boolean; otherPositions?: string; formerVA?: string;
 };
 
 const AV = ['#1f5fbf', '#6941c6', '#1d7a43', '#c4320a', '#0e7490', '#9a6200', '#b42318', '#475467'];
@@ -54,12 +56,18 @@ export default function CandidatesTable({ rows, filters = {} }: { rows: Candidat
                 <div className="name-cell"><span className={`new-dot${isNew(since, ...(r.changed || [])) ? '' : ' hidden'}`} title="New or changed since your last visit" />
                   <span className="av" style={{ background: AV[(r.id.charCodeAt(r.id.length - 1) || 0) % AV.length] }}>{initials(r.name)}</span>
                   <div><Link href={`/candidates/${encodeURIComponent(r.id)}`}>{r.name || '(no name)'}</Link><div className="muted small">{r.email}</div></div></div>
+                {(r.otherPositions || r.formerVA) && (
+                  <div className="row-notes">
+                    {r.otherPositions && <span className="note-chip" title={`Also applied for: ${r.otherPositions}`}>Also applied for other position: {r.otherPositions}</span>}
+                    {r.formerVA && <span className="note-chip warn" title="On the team onboarding list">Previously a {r.formerVA}</span>}
+                  </div>
+                )}
                 {r.tags && r.tags.length > 0 && <div className="row-tags">{r.tags.map((t) => <Link key={t} href={`/candidates?stage=All&tag=${encodeURIComponent(t)}`} className="mini-tag">{t}</Link>)}</div>}
               </td>
               <td><FitBadge tag={r.fit} track={r.fitTrack} hold={r.hold} summary={r.fitSummary} old={r.historical} /></td>
               <td>{r.score ? <span className={`badge ${r.scoreSuggestion === 'Passed' ? 'green' : 'red'}`} title={`Suggested: ${r.scoreSuggestion}`}>{r.score}</span> : <span className="muted">0</span>}</td>
               <td className="stage-cell" onMouseMove={(e) => e.stopPropagation()}>
-                <StageBadge stage={r.stage} /><ZoomBadge z={r.zoom} />{r.historical && <span className="tag">Before system</span>}{r.test && <span className="tag">Test · not counted</span>}
+                <StageBadge stage={r.stage} /><ZoomBadge z={r.zoom} />{r.historical && <span className="tag">Before system</span>}{r.test && <span className="tag">Test · not counted</span>}{r.repeat && <span className="tag" title="Same person applied before; only one application is counted">Repeat · not counted</span>}
                 <div className="row-actions"><InlineStage id={r.id} stage={r.stage} /> <QuickNote id={r.id} /></div>
               </td>
               <td>{r.position}</td><td>{r.source}</td><td>{r.applied}</td><td>{r.interview}</td><td>{r.confirmed}</td><td>{r.minutes}</td><td>{r.invites}</td>

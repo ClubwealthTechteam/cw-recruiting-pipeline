@@ -1,23 +1,44 @@
 'use client';
 import { useState } from 'react';
 import { useAction } from './useAction';
+import { toast } from './Toaster';
+import type { JobAd } from '@/lib/sheet';
+import { formatDate } from '@/lib/pipeline';
 
-/** Job Ads checklist: tick the ads that are running. Applicants for an unticked ad are screened but not invited. */
-export default function JobAdsForm({ ads, stats }: { ads: { position: string; active: boolean }[]; stats: Record<string, { week: number; held: number }> }) {
+type Stats = Record<string, { week: number; held: number; waiting: number }>;
+
+/**
+ * Job Ads checklist: tick the ads that are running. Positions with an OnlineJobs.ph post that had applicants in the
+ * last 14 days are listed too (Tara, 2026-11-10). Pausing an ad emails its Applied / Invited / Confirmed applicants
+ * the saved "Position on hold" template, after asking with the count.
+ */
+export default function JobAdsForm({ ads, stats }: { ads: JobAd[]; stats: Stats }) {
   const [active, setActive] = useState(ads.filter((a) => a.active).map((a) => a.position));
   const { run, busy } = useAction();
   const changed = ads.some((a) => a.active !== active.includes(a.position));
+  const pausing = ads.filter((a) => a.active && !active.includes(a.position));
+  async function save() {
+    const n = pausing.reduce((t, a) => t + (stats[a.position]?.waiting || 0), 0);
+    if (pausing.length && n && !confirm(`Pause ${pausing.map((a) => a.position).join(', ')}?\n\n${n} applicant${n === 1 ? '' : 's'} (Applied, Invited or Confirmed) will get the "Position on hold" email, or an OLJ message if they have no email. Their queued invites and reminders are cancelled.`)) return;
+    const r = await run({ action: 'setActivePositions', active, shown: ads.map((a) => a.position) }, { success: 'Job ads saved ✓' });
+    if (r && typeof r === 'object') {
+      const d = r as { emailed?: number; olj?: number; skipped?: string[] };
+      const sent = (d.emailed || 0) + (d.olj || 0);
+      if (sent || d.skipped?.length) toast(`"Position on hold" queued for ${sent} (${d.emailed || 0} email, ${d.olj || 0} OLJ)${d.skipped?.length ? ` · ${d.skipped.length} skipped` : ''}`);
+    }
+  }
   return (
     <section className="panel" data-tour="job-ads">
       <table className="table">
-        <thead><tr><th style={{ width: 90 }}>Active</th><th>Job ad (position)</th><th>Applied, last 7 days</th><th>Waiting (ad paused)</th></tr></thead>
+        <thead><tr><th style={{ width: 90 }}>Active</th><th>Job ad (position)</th><th>On OnlineJobs.ph</th><th>Applied, last 7 days</th><th>Waiting (ad paused)</th></tr></thead>
         <tbody>
           {ads.map((a) => {
             const on = active.includes(a.position);
             return (
               <tr key={a.position}>
                 <td><label className="check-label"><input type="checkbox" checked={on} onChange={() => setActive((x) => (on ? x.filter((p) => p !== a.position) : [...x, a.position]))} /> {on ? 'Active' : 'Paused'}</label></td>
-                <td><b>{a.position}</b></td>
+                <td><b>{a.position}</b>{a.open === false && <div className="muted small">Not invited automatically (not one of the open positions)</div>}</td>
+                <td>{a.oljPosts?.length ? <>{a.oljPosts.map((t) => <div key={t} className="small">{t}</div>)}<div className="muted small">Last applicant {formatDate(a.oljLast || '')}</div></> : <span className="muted">—</span>}</td>
                 <td>{stats[a.position]?.week ?? 0}</td>
                 <td>{stats[a.position]?.held ?? 0}</td>
               </tr>
@@ -26,8 +47,8 @@ export default function JobAdsForm({ ads, stats }: { ads: { position: string; ac
         </tbody>
       </table>
       <p style={{ display: 'flex', gap: 10, alignItems: 'center', marginTop: 12 }}>
-        <button className="btn primary" disabled={!changed || busy} onClick={() => run({ action: 'setActivePositions', active }, { success: 'Job ads saved ✓' })}>{busy ? 'Saving…' : 'Save'}</button>
-        <span className="hint">Paused: new applicants for that position still come in and are screened, but are not invited automatically. They show &quot;Job ad paused&quot; in Candidates.</span>
+        <button className="btn primary" disabled={!changed || busy} onClick={save}>{busy ? 'Saving…' : 'Save'}</button>
+        <span className="hint">Paused: new applicants for that position still come in and are screened, but are not invited. Applied, Invited and Confirmed applicants get the saved &quot;Position on hold&quot; email once. Ticking it again does not email anyone.</span>
       </p>
     </section>
   );

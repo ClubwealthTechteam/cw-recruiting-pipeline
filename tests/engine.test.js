@@ -1279,3 +1279,73 @@ test('fill-ins work with [Brackets] or {braces}: first name, full name, position
   assert.equal(p('Dear [First Name], the [Position] role', {}), 'Dear there, the open role');
   assert.equal(p('[link] stays', a), '[link] stays');
 });
+
+test('rescheduled: a Confirmed applicant with a new invite goes back to Invited until they confirm again (first name is enough from their own email)', () => {
+  const env = invitedEnv({ AUTO_INVITES: 'OFF', EMAIL_SENDING: 'ON' });
+  env.ctx.tick();
+  const id = 'F-2';
+  env.api({ action: 'sendInvite', by: 'Am', id, channel: 'email' });
+  const A = env.sheets.Applicants.data, h = A[0];
+  A.find((r) => r[0] === id)[h.indexOf('Stage')] = 'Confirmed';
+  A.find((r) => r[0] === id)[h.indexOf('Confirmed At')] = '2026-10-27 09:00:00';
+  const r = env.api({ action: 'moveSession', by: 'Am', ids: [id], date: '2026-11-18', sendInvite: true });
+  assert.equal(r.data.invited, 1, r.error);
+  const a = () => env.rows('Applicants').find((x) => x['Applicant ID'] === id);
+  assert.equal(a().Stage, 'Invited');
+  assert.equal(a()['Confirmed At'], '');
+  addRow(env, 'Replies', { 'Message ID': 'rs1', 'From Email': a().Email, 'Reply Text': a()['First Name'].split(' ')[0] });
+  env.ctx.tick();
+  assert.equal(a().Stage, 'Confirmed');
+  // moving without a new invite leaves the stage alone
+  env.api({ action: 'moveSession', by: 'Am', ids: [id], date: '2026-11-25' });
+  assert.equal(a().Stage, 'Confirmed');
+});
+
+test('preview pencil: an edited subject and email replace the generated invite, banner kept', () => {
+  const env = invitedEnv({ AUTO_INVITES: 'OFF', EMAIL_SENDING: 'ON' });
+  env.ctx.tick();
+  const r = env.api({ action: 'sendInvite', by: 'Am', id: 'F-2', channel: 'email', edited: { subject: 'New subject', body: '<p>Edited text</p><script>x</script>' } });
+  assert.equal(r.ok, true, r.error);
+  const e = env.rows('Outbox').filter((x) => x['Applicant ID'] === 'F-2' && x.Status === 'Queued').pop();
+  assert.equal(e.Subject, 'New subject');
+  assert.match(e.Body, /Edited text/);
+  assert.doesNotMatch(e.Body, /<script/);
+  assert.match(e.Body, /img/);
+  assert.match(env.api({ action: 'sendInvite', by: 'Am', id: 'F-3', channel: 'email', edited: { subject: '', body: 'x' } }).error, /subject/);
+});
+
+test('job ads: pausing a position emails its Applied / Invited / Confirmed applicants the "Position on hold" template, once', () => {
+  const env = batchEnv();
+  env.api({ action: 'saveTemplate', by: 'Am', name: 'Position on hold', subject: 'ClubWealth | Update on Your Application', body: 'Dear [First Name], the [Position] role is on hold.' });
+  const A = env.sheets.Applicants.data, h = A[0];
+  A.find((r) => r[0] === 'F-3')[h.indexOf('Stage')] = 'Passed Interview';
+  const shown = env.api({ action: 'data' }).data.jobAds.map((x) => x.position);
+  const before = env.rows('Outbox').length;
+  const r = env.api({ action: 'setActivePositions', by: 'Am', shown, active: shown.filter((p) => p !== 'Inside Sales Agent (ISA)') });
+  assert.equal(r.ok, true, r.error);
+  const sent = env.rows('Outbox').slice(before).filter((e) => e.Status === 'Queued');
+  // Jose (F-3) is ISA but Passed Interview: not emailed. Ana (F-4, Appointment Setter = ISA) is.
+  assert.deepEqual(sent.map((e) => e['Applicant ID']), ['F-4']);
+  assert.equal(sent[0].Subject, 'ClubWealth | Update on Your Application');
+  assert.match(sent[0].Body, /Dear Ana, the Inside Sales Agent \(ISA\) role is on hold/);
+  assert.match(env.rows('Applicants').find((a) => a['Applicant ID'] === 'F-4').Tags, /Position on hold/);
+  assert.equal(env.ctx.inviteHoldReason({ Position: 'Inside Sales Agent (ISA)' }), 'Job ad paused: Inside Sales Agent (ISA)');
+  // saving again does not email twice; ticking it again removes the tag
+  env.api({ action: 'setActivePositions', by: 'Am', shown, active: shown.filter((p) => p !== 'Inside Sales Agent (ISA)') });
+  assert.equal(env.rows('Outbox').slice(before).length, 1);
+  env.api({ action: 'setActivePositions', by: 'Am', shown, active: shown });
+  assert.doesNotMatch(env.rows('Applicants').find((a) => a['Applicant ID'] === 'F-4').Tags, /Position on hold/);
+  assert.equal(env.ctx.inviteHoldReason({ Position: 'Inside Sales Agent (ISA)' }), '');
+});
+
+test('job ads list positions that are live on OnlineJobs.ph (applicants in the last 14 days)', () => {
+  const env = batchEnv();
+  addRow(env, 'OLJ', { 'Conversation Key': 'j1', 'Job Post': 'AI-SAVVY MARKETING &amp; ADS SPECIALIST', 'Applicant Name': 'A B', 'Last Message At': '2026-10-26T10:00:00.000Z' });
+  addRow(env, 'OLJ', { 'Conversation Key': 'j2', 'Job Post': 'Old General VA post', 'Applicant Name': 'C D', 'Last Message At': '2026-09-01T10:00:00.000Z' });
+  const ads = env.api({ action: 'data' }).data.jobAds;
+  const m = ads.find((x) => x.position === 'Marketing & Ads Specialist');
+  assert.ok(m, JSON.stringify(ads));
+  assert.equal(m.active, true);
+  assert.deepEqual(m.oljPosts, ['AI-SAVVY MARKETING & ADS SPECIALIST']);
+  assert.equal(ads.some((x) => x.position === 'General VA'), false, 'older than 14 days');
+});

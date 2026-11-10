@@ -15,6 +15,9 @@ import { requireUser } from '@/lib/auth';
 import { getData } from '@/lib/sheet';
 import { s, fullName } from '@/lib/pipeline';
 
+/** Google Sheets can take a while (Tara, 2026-11-10): give it up to a minute instead of failing early. */
+export const maxDuration = 60;
+
 export const dynamic = 'force-dynamic';
 
 export default async function AppLayout({ children, panel }: { children: React.ReactNode; panel?: React.ReactNode }) {
