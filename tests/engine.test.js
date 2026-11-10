@@ -1269,3 +1269,13 @@ test('mass email and mass OLJ message: one personal copy each, skips who cannot 
   assert.equal(env.rows('Outbox').filter((e) => e.Type === 'OLJ Message' && e.Body === 'Hi Lito!').length, 1);
   assert.match(env.api({ action: 'bulkMessage', by: 'Am', channel: 'email', ids: [], text: 'x' }).error, /Select/);
 });
+
+test('fill-ins work with [Brackets] or {braces}: first name, full name, position', () => {
+  const env = batchEnv();
+  const p = env.ctx.personalize;
+  const a = { 'First Name': 'Krista', 'Last Name': 'Buendia', Position: 'Inside Sales Agent (ISA)' };
+  assert.equal(p('Dear [First Name], the [Position] role. {first_name} / [Name] / {full_name} / [ROLE]', a),
+    'Dear Krista, the Inside Sales Agent (ISA) role. Krista / Krista Buendia / Krista Buendia / Inside Sales Agent (ISA)');
+  assert.equal(p('Dear [First Name], the [Position] role', {}), 'Dear there, the open role');
+  assert.equal(p('[link] stays', a), '[link] stays');
+});

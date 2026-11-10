@@ -58,7 +58,7 @@ export default function Inbox({ id, thread, hasEmail, isOlj, emailReady, only, o
       {channels.length === 0 ? <p className="hint">No email address or OLJ conversation to reply to.</p> : (
         <form className="stack-form" onSubmit={send}>
           {templates.length > 0 && (
-            <select value="" onChange={(e) => { const tp = templates.find((x) => x.name === e.target.value); if (tp) setText(tp.body.replace(/\{first_name\}/g, firstName || 'there')); }} aria-label="Insert a template" data-tour="template-pick">
+            <select value="" onChange={(e) => { const tp = templates.find((x) => x.name === e.target.value); if (tp) setText(tp.body.replace(/[{[]\s*first[_ ]?name\s*[}\]]/gi, firstName || 'there')); }} aria-label="Insert a template" data-tour="template-pick">
               <option value="">Insert a template…</option>
               {templates.map((x) => <option key={x.name} value={x.name}>{x.name}</option>)}
             </select>
