@@ -22,6 +22,7 @@ var STAGES = [
   'Benched',
   'Hired',
   'Onboarding',
+  'Offboarded',
   'Not Fit',
   'Banned'
 ];
@@ -300,9 +301,25 @@ var OPEN_POSITIONS = ['Collections VA', 'Inside Sales Agent (ISA)', 'Real Estate
  * they are held back. Form applicants also need experience and 50+ Mbps; OLJ applicants are checked for interest
  * and a summary/resume by the OLJ sender before it sends.
  */
+// ---------- job ads and paused invites (Miguel, 2026-11-10) ----------
+
+/** Positions whose job ad is active (Settings ACTIVE_POSITIONS, comma separated). Empty setting = all open positions. */
+var ACTIVE_POSITIONS = OPEN_POSITIONS.slice();
+function setActivePositions(value) {
+  var v = String(value || '').trim();
+  ACTIVE_POSITIONS = v ? v.split(',').map(function (x) { return x.trim(); }).filter(function (x) { return OPEN_POSITIONS.indexOf(x) !== -1; }) : OPEN_POSITIONS.slice();
+}
+/** The tag that pauses invites for one applicant (the profile's Pause invites button). */
+var PAUSE_TAG = 'Invites paused';
+function invitesPaused(a) {
+  return String(a && a.Tags || '').split(',').some(function (t) { return t.trim() === PAUSE_TAG; });
+}
+
 function inviteHoldReason(a) {
   var pos = String(a.Position || '');
   if (OPEN_POSITIONS.indexOf(pos) === -1) return 'Position not open: ' + (pos || 'unknown');
+  if (ACTIVE_POSITIONS.indexOf(pos) === -1) return 'Job ad paused: ' + pos;
+  if (invitesPaused(a)) return 'Invites paused for this applicant';
   if (String(a.Source) === 'OLJ') return '';
   if (/^\s*no\b/i.test(String(a['Has Experience'] || ''))) return 'No experience';
   if (/below/i.test(String(a['Internet Speed'] || ''))) return 'Internet below 50 Mbps';

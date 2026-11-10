@@ -15,7 +15,8 @@ const PRESETS: Record<string, string[]> = {
   'Passed Pre-Interview': ['Passed the pre-interview'],
   'Passed Interview': ['Passed the interview'],
   Hired: ['Offer accepted'],
-  Onboarding: ['Started onboarding']
+  Onboarding: ['Started onboarding'],
+  Offboarded: ['No longer active on the ISA Masterfile', 'Resigned', 'Let go']
 };
 
 /** Moves one or more applicants to a stage. A reason is required for Not Fit, Did Not Complete and re-invites. */

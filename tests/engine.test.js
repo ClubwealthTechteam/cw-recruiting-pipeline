@@ -1173,3 +1173,68 @@ test('Zoom tracking from the site: starts once in the window, polls Zoom, writes
   assert.equal(zoomCalls.length, calls, 'no more Zoom calls after the session');
   assert.ok(zoomCalls.filter((u) => /zoom/.test(u)).every((u) => /^https:\/\/(zoom\.us\/oauth\/token|api\.zoom\.us\/v2\/metrics\/meetings\/)/.test(u)), 'only the token and the read-only participant list');
 });
+
+function batchEnv(settings = {}, onboarding = {}) {
+  const env = load({ mode: 'LIVE', now: pdt('2026-10-27T12:00:00'), settings: { EMAIL_SENDING: 'ON', ...settings }, onboarding, formRows: [
+    formRow(pdt('2026-10-23T10:00:00'), 'Maria Clara', 'Santos', 'maria@example.com', 'Collections VA', 'Yes'),
+    formRow(pdt('2026-10-24T10:00:00'), 'Jose', 'Dela Cruz', 'jose@example.com', 'ISA', 'Yes'),
+    formRow(pdt('2026-10-25T10:00:00'), 'Ana', 'Reyes', 'ana@example.com', 'Appointment Setter', 'Yes')
+  ] });
+  env.ctx.importHistory();
+  env.ctx.setup();
+  return env;
+}
+
+test('Offboarded: unchecked on the ISA Masterfile moves a Hired / Onboarding applicant, by name, hourly', () => {
+  const env = batchEnv({}, { 'Active ISAs': [['PromoCode', 'First', 'Last', 'Active'], ['CWMaria', 'Maria Clara', 'Santos', false], ['CWJose', 'Jose', 'Dela Cruz', true], ['CWAna', 'Ana', 'Reyes', 'FALSE']] });
+  const A = env.sheets.Applicants.data, h = A[0];
+  const set = (id, k, v) => { A.find((r) => r[0] === id)[h.indexOf(k)] = v; };
+  set('F-2', 'Stage', 'Hired'); set('F-3', 'Stage', 'Onboarding'); set('F-4', 'Stage', 'Passed Interview');
+  env.ctx.tick();
+  const st = (id) => env.rows('Applicants').find((a) => a['Applicant ID'] === id).Stage;
+  assert.deepEqual([st('F-2'), st('F-3'), st('F-4')], ['Offboarded', 'Onboarding', 'Passed Interview'], 'only unchecked AND hired; Ana is not hired');
+  assert.equal(env.rows('History').some((x) => x['Applicant ID'] === 'F-2' && x['To Stage'] === 'Offboarded'), true);
+  assert.equal(env.rows('Outbox').some((e) => e['Applicant ID'] === 'F-2' && e.Status === 'Pending approval'), false, 'no email');
+});
+
+test('pause invites: the CRM switch, a paused applicant, and job ads that are paused', () => {
+  const env = batchEnv({ AUTO_INVITES: 'ON' });
+  assert.equal(env.api({ action: 'setAutoInvites', by: 'Am', on: false }).data.autoInvites, 'OFF');
+  assert.equal(env.api({ action: 'data' }).data.autoInvites, 'OFF');
+  env.api({ action: 'setAutoInvites', by: 'Am', on: true });
+  // per applicant
+  env.api({ action: 'pauseInvites', by: 'Am', id: 'F-2', paused: true });
+  const a = () => env.rows('Applicants').find((x) => x['Applicant ID'] === 'F-2');
+  assert.match(a().Tags, /Invites paused/);
+  assert.match(env.api({ action: 'sendInvite', by: 'Am', id: 'F-2', channel: 'email' }).error, /paused/);
+  assert.equal(env.ctx.inviteHoldReason({ Position: 'Collections VA', Tags: 'Invites paused' }), 'Invites paused for this applicant');
+  env.api({ action: 'pauseInvites', by: 'Am', id: 'F-2', paused: false });
+  assert.doesNotMatch(a().Tags, /Invites paused/);
+  // job ads: only ISA active
+  const r = env.api({ action: 'setActivePositions', by: 'Am', active: ['Inside Sales Agent (ISA)', 'Nope'] });
+  assert.deepEqual(r.data.active, ['Inside Sales Agent (ISA)']);
+  assert.equal(env.ctx.inviteHoldReason({ Position: 'Collections VA' }), 'Job ad paused: Collections VA');
+  assert.equal(env.ctx.inviteHoldReason({ Position: 'Inside Sales Agent (ISA)' }), '');
+  const ads = env.api({ action: 'data' }).data.jobAds;
+  assert.deepEqual(ads.filter((x) => x.active).map((x) => x.position), ['Inside Sales Agent (ISA)']);
+});
+
+test("Don't send puts the applicant back in the stage before the move; templates save and delete", () => {
+  const env = batchEnv();
+  env.api({ action: 'setStage', by: 'Am', ids: ['F-2'], stage: 'Passed Interview' });
+  env.api({ action: 'setStage', by: 'Am', ids: ['F-2'], stage: 'Hired', company: 'Homexa', startDate: '2026-11-13' });
+  const e = env.rows('Outbox').find((x) => x['Applicant ID'] === 'F-2' && x.Status === 'Pending approval');
+  const r = env.api({ action: 'skipEmail', by: 'Camille', emailId: e['Email ID'] });
+  assert.equal(r.data.backTo, 'Passed Interview');
+  const a = env.rows('Applicants').find((x) => x['Applicant ID'] === 'F-2');
+  assert.equal(a.Stage, 'Passed Interview');
+  assert.doesNotMatch(String(a.Tags), /Hired \|/);
+  assert.equal(env.rows('Outbox').filter((x) => x['Applicant ID'] === 'F-2' && x.Status === 'Pending approval').length, 0, 'going back queues nothing new');
+  // templates
+  assert.equal(env.api({ action: 'saveTemplate', by: 'Am', name: 'Reschedule', subject: 'New date', body: 'Hi {first_name}, ...' }).ok, true);
+  assert.equal(env.api({ action: 'data' }).data.emailTemplates[0].Name, 'Reschedule');
+  env.api({ action: 'saveTemplate', by: 'Camille', name: 'reschedule', subject: 'New date', body: 'Hi {first_name}, updated' });
+  assert.equal(env.rows('Email Templates').length, 1, 'same name updates');
+  env.api({ action: 'deleteTemplate', by: 'Am', name: 'Reschedule' });
+  assert.equal(env.rows('Email Templates').length, 0);
+});

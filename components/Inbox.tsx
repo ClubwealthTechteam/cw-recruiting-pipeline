@@ -12,7 +12,9 @@ const LABEL: Record<string, string> = {
  * The applicant's conversation (email from CareersCW, and OnlineJobs.ph for OLJ applicants) with a box to answer.
  * Email answers go out from CareersCW with the Club Wealth sign-off and banner; OLJ answers go out on the next OLJ run.
  */
-export default function Inbox({ id, thread, hasEmail, isOlj, emailReady, only, onSent }: { id: string; thread: ThreadItem[]; hasEmail: boolean; isOlj: boolean; emailReady: boolean; only?: 'OLJ' | 'Email'; onSent?: () => void }) {
+export type Template = { name: string; subject: string; body: string };
+
+export default function Inbox({ id, thread, hasEmail, isOlj, emailReady, only, onSent, firstName = '', templates = [] }: { id: string; thread: ThreadItem[]; hasEmail: boolean; isOlj: boolean; emailReady: boolean; only?: 'OLJ' | 'Email'; onSent?: () => void; firstName?: string; templates?: Template[] }) {
   const channels = ([...(isOlj ? ['OLJ'] : []), ...(hasEmail ? ['Email'] : [])] as ('OLJ' | 'Email')[]).filter((c) => !only || c === only);
   const [channel, setChannel] = useState<'OLJ' | 'Email'>(only || channels[0] || 'Email');
   const [text, setText] = useState('');
@@ -55,6 +57,12 @@ export default function Inbox({ id, thread, hasEmail, isOlj, emailReady, only, o
       </div>
       {channels.length === 0 ? <p className="hint">No email address or OLJ conversation to reply to.</p> : (
         <form className="stack-form" onSubmit={send}>
+          {templates.length > 0 && (
+            <select value="" onChange={(e) => { const tp = templates.find((x) => x.name === e.target.value); if (tp) setText(tp.body.replace(/\{first_name\}/g, firstName || 'there')); }} aria-label="Insert a template" data-tour="template-pick">
+              <option value="">Insert a template…</option>
+              {templates.map((x) => <option key={x.name} value={x.name}>{x.name}</option>)}
+            </select>
+          )}
           <textarea id="reply-box" rows={3} value={text} onChange={(e) => setText(e.target.value)}
             placeholder={channel === 'OLJ' ? 'Write an OLJ message…' : 'Write an email reply… (the Club Wealth sign-off and banner are added for you)'} />
           <button className="btn primary" disabled={busy || !text.trim() || (channel === 'Email' && !emailReady)}>

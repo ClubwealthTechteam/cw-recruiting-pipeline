@@ -2,12 +2,12 @@ import type { Row } from './sheet';
 
 export const STAGES = [
   'Applied', 'Invited', 'Confirmed', 'Open for re-invite', 'Interview Completed',
-  'Did Not Complete', 'Uninterested | Left Zoom', 'No Show', 'No Confirmation', 'Passed Pre-Interview', 'Passed Interview', 'Benched', 'Hired', 'Onboarding', 'Not Fit', 'Banned'
+  'Did Not Complete', 'Uninterested | Left Zoom', 'No Show', 'No Confirmation', 'Passed Pre-Interview', 'Passed Interview', 'Benched', 'Hired', 'Onboarding', 'Offboarded', 'Not Fit', 'Banned'
 ] as const;
 
 /** Board column order: the main flow first, then the side outcomes. */
 export const BOARD_STAGES = [
-  'Applied', 'Invited', 'Confirmed', 'Interview Completed', 'Passed Pre-Interview', 'Passed Interview', 'Benched', 'Hired', 'Onboarding',
+  'Applied', 'Invited', 'Confirmed', 'Interview Completed', 'Passed Pre-Interview', 'Passed Interview', 'Benched', 'Hired', 'Onboarding', 'Offboarded',
   'Open for re-invite', 'Did Not Complete', 'Uninterested | Left Zoom', 'No Show', 'No Confirmation', 'Not Fit', 'Banned'
 ];
 
@@ -29,7 +29,7 @@ export type Stage = (typeof STAGES)[number];
 export const STAGE_TONE: Record<string, string> = {
   Applied: 'grey', Invited: 'blue', Confirmed: 'blue', 'Open for re-invite': 'amber',
   'Interview Completed': 'amber', 'Did Not Complete': 'red', 'Uninterested | Left Zoom': 'grey', 'No Show': 'red', 'No Confirmation': 'grey',
-  'Passed Pre-Interview': 'green', 'Passed Interview': 'green', Benched: 'blue', Hired: 'green', Onboarding: 'green', 'Not Fit': 'grey', Banned: 'red'
+  'Passed Pre-Interview': 'green', 'Passed Interview': 'green', Benched: 'blue', Hired: 'green', Onboarding: 'green', Offboarded: 'grey', 'Not Fit': 'grey', Banned: 'red'
 };
 
 /** Screening tags (Claude): Great = clearly meets the rule (1+ year or highly relevant), Good = meets 6 months, Not Fit = does not or not enough info. */
