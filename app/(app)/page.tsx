@@ -5,6 +5,7 @@ import { WeeklyBars, RateTrend, HBars } from '@/components/Charts';
 import DataError from '@/components/DataError';
 import AskBar from '@/components/AskBar';
 import OpenSessionButton from '@/components/OpenSessionButton';
+import InvitesSwitch from '@/components/InvitesSwitch';
 import { currentUser } from '@/lib/auth';
 import { sessionTimes, todayPT, fullName, scoreSummary } from '@/lib/pipeline';
 
@@ -83,6 +84,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
           <div className="kv-row"><span>Invited by email</span><b>{invitedNext.length - oljNext}</b></div>
           <div className="kv-row"><span>Invited on OLJ</span><b>{oljNext}</b></div>
           <div className="kv-row"><span>Reminder</span><span className="muted">Wednesday 6:00 AM PT</span></div>
+          <InvitesSwitch on={d.autoInvites !== 'OFF'} />
           <p style={{ marginTop: 12, display: 'flex', gap: 8 }}><OpenSessionButton date={nextSession} /></p>
         </section>
       </div>

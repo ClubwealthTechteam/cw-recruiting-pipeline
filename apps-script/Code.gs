@@ -18,7 +18,7 @@ var SH = {
   APPLICANTS: 'Applicants', HISTORY: 'History', OUTBOX: 'Outbox', REPLIES: 'Replies',
   FLAGS: 'Needs Attention', ZOOM: 'Zoom Attendance', OLJ: 'OLJ', POSITIONS: 'Positions',
   SETTINGS: 'Settings', LOG: 'Run Log', TEST_FORM: 'Test Form', CHAT: 'Chat', SCORES: 'Scorecards', VIEWS: 'Views', EMAILAPPS: 'Email Applications',
-  TEAM: 'Team (Onboarding)', TEAM_UPDATES: 'Team Updates'
+  TEAM: 'Team (Onboarding)', TEAM_UPDATES: 'Team Updates', TEMPLATES: 'Email Templates'
 };
 
 // Form Responses 1 columns (0-based), read only.
@@ -97,6 +97,7 @@ function settings_() {
   var cv = map.CANCELLED_SESSIONS ? map.CANCELLED_SESSIONS.Value : '';
   if (Object.prototype.toString.call(cv) === '[object Date]') cv = Utilities.formatDate(cv, TZ, 'yyyy-MM-dd');
   if (typeof setCancelledSessions === 'function') setCancelledSessions(cv);
+  if (typeof setActivePositions === 'function') setActivePositions(map.ACTIVE_POSITIONS ? map.ACTIVE_POSITIONS.Value : '');
   return {
     // Sheets turns typed dates like 2026-10-28 into Date values; always hand back YYYY-MM-DD text.
     get: function (k) {
@@ -208,6 +209,7 @@ function doNotInvite_(st, a) {
 function queueInvite_(st, a, interviewYmd, type) {
   // Before Zapier is connected Am invites by hand; AUTO_INVITES = OFF keeps the system from queuing duplicates.
   if (st.get('MODE') === 'LIVE' && st.get('AUTO_INVITES') === 'OFF') return null;
+  if (invitesPaused(a)) return null; // the profile's Pause invites (Miguel, 2026-11-10)
   var blocked = doNotInvite_(st, a);
   if (blocked) {
     var already = table_(SH.FLAGS).rows.some(function (f) {
@@ -1017,6 +1019,7 @@ function tick() {
       team: safeTeamSync_(st),
       banned: bannedSweep_(st),
       zoomTracked: safeZoomTrack_(st),
+      offboarded: offboardSync_(st),
       zoom: processZoom_(st),
       reminders: queueReminders_(st)
     };
@@ -1160,7 +1163,7 @@ function decideStatusEmail_(st, req, approve) {
   if (e.Status !== 'Pending approval') throw new Error('This email is no longer waiting for approval (it is ' + e.Status + ').');
   if (!approve) {
     update_(out, e, { Status: 'Cancelled', Error: "Don't send: " + req.by, 'Decided By': req.by, 'Decided At': nowStr_() });
-    return { cancelled: true };
+    return { cancelled: true, backTo: revertAfterSkip_(e, req.by) };
   }
   if (st.get('EMAIL_SENDING') !== 'ON') throw new Error('Email sending is off (Settings EMAIL_SENDING).');
   var twice = out.rows.some(function (r) {
@@ -1574,7 +1577,10 @@ function api_(req) {
       mode: st.get('MODE'),
       emailSending: st.get('EMAIL_SENDING'),
       cancelledSessions: Object.keys(CANCELLED_SESSIONS).sort(),
-      zoomTracking: zoomTrackingStatus_(st)
+      zoomTracking: zoomTrackingStatus_(st),
+      autoInvites: st.get('AUTO_INVITES') === 'OFF' ? 'OFF' : 'ON',
+      jobAds: OPEN_POSITIONS.map(function (p) { return { position: p, active: ACTIVE_POSITIONS.indexOf(p) !== -1 }; }),
+      emailTemplates: optionalRows_(SH.TEMPLATES)
     };
   }
   if (req.action === 'applicant') {
@@ -1783,6 +1789,11 @@ function api_(req) {
     }
     if (req.action === 'editPendingEmail') return editPendingEmail_(req);
     if (req.action === 'startZoomTracking') return startZoomTracking_(st2, req);
+    if (req.action === 'setAutoInvites') return setAutoInvites_(st2, req);
+    if (req.action === 'setActivePositions') return setActivePositions_(st2, req);
+    if (req.action === 'pauseInvites') return pauseInvites_(apps, byId, req);
+    if (req.action === 'attachToEmail') return attachToEmail_(req);
+    if (req.action === 'saveTemplate' || req.action === 'deleteTemplate') return saveTemplate_(req);
     if (req.action === 'approveEmail') return decideStatusEmail_(st2, req, true);
     if (req.action === 'skipEmail') return decideStatusEmail_(st2, req, false);
     if (req.action === 'updateTeam') {
@@ -1806,6 +1817,7 @@ function api_(req) {
       if (dup) throw new Error('An invite for Wednesday ' + longDate(session) + ' is already queued or sent.');
       var blockedWhy = doNotInvite_(st2, ai);
       if (blockedWhy) throw new Error('Do not invite: ' + blockedWhy + '.');
+      if (invitesPaused(ai)) throw new Error('Invites are paused for this applicant. Click Resume invites on the profile first.');
       if (req.channel === 'email') {
         if (st2.get('EMAIL_SENDING') !== 'ON') throw new Error('Email sending is not connected yet (CareersCW in Zapier). Use OLJ, or invite by hand.');
         if (!ai.Email) throw new Error('This applicant has no email address.');
@@ -2280,4 +2292,162 @@ function zoomTrackTick_(st) {
 /** The tick never fails because of Zoom: an error is logged and the next tick tries again. */
 function safeZoomTrack_(st) {
   try { return zoomTrackTick_(st); } catch (e) { log_('zoomTracking', 'poll failed', { error: String(e).slice(0, 200) }, st.get('ZOOM_TRACKING_FOR')); return 0; }
+}
+
+// ---------- Nov 10 additions (Miguel): pause invites, job ads, attachments, templates, Offboarded, Don't send ----------
+
+/** CRM switch for all automatic invites (Settings AUTO_INVITES). Manual invites are not affected. */
+function setAutoInvites_(st, req) {
+  var on = req.on === true || req.on === 'ON';
+  st.set('AUTO_INVITES', on ? 'ON' : 'OFF');
+  log_('autoInvites', on ? 'resumed' : 'paused', { by: req.by }, '');
+  return { autoInvites: on ? 'ON' : 'OFF' };
+}
+
+/** Job Ads checklist: which open positions are active. Applicants for a paused ad are screened but not invited. */
+function setActivePositions_(st, req) {
+  var list = (req.active || []).map(String).filter(function (p) { return OPEN_POSITIONS.indexOf(p) !== -1; });
+  st.set('ACTIVE_POSITIONS', list.length ? list.join(', ') : 'NONE');
+  setActivePositions(list.length ? list.join(', ') : 'NONE');
+  return { active: ACTIVE_POSITIONS };
+}
+
+/** Profile "Pause invites" / "Resume invites": the tag "Invites paused" keeps every automatic invite away from them. */
+function pauseInvites_(apps, byId, req) {
+  var a = byId[req.id];
+  if (!a) throw new Error('not found');
+  var tags = String(a.Tags || '').split(',').map(function (x) { return x.trim(); }).filter(function (x) { return x && x !== PAUSE_TAG; });
+  if (req.paused) tags.push(PAUSE_TAG);
+  update_(apps, a, { Tags: tags.join(', '), Notes: (a.Notes ? a.Notes + '\n' : '') + nowStr_() + ' ' + req.by + ': invites ' + (req.paused ? 'paused' : 'resumed') });
+  if (!req.paused && a['Invite Hold'] === 'Invites paused for this applicant') update_(apps, a, { 'Invite Hold': '' });
+  return { paused: !!req.paused };
+}
+
+var ATTACH_FOLDER = 'Recruiting Pipeline - Email Attachments';
+var ATTACH_TYPES = { 'application/pdf': 'pdf', 'application/msword': 'doc', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
+  'application/vnd.ms-excel': 'xls', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'xlsx', 'image/png': 'png', 'image/jpeg': 'jpg', 'text/plain': 'txt' };
+
+/**
+ * Attach a file to an email waiting in Needs Approval: saved to the Drive folder "Recruiting Pipeline - Email
+ * Attachments", shared so anyone with the link can view it, and a download link is added above the banner.
+ */
+function attachToEmail_(req) {
+  var out = table_(SH.OUTBOX);
+  var e = out.rows.filter(function (r) { return r['Email ID'] === req.emailId; })[0];
+  if (!e) throw new Error('Email not found.');
+  if (e.Status !== 'Pending approval') throw new Error('Files can only be added while the email waits for approval.');
+  var f = req.file || {};
+  if (!ATTACH_TYPES[f.type]) throw new Error('Attach a PDF, Word, Excel, image or text file.');
+  var bytes = Utilities.base64Decode(String(f.data || ''));
+  if (bytes.length > 3 * 1024 * 1024) throw new Error('The file is larger than 3 MB.');
+  var props = PropertiesService.getScriptProperties();
+  var fid = props.getProperty('ATTACH_FOLDER_ID');
+  if (!fid || !driveApi_('get', 'files/' + fid + '?fields=id,trashed')) {
+    fid = driveApi_('post', 'files?fields=id', { name: ATTACH_FOLDER, mimeType: 'application/vnd.google-apps.folder' }).id;
+    props.setProperty('ATTACH_FOLDER_ID', fid);
+  }
+  var name = String(f.name || ('attachment.' + ATTACH_TYPES[f.type])).replace(/[\\/:*?"<>|]/g, '_').slice(0, 120);
+  var boundary = 'cwattach' + Date.now();
+  var meta = Utilities.newBlob('--' + boundary + '\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n' +
+    JSON.stringify({ name: name, parents: [fid] }) + '\r\n--' + boundary + '\r\nContent-Type: ' + f.type + '\r\n\r\n').getBytes();
+  var tail = Utilities.newBlob('\r\n--' + boundary + '--').getBytes();
+  var res = UrlFetchApp.fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,webViewLink', {
+    method: 'post', contentType: 'multipart/related; boundary=' + boundary, payload: meta.concat(bytes, tail),
+    headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() }, muteHttpExceptions: true
+  });
+  if (res.getResponseCode() >= 300) throw new Error('Could not save the file to Drive (' + res.getResponseCode() + '): ' + driveReason_(res));
+  var file = JSON.parse(res.getContentText());
+  var shared = 'anyone';
+  try { driveApi_('post', 'files/' + file.id + '/permissions', { type: 'anyone', role: 'reader', allowFileDiscovery: false }); }
+  catch (err) { shared = 'private'; }
+  var link = file.webViewLink || 'https://drive.google.com/file/d/' + file.id + '/view';
+  var block = '<p>Attachment: <a href="' + link + '">' + escapeHtml(name) + '</a> (click to open or download)</p>';
+  var body = String(e.Body || '');
+  var at = body.indexOf('<p><img src="' + BANNER_URL);
+  var cheers = body.lastIndexOf('<p>Cheers,');
+  var pos = cheers !== -1 ? cheers : at;
+  body = pos !== -1 ? body.slice(0, pos) + block + body.slice(pos) : body + block;
+  update_(out, e, { Body: body });
+  return { link: link, shared: shared };
+}
+
+/** Email templates (macros) for the reply box: tab "Email Templates" (Name, Subject, Body, Created By, Updated At). */
+function saveTemplate_(req) {
+  ensureTab_(SH.TEMPLATES, ['Name', 'Subject', 'Body', 'Created By', 'Updated At']);
+  var t = table_(SH.TEMPLATES);
+  var name = String(req.name || '').trim().slice(0, 80);
+  if (!name) throw new Error('A template needs a name.');
+  var row = t.rows.filter(function (r) { return String(r.Name).toLowerCase() === name.toLowerCase(); })[0];
+  if (req.action === 'deleteTemplate') {
+    if (row) t.sheet.deleteRow(row._row);
+    return { deleted: !!row };
+  }
+  var body = String(req.body || '').trim();
+  if (!body) throw new Error('The template is empty.');
+  if (body.length > 5000) throw new Error('The template is too long (5,000 characters max).');
+  var f = { Subject: String(req.subject || '').trim().slice(0, 200), Body: body, 'Created By': req.by, 'Updated At': nowStr_() };
+  if (row) update_(t, row, f);
+  else { f.Name = name; append_(t, f); }
+  return { saved: name };
+}
+
+/**
+ * Offboarded (Miguel, 2026-11-10): once an hour, people whose "Active" box is unchecked on the ISA Masterfile's
+ * "Active ISAs" tab (read only) move from Hired / Onboarding to Offboarded, matched by first and last name. Never
+ * moves anyone back, never sends an email. Settings ISA_MASTERFILE_ID (default below).
+ */
+var ISA_MASTERFILE_DEFAULT = '1ahOwILkD6_S_YDoEiy_zg4hmqkvEUgsMVoXXfW0t3Bg';
+function offboardSync_(st) {
+  var last = Number(st.get('OFFBOARD_CHECKED_MS')) || 0;
+  if (new Date().getTime() - last < 55 * 60000) return 0;
+  st.set('OFFBOARD_CHECKED_MS', String(new Date().getTime()));
+  var values;
+  try {
+    var sh = SpreadsheetApp.openById(st.get('ISA_MASTERFILE_ID') || ISA_MASTERFILE_DEFAULT).getSheetByName('Active ISAs');
+    if (!sh) throw new Error('no "Active ISAs" tab');
+    values = sh.getDataRange().getValues();
+  } catch (e) {
+    log_('offboardSync', 'could not read the ISA Masterfile', { error: String(e).slice(0, 200) }, '');
+    return 0;
+  }
+  var h = values[0].map(function (x) { return String(x).trim(); });
+  var iF = h.indexOf('First'), iL = h.indexOf('Last'), iA = h.indexOf('Active');
+  if (iF === -1 || iL === -1 || iA === -1) { log_('offboardSync', 'columns First / Last / Active not found', {}, ''); return 0; }
+  var gone = values.slice(1).filter(function (r) { return r[iA] === false || String(r[iA]).toUpperCase() === 'FALSE'; });
+  if (!gone.length) return 0;
+  var apps = table_(SH.APPLICANTS);
+  var hired = apps.rows.filter(function (a) { return a.Stage === 'Hired' || a.Stage === 'Onboarding'; });
+  var n = 0;
+  gone.forEach(function (r) {
+    var full = (String(r[iF]) + ' ' + String(r[iL])).trim();
+    if (!full) return;
+    var m = hired.filter(function (a) { return a.Stage !== 'Offboarded' && nameMatches(full, a['First Name'], a['Last Name']); });
+    if (m.length === 1) {
+      setStage_(apps, m[0], 'Offboarded', 'System', '"Active" unchecked on the ISA Masterfile (Active ISAs)');
+      n++;
+    } else if (m.length > 1) {
+      flag_('', 'Offboarded: name matches several hires', full + ' is unchecked on the ISA Masterfile and matches ' + m.length + ' hired applicants. Move the right one to Offboarded by hand.');
+    }
+  });
+  return n;
+}
+
+/**
+ * "Don't send" on a status email (Miguel, 2026-11-10): the applicant goes back to the stage they had before the move
+ * that prepared it (e.g. Hired → Passed Interview), and a Hired | company tag is removed. Returns the stage or ''.
+ */
+var EMAIL_FROM_STAGES = { Hired: ['Hired', 'Onboarding'], Onboarding: ['Onboarding', 'Hired'], Rejected: ['Not Fit'], Benched: ['Benched'] };
+function revertAfterSkip_(e, by) {
+  var apps = table_(SH.APPLICANTS);
+  var a = apps.rows.filter(function (r) { return r['Applicant ID'] === e['Applicant ID']; })[0];
+  if (!a || (EMAIL_FROM_STAGES[e.Type] || []).indexOf(a.Stage) === -1) return '';
+  var moves = table_(SH.HISTORY).rows.filter(function (h) { return h['Applicant ID'] === a['Applicant ID'] && h['To Stage'] === a.Stage && h['From Stage'] && h['From Stage'] !== a.Stage; });
+  var prev = moves.length ? String(moves[moves.length - 1]['From Stage']) : '';
+  if (!prev || STAGES.indexOf(prev) === -1) return '';
+  var wasHire = a.Stage === 'Hired' || a.Stage === 'Onboarding';
+  setStage_(apps, a, prev, by, 'Back: the ' + e.Type + ' email was not sent (Don\'t send)');
+  if (wasHire && prev !== 'Hired' && prev !== 'Onboarding') {
+    update_(apps, a, { Tags: String(a.Tags || '').split(',').map(function (x) { return x.trim(); }).filter(function (x) { return x && x.indexOf('Hired |') !== 0; }).join(', ') });
+  }
+  return prev;
 }

@@ -14,6 +14,8 @@ const ICON: Record<string, string> = {
   '/reports': 'M4 20V10m6 10V4m6 16v-7m4 7H2',
   '/attention': 'M12 3l10 18H2zm0 7v5m0 3v.5',
   '/approvals': 'M4 6h16v12H4zm0 0l8 7 8-7',
+  '/jobs': 'M4 7h16v12H4zM9 7V5h6v2M4 12h16',
+  '/templates': 'M5 4h14v16H5zM8 8h8M8 12h8M8 16h5',
   '/team': 'M9 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6zm8 0a3 3 0 1 0 0-6M3 20a6 6 0 0 1 12 0m2-6a6 6 0 0 1 4 6',
   '/help': 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zm-2.5-11a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6v.6M12 17v.5'
 };
@@ -24,6 +26,8 @@ const LINKS = [
   { href: '/session', label: "This Week's Session" },
   { href: '/talent', label: 'Talent Pool' },
   { href: '/reports', label: 'Reports' },
+  { href: '/jobs', label: 'Job Ads' },
+  { href: '/templates', label: 'Email Templates' },
   { href: '/attention', label: 'Needs Attention' },
   { href: '/approvals', label: 'Needs Approval' },
   { href: '/team', label: 'Active Team Members' },

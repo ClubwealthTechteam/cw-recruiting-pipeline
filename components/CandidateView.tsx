@@ -9,6 +9,7 @@ import { s, fullName, ymd, formatDate, formatDateTime, statusEmails, sessionTime
 import Presence from '@/components/Presence';
 import NotDuplicate from '@/components/NotDuplicate';
 import ProfileKeys from '@/components/ProfileKeys';
+import PauseInvitesButton from '@/components/PauseInvitesButton';
 import StageBadge from '@/components/StageBadge';
 import StageForm from '@/components/StageForm';
 import { NoteForm, EmailForm } from '@/components/SmallForms';
@@ -146,7 +147,7 @@ export default async function CandidateView({ appId, panel = false }: { appId: s
     <>
       <section className="panel">
         <h2>Conversation</h2>
-        <Inbox id={appId} thread={detail.thread} hasEmail={!!a.Email} isOlj={s(a.Source) === 'OLJ'} emailReady={d.emailSending === 'ON'} />
+        <Inbox id={appId} firstName={s(a['First Name'])} templates={(d.emailTemplates || []).map((x) => ({ name: s(x.Name), subject: s(x.Subject), body: s(x.Body) }))} thread={detail.thread} hasEmail={!!a.Email} isOlj={s(a.Source) === 'OLJ'} emailReady={d.emailSending === 'ON'} />
       </section>
       <section className="panel" data-tour="timeline">
         <h2>Timeline</h2>
@@ -171,7 +172,9 @@ export default async function CandidateView({ appId, panel = false }: { appId: s
         <p className="hint" style={{ marginTop: 0 }}>Invites sent: {s(a['Invite Count']) || '0'}{a['Zoom Minutes'] ? ` · Zoom: ${s(a['Zoom Minutes'])} min` : ''}{a.Arrival ? ` · ${s(a.Arrival)}` : ''}</p>
         {s(a['Do Not Invite']) && <p className="error"><strong>Do not invite.</strong> {s(a['Do Not Invite'])}.</p>}
         {!s(a['Do Not Invite']) && s(a['Invite Hold']) && <p className="hint"><strong>Not invited automatically:</strong> {s(a['Invite Hold'])}. You can still invite by hand if this is a mistake.</p>}
-        <InviteButtons id={appId} isOlj={s(a.Source) === 'OLJ'} hasEmail={!!a.Email} emailReady={d.emailSending === 'ON'} blocked={!!s(a['Do Not Invite'])} />
+        {splitTags(a.Tags).includes('Invites paused') && <p className="hint"><strong>Invites are paused</strong> for this applicant: nothing is sent automatically, and Send invite is blocked until you resume.</p>}
+        <InviteButtons id={appId} isOlj={s(a.Source) === 'OLJ'} hasEmail={!!a.Email} emailReady={d.emailSending === 'ON'} blocked={!!s(a['Do Not Invite']) || splitTags(a.Tags).includes('Invites paused')} />
+        <p style={{ margin: '8px 0 0' }}><PauseInvitesButton id={appId} paused={splitTags(a.Tags).includes('Invites paused')} /></p>
         <p className="hint">Invites are for the next Wednesday, 2:00 PM PT. You see the email before it is sent.</p>
         <h3>Move to another session</h3>
         <SessionForm ids={[appId]} current={ymd(a['Interview Date'])} />

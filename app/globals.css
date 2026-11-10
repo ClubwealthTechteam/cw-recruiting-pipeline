@@ -594,3 +594,5 @@ input:focus, select:focus, textarea:focus { outline: 3px solid #dbe7fb; border-c
 .edit-tools { display: flex; gap: 6px; margin-bottom: 8px; }
 .edit-frame { height: 460px; border: 2px solid #cfe0fb; }
 .profile .inline-form select, .profile .inline-form input { max-width: 100%; }
+.ai-suggest { display: flex; gap: 8px; padding: 10px; background: var(--violet-bg); border-radius: 10px; }
+.ai-suggest input { background: #fff; }

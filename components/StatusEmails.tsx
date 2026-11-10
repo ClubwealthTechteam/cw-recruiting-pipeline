@@ -1,6 +1,7 @@
 'use client';
 import { useRef, useState } from 'react';
 import { useAction } from './useAction';
+import { toast } from './Toaster';
 
 export type StatusEmail = {
   id: string; type: string; to: string; subject: string; body?: string; status: string;
@@ -18,6 +19,7 @@ export function PendingStatusEmail({ e, name }: { e: StatusEmail; name?: string 
     <div className="approval">
       <div className="approval-head">
         <strong>{NAME[e.type] || e.type} ready to send — waiting for approval</strong>
+        <AttachButton emailId={e.id} />
         <button type="button" className="btn small-btn edit-btn" onClick={() => setEditing(true)} title="Edit this email before it is sent">
           <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" /></svg>
           Edit
@@ -38,7 +40,11 @@ export function PendingStatusEmail({ e, name }: { e: StatusEmail; name?: string 
           Approve &amp; send
         </button>
         <button className="btn ghost" disabled={busy}
-          onClick={() => confirm("Don't send this email? It will be cancelled.") && run({ action: 'skipEmail', emailId: e.id }, { success: 'Email cancelled' })}>
+          onClick={async () => {
+            if (!confirm("Don't send this email? It is cancelled and the applicant goes back to the stage they had before (e.g. Hired → Passed Interview).")) return;
+            const r = await run({ action: 'skipEmail', emailId: e.id }, { success: 'Email cancelled' });
+            if (r && typeof r === 'object' && (r as { backTo?: string }).backTo) toast(`Moved back to ${(r as { backTo: string }).backTo} ✓`);
+          }}>
           Don&apos;t send
         </button>
         {error && <span className="error">{error}</span>}
@@ -101,5 +107,28 @@ function EditStatusEmail({ e, onDone }: { e: StatusEmail; onDone: () => void }) 
         {error && <span className="error">{error}</span>}
       </div>
     </div>
+  );
+}
+
+/** Attach a file (PDF, Word, Excel, image or text, 3 MB max): saved in Drive, and a download link goes into the email. */
+function AttachButton({ emailId }: { emailId: string }) {
+  const { run, busy } = useAction();
+  const input = useRef<HTMLInputElement>(null);
+  async function pick(f: File | undefined) {
+    if (!f) return;
+    if (f.size > 3 * 1024 * 1024) { toast('The file is larger than 3 MB.', 'error'); return; }
+    const data = await new Promise<string>((ok, fail) => { const r = new FileReader(); r.onload = () => ok(String(r.result).split(',')[1] || ''); r.onerror = () => fail(new Error('Could not read the file.')); r.readAsDataURL(f); });
+    const r = await run({ action: 'attachToEmail', emailId, file: { name: f.name, type: f.type, data } }, { success: `${f.name} attached ✓ (a download link is in the email)` });
+    if (r && typeof r === 'object' && (r as { shared?: string }).shared === 'private') toast('Attached, but Drive did not allow sharing by link: the applicant may not be able to open it.', 'error');
+    if (input.current) input.current.value = '';
+  }
+  return (
+    <>
+      <input ref={input} type="file" hidden accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg,.txt" onChange={(x) => pick(x.target.files?.[0])} />
+      <button type="button" className="btn small-btn edit-btn" disabled={busy} onClick={() => input.current?.click()} title="Attach a file to this email" data-tour="attach">
+        <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12.5l-8.5 8.5a5 5 0 0 1-7-7L14 5.5a3.5 3.5 0 0 1 5 5L10.5 19a2 2 0 0 1-3-3L15 8.5" /></svg>
+        {busy ? 'Attaching…' : 'Attach file'}
+      </button>
+    </>
   );
 }
