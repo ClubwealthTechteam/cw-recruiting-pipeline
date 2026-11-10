@@ -1,11 +1,10 @@
 import Link from 'next/link';
 import { Suspense } from 'react';
 import { getData, getDataWithHistory } from '@/lib/sheet';
-import { STAGES, s, fullName, ymd, formatDate, formatDateTime, positionCounts, weekOf, scoreSummary, splitTags, isTest, SOURCES, SOURCE_LABEL, zoomLive, appliedRange } from '@/lib/pipeline';
+import { STAGES, s, fullName, ymd, formatDate, formatDateTime, positionCounts, weekOf, scoreSummary, splitTags, isTest, SOURCES, SOURCE_LABEL, zoomLive, appliedRange, APPLIED_OPTIONS } from '@/lib/pipeline';
 import SavedViews from '@/components/SavedViews';
 import CandidatesTable, { type CandidateRow } from '@/components/CandidatesTable';
 import AddApplicant from '@/components/AddApplicant';
-import AppliedFilter, { APPLIED_OPTIONS } from '@/components/AppliedFilter';
 import DataError from '@/components/DataError';
 
 const PAGE = 200;
@@ -85,17 +84,13 @@ export default async function Candidates({ searchParams }: { searchParams: Promi
       <form className="filters" action="/candidates">
         <input type="hidden" name="stage" value={stage} />
         <input name="q" defaultValue={p.q} placeholder="Search name, email or position" />
-        <AppliedFilter value={p.applied} from={p.from} to={p.to} />
-        <select name="fit" defaultValue={p.fit || ''}><option value="">All fits</option><option>Great</option><option>Good</option><option>Not Fit</option><option>Held back</option><option value="Not screened">Not rated yet</option></select>
-        <select name="source" defaultValue={p.source || ''}><option value="">All sources</option>{SOURCES.map((x) => <option key={x} value={x}>{SOURCE_LABEL[x]}</option>)}</select>
-        <select name="position" defaultValue={p.position || ''}><option value="">All positions</option>{positions.map((x) => <option key={x}>{x}</option>)}</select>
-        <select name="score" defaultValue={p.score || ''}><option value="">Any score</option><option value="rated">Rated</option><option value="unrated">Not rated (0)</option><option value="Passed">Suggested Passed</option><option value="Not Fit">Suggested Not Fit</option></select>
+        {['fit', 'source', 'position', 'score', 'session', 'applied', 'from', 'to'].map((k) => p[k as keyof Q] ? <input key={k} type="hidden" name={k} value={p[k as keyof Q]} /> : null)}
         {allTags.length > 0 && <select name="tag" defaultValue={p.tag || ''}><option value="">All tags</option>{allTags.map((t) => <option key={t}>{t}</option>)}</select>}
         {p.week && <input type="hidden" name="week" value={p.week} />}
-        <select name="session" defaultValue={p.session || ''}><option value="">All sessions</option>{sessions.map((x) => <option key={x} value={x}>{formatDate(x)}</option>)}</select>
         <label className="check-label"><input type="checkbox" name="history" value="1" defaultChecked={showHistory} /> Include applicants from before the system</label>
         <button className="btn">Filter</button>
-        <Link href="/candidates" className="btn ghost">Clear</Link>
+        <Link href="/candidates" className="btn ghost">Clear all filters</Link>
+        <span className="hint">Filter by Fit, Score, Stage, Position, Source, Applied or Session with the ▾ on each column header.</span>
       </form>
       <div className="result-count">
         <p><strong>{rows.filter((a) => !isTest(a)).length}</strong> applicant{rows.filter((a) => !isTest(a)).length === 1 ? '' : 's'}{p.position ? <> for <strong>{p.position}</strong></> : ''}{p.tag ? <> tagged <strong>{p.tag}</strong></> : ''}{p.week ? <> who applied the week of <strong>{formatDate(p.week)}</strong></> : ''}{range ? <> who applied <strong>{p.applied === 'custom' ? `${range[0].startsWith('0000') ? 'up to' : `${formatDate(range[0])} –`} ${range[1].startsWith('9999') ? 'now' : formatDate(range[1])}` : (APPLIED_OPTIONS.find(([k]) => k === p.applied)?.[1] || '').replace(/^Applied /, '')}</strong></> : ''} match these filters{rows.some(isTest) ? <span className="muted"> (plus {rows.filter(isTest).length} test applicant, not counted)</span> : ''}</p>
@@ -109,7 +104,15 @@ export default async function Candidates({ searchParams }: { searchParams: Promi
         </div>
       </div>
       <AddApplicant />
-      <div data-tour="cand-table"><CandidatesTable rows={tableRows} /></div>
+      <div data-tour="cand-table"><CandidatesTable rows={tableRows} filters={{
+        fit: { param: 'fit', options: [['Great', 'Great'], ['Good', 'Good'], ['Not Fit', 'Not Fit'], ['Held back', 'Held back'], ['Not screened', 'Not rated yet']].map(([value, label]) => ({ value, label })) },
+        score: { param: 'score', options: [['rated', 'Rated'], ['unrated', 'Not rated (0)'], ['Passed', 'Suggested Passed'], ['Not Fit', 'Suggested Not Fit']].map(([value, label]) => ({ value, label })) },
+        stage: { param: 'stage', noAll: true, defaultValue: 'Active', options: ['Active', 'All', ...STAGES].map((x) => ({ value: x, label: x === 'Active' ? 'Active (not closed)' : x === 'All' ? 'All stages' : x })) },
+        position: { param: 'position', options: positions.map((x) => ({ value: x, label: x })) },
+        source: { param: 'source', options: SOURCES.map((x) => ({ value: x, label: SOURCE_LABEL[x] })) },
+        applied: { param: 'applied', dates: true, options: APPLIED_OPTIONS.filter(([k]) => k).map(([value, label]) => ({ value, label: value === 'custom' ? 'Between dates:' : label.replace(/^Applied /, '') })) },
+        session: { param: 'session', options: sessions.map((x) => ({ value: x, label: formatDate(x) })) }
+      }} /></div>
       {rows.length > PAGE && (
         <div className="pager">
           {page > 1 && <Link href={link({ page: String(page - 1) })} className="btn ghost">Previous</Link>}

@@ -9,6 +9,7 @@ import { InlineStage, QuickNote } from './InlineActions';
 import UndoButton from './UndoButton';
 import ZoomBadge from './ZoomBadge';
 import { useSince, isNew } from './useSince';
+import HeaderFilter, { type ColumnFilter } from './HeaderFilter';
 import type { ZoomLive } from '@/lib/pipeline';
 
 export type CandidateRow = {
@@ -22,7 +23,8 @@ const AV = ['#1f5fbf', '#6941c6', '#1d7a43', '#c4320a', '#0e7490', '#9a6200', '#
 export const initials = (n: string) => n.split(' ').filter(Boolean).slice(0, 2).map((x) => x[0]).join('').toUpperCase() || '?';
 export const avatarColor = (id: string) => AV[(id.charCodeAt(id.length - 1) || 0) % AV.length];
 
-export default function CandidatesTable({ rows }: { rows: CandidateRow[] }) {
+export default function CandidatesTable({ rows, filters = {} }: { rows: CandidateRow[]; filters?: Record<string, ColumnFilter> }) {
+  const th = (label: string, key?: string, title?: string) => <th title={key && filters[key] ? undefined : title}>{key && filters[key] ? <HeaderFilter label={label} filter={filters[key]} title={title} /> : label}</th>;
   const [sel, setSel] = useState<string[]>([]);
   const since = useSince();
   const [tip, setTip] = useState<{ x: number; y: number; row: CandidateRow } | null>(null);
@@ -38,7 +40,7 @@ export default function CandidatesTable({ rows }: { rows: CandidateRow[] }) {
         <thead>
           <tr>
             <th className="check"><input type="checkbox" checked={all} onChange={() => setSel(all ? [] : rows.map((r) => r.id))} aria-label="Select all" /></th>
-            <th>Name</th><th>Fit</th><th title="Interview scorecard average (0 = not rated yet)">Score</th><th>Stage</th><th>Position</th><th>Source</th><th title="Newest first">Applied (PT) ↓</th><th>Session</th><th>Confirmed</th><th>Zoom min</th><th>Invites</th>
+            <th>Name</th>{th('Fit', 'fit')}{th('Score', 'score', 'Interview scorecard average (0 = not rated yet)')}{th('Stage', 'stage')}{th('Position', 'position')}{th('Source', 'source')}{th('Applied (PT) ↓', 'applied', 'Newest first')}{th('Session', 'session')}<th>Confirmed</th><th>Zoom min</th><th>Invites</th>
           </tr>
         </thead>
         <tbody>

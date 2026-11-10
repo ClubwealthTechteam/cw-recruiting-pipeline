@@ -367,3 +367,10 @@ export function appliedRange(key: string | undefined, from?: string, to?: string
     default: return null;
   }
 }
+
+/** The Candidates "Applied" choices (used by the header filter). */
+export const APPLIED_OPTIONS: [string, string][] = [
+  ['', 'Applied: any time'], ['today', 'Applied today'], ['yesterday', 'Applied yesterday'], ['3d', 'Applied in the last 3 days'],
+  ['7d', 'Applied in the last 7 days'], ['14d', 'Applied in the last 14 days'], ['30d', 'Applied in the last 30 days'],
+  ['thisweek', 'Applied this week (Mon–Sun)'], ['lastweek', 'Applied last week'], ['custom', 'Applied between dates…']
+];
