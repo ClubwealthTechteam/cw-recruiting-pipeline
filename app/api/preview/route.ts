@@ -2,6 +2,9 @@ import { NextResponse } from 'next/server';
 import { currentUser } from '@/lib/auth';
 import { read } from '@/lib/sheet';
 
+/** Google Sheets can take a while (Tara, 2026-11-10): give it up to a minute instead of failing early. */
+export const maxDuration = 60;
+
 export type Preview = { to: string; subject: string; body: string; session: string; name: string; doNotInvite: string };
 
 /** What an email will look like before it is sent (nothing is queued). */

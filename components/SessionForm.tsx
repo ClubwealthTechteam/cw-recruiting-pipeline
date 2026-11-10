@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import { upcomingSessions, formatDate } from '@/lib/pipeline';
 import { useAction } from './useAction';
-import SendPreview from './SendPreview';
+import SendPreview, { type SendEdits } from './SendPreview';
 
 /**
  * Moves one or more applicants to another Wednesday session. Emails still queued for the old date are cancelled.
@@ -21,14 +21,14 @@ export default function SessionForm({ ids, current, onDone, compact = false }: {
     if (invite) { setPreview(true); return; } // see the invite (and the count) before it goes out
     await move();
   }
-  async function move() {
+  async function move(edits?: SendEdits) {
     setPreview(false);
-    const r = await run({ action: 'moveSession', ids, date, sendInvite: invite, reason });
+    const r = await run({ action: 'moveSession', ids, date, sendInvite: invite, reason, ...(edits?.edited ? { edited: edits.edited } : {}) });
     if (r) { setDate(''); setInvite(false); setReason(''); onDone?.(); }
   }
   return (
     <form onSubmit={submit} className="inline-form">
-      {preview && ids[0] && <SendPreview req={{ kind: 'reinvite', id: ids[0], date }} ids={ids} count={ids.length} title={`Move to Wednesday, ${formatDate(date)} and send a new invite`} onClose={() => setPreview(false)} onSend={move} />}
+      {preview && ids[0] && <SendPreview req={{ kind: 'reinvite', id: ids[0], date }} ids={ids} count={ids.length} title={`Move to Wednesday, ${formatDate(date)} and send a new invite`} onClose={() => setPreview(false)} onSend={(e) => move(e)} />}
       <select value={date} onChange={(e) => setDate(e.target.value)} disabled={!ids.length || busy} aria-label="Session">
         <option value="">{compact ? 'Session…' : 'Move to session…'}</option>
         {options.map((d) => <option key={d} value={d}>Wed, {formatDate(d)} · 2:00 PM PT</option>)}

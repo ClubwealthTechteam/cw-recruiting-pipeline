@@ -98,6 +98,8 @@ function settings_() {
   if (Object.prototype.toString.call(cv) === '[object Date]') cv = Utilities.formatDate(cv, TZ, 'yyyy-MM-dd');
   if (typeof setCancelledSessions === 'function') setCancelledSessions(cv);
   if (typeof setActivePositions === 'function') setActivePositions(map.ACTIVE_POSITIONS ? map.ACTIVE_POSITIONS.Value : '');
+  // PAUSED_POSITIONS (any position, incl. OLJ-only ones) replaces ACTIVE_POSITIONS once Job Ads is saved again
+  if (map.PAUSED_POSITIONS && typeof setPausedPositions === 'function') setPausedPositions(map.PAUSED_POSITIONS.Value);
   return {
     // Sheets turns typed dates like 2026-10-28 into Date values; always hand back YYYY-MM-DD text.
     get: function (k) {
@@ -479,7 +481,7 @@ function processReplies_(st) {
       return;
     }
     var m = matchReply_(apps.rows, rep, today);
-    if (m.applicant && rep.Category === 'Other' && confirmsFor(rep['Reply Text'], m.applicant['First Name'], m.applicant['Last Name'])) {
+    if (m.applicant && rep.Category === 'Other' && confirmsFor(rep['Reply Text'], m.applicant['First Name'], m.applicant['Last Name'], m.method === 'Email')) {
       update_(reps, rep, { Category: 'Confirmed' });
     }
     var action;
@@ -1002,28 +1004,39 @@ function onPipelineChange() {
 // ---------- the 5-minute job ----------
 
 function tick() {
+  // Each step takes the lock on its own (Tara, 2026-11-10): a save from the site waits for one step (seconds), not
+  // the whole run (which can take over a minute when the team sync or Zoom tracking runs).
   var lock = LockService.getScriptLock();
-  if (!lock.tryLock(30000)) return;
+  var st, c = {};
+  var steps = [
+    ['rename', function () { renameStageOnce_(st, 'Onboarded', 'Onboarding', 'STAGE_RENAMED_ONBOARDING'); return 0; }],
+    ['intake', function () { return importNewFormRows_(st); }],
+    ['manualInvites', function () { return syncManualInvites_(st); }],
+    ['screenTracks', function () { return backfillScreenTracks_(); }],
+    ['emailed', function () { return dispatchEmails_(st); }],
+    ['sent', function () { return applySentEmails_(st); }],
+    ['replies', function () { return processReplies_(st); }],
+    ['olj', function () { return processOLJ_(st); }],
+    ['emailApps', function () { return processEmailApps_(st); }],
+    ['team', function () { return safeTeamSync_(st); }],
+    ['banned', function () { return bannedSweep_(st); }],
+    ['zoomTracked', function () { return safeZoomTrack_(st); }],
+    ['offboarded', function () { return offboardSync_(st); }],
+    ['zoom', function () { return processZoom_(st); }],
+    ['reminders', function () { return queueReminders_(st); }],
+    ['slack', function () { return slackAlerts_(st); }]
+  ];
   try {
-    var st = settings_();
-    renameStageOnce_(st, 'Onboarded', 'Onboarding', 'STAGE_RENAMED_ONBOARDING');
-    var c = {
-      intake: importNewFormRows_(st),
-      manualInvites: syncManualInvites_(st),
-      screenTracks: backfillScreenTracks_(),
-      emailed: dispatchEmails_(st),
-      sent: applySentEmails_(st),
-      replies: processReplies_(st),
-      olj: processOLJ_(st),
-      emailApps: processEmailApps_(st),
-      team: safeTeamSync_(st),
-      banned: bannedSweep_(st),
-      zoomTracked: safeZoomTrack_(st),
-      offboarded: offboardSync_(st),
-      zoom: processZoom_(st),
-      reminders: queueReminders_(st)
-    };
-    c.slack = slackAlerts_(st);
+    for (var i = 0; i < steps.length; i++) {
+      if (!lock.tryLock(30000)) { c.skipped = steps[i][0]; break; } // the rest runs on the next tick
+      try {
+        st = settings_();
+        var v = steps[i][1]();
+        if (steps[i][0] !== 'rename') c[steps[i][0]] = v;
+      } finally {
+        lock.releaseLock();
+      }
+    }
     if (Object.keys(c).some(function (k) { return c[k]; })) {
       log_('tick', 'ok', c);
       notifySite_();
@@ -1031,8 +1044,6 @@ function tick() {
   } catch (err) {
     log_('tick', 'error', '', String(err && err.message || err));
     throw err;
-  } finally {
-    lock.releaseLock();
   }
 }
 
@@ -1324,7 +1335,14 @@ function doPost(e) {
     res = { ok: true, data: api_(req) };
     if (['zoomRows', 'chatAsk', 'chatAnswer'].indexOf(req.action) !== -1) notifySite_();
   } catch (err) {
-    res = { ok: false, error: String(err && err.message || err) };
+    var msg = String(err && err.message || err);
+    // The 5-minute update or another save was still running (Tara, 2026-11-10): say so plainly; the site retries once.
+    if (/lock timeout|another process was holding the lock/i.test(msg)) {
+      // nothing was changed yet: safe for the site to try again
+      res = { ok: false, busy: true, error: 'The system was busy finishing another update. Nothing was saved. Please try again in a moment.' };
+    } else if (/too many times|Service Spreadsheets (failed|timed out)|Service error/i.test(msg)) {
+      res = { ok: false, error: 'Google Sheets did not respond in time. Refresh the page to check whether your change was saved before trying again.' };
+    } else res = { ok: false, error: msg };
   }
   return ContentService.createTextOutput(JSON.stringify(res)).setMimeType(ContentService.MimeType.JSON);
 }
@@ -1582,7 +1600,7 @@ function api_(req) {
       cancelledSessions: Object.keys(CANCELLED_SESSIONS).sort(),
       zoomTracking: zoomTrackingStatus_(st),
       autoInvites: st.get('AUTO_INVITES') === 'OFF' ? 'OFF' : 'ON',
-      jobAds: OPEN_POSITIONS.map(function (p) { return { position: p, active: ACTIVE_POSITIONS.indexOf(p) !== -1 }; }),
+      jobAds: jobAds_(),
       emailTemplates: optionalRows_(SH.TEMPLATES)
     };
   }
@@ -1825,7 +1843,7 @@ function api_(req) {
       if (req.channel === 'email') {
         if (st2.get('EMAIL_SENDING') !== 'ON') throw new Error('Email sending is not connected yet (CareersCW in Zapier). Use OLJ, or invite by hand.');
         if (!ai.Email) throw new Error('This applicant has no email address.');
-        queueEmail_(st2, ai, 'Invite', inviteEmail(session, new Date()), session);
+        queueEmail_(st2, ai, 'Invite', withEdits_(inviteEmail(session, new Date()), req.edited), session, req.by);
       } else if (req.channel === 'olj') {
         if (ai.Source !== 'OLJ' || !ai['Source Ref']) throw new Error('This applicant did not come from OnlineJobs.ph.');
         append_(outT, {
@@ -1867,7 +1885,7 @@ function api_(req) {
             });
             res.olj++;
           } else {
-            queueEmail_(st2, an, 'Re-invite', inviteEmail(toDay, new Date()), toDay, req.by);
+            queueEmail_(st2, an, 'Re-invite', withEdits_(inviteEmail(toDay, new Date()), req.edited), toDay, req.by);
             res.reinvited++;
           }
         });
@@ -1907,7 +1925,15 @@ function api_(req) {
           if (st2.get('EMAIL_SENDING') !== 'ON') mail = 'no invite: email sending is off';
           else if (!am.Email) mail = 'no invite: no email address';
           else if (doNotInvite_(st2, am)) mail = 'no invite: ' + doNotInvite_(st2, am);
-          else if (queueEmail_(st2, am, 'Re-invite', inviteEmail(newDate, new Date()), newDate, req.by)) { mail = 'invite queued'; invitedM++; }
+          else if (queueEmail_(st2, am, 'Re-invite', withEdits_(inviteEmail(newDate, new Date()), req.edited), newDate, req.by)) { mail = 'invite queued'; invitedM++; }
+        }
+        // Rescheduled (Tara, 2026-11-10): with a new invite sent they are Invited again until they reply to it with
+        // their name, which moves them to Confirmed as usual.
+        if (mail === 'invite queued' || mail === 'OLJ invite queued') {
+          if (am.Stage !== 'Invited' && RESCHEDULE_TO_INVITED.indexOf(am.Stage) !== -1) {
+            setStage_(apps, am, 'Invited', req.by, 'Session moved to ' + newDate + '; waiting for them to confirm the new date');
+          }
+          update_(apps, am, { 'Confirmed At': '' });
         }
         update_(apps, am, {
           'Interview Date': newDate, 'Reminder Sent At': '',
@@ -1972,7 +1998,9 @@ function api_(req) {
       if (!ar.Email) throw new Error('This applicant has no email address.');
       var blockedR = doNotInvite_(st2, ar);
       if (blockedR) throw new Error('Do not contact: ' + blockedR + '.');
-      var q = queueEmail_(st2, ar, 'Reply', replyEmail(personalize(text, ar)), ymdOf_(ar['Interview Date']), req.by);
+      var rmail = replyEmail(personalize(text, ar));
+      if (String(req.subject || '').trim()) rmail.subject = String(req.subject).replace(/[\r\n]+/g, ' ').trim().slice(0, 200);
+      var q = queueEmail_(st2, ar, 'Reply', rmail, ymdOf_(ar['Interview Date']), req.by);
       return { queued: !!q };
     }
     if (req.action === 'replyToEmail') {
@@ -2155,6 +2183,24 @@ function renameStageOnce_(st, from, to, flag) {
  * Edit a status email while it waits in Needs Approval (Miguel, 2026-11-05: pencil icon on the site). Only the subject
  * and body change; scripts, styles, frames and event handlers are removed, and the banner is put back if it was deleted.
  */
+/** Stages that go back to Invited when their session is moved and a new invite goes out. */
+var RESCHEDULE_TO_INVITED = ['Applied', 'Invited', 'Confirmed', 'Open for re-invite', 'No Show', 'No Confirmation'];
+
+/**
+ * The pencil on an email preview (Tara, 2026-11-10): the subject and email as edited there replace the generated
+ * ones. The banner is kept, as in Needs Approval edits.
+ */
+function withEdits_(mail, edited) {
+  if (!edited || typeof edited !== 'object') return mail;
+  var subject = String(edited.subject || '').replace(/[\r\n]+/g, ' ').trim().slice(0, 200);
+  var body = cleanEmailHtml(String(edited.body || ''));
+  if (!subject) throw new Error('The subject cannot be empty.');
+  if (!body.replace(/<[^>]*>/g, '').trim()) throw new Error('The email cannot be empty.');
+  if (body.length > 60000) throw new Error('The email is too long.');
+  if (body.indexOf(BANNER_URL) === -1) body += SIGNATURE_HTML.replace('<p>Cheers,<br>Club Wealth</p>', '');
+  return { subject: subject, body: body };
+}
+
 function editPendingEmail_(req) {
   ensureCols_(SH.OUTBOX, DECIDED_COLS.concat(['Edited By', 'Edited At']));
   var out = table_(SH.OUTBOX);
@@ -2310,11 +2356,116 @@ function setAutoInvites_(st, req) {
 }
 
 /** Job Ads checklist: which open positions are active. Applicants for a paused ad are screened but not invited. */
+/**
+ * Job Ads rows (Tara, 2026-11-10): the open positions, plus every position with an OnlineJobs.ph post that had an
+ * applicant message in the last 14 days. A position is Paused when it is in Settings PAUSED_POSITIONS.
+ */
+function jobAds_() {
+  var overrides = positionOverrides_();
+  var since = new Date().getTime() - 14 * 86400000;
+  var olj = {};
+  var oljT = optionalTable_(SH.OLJ);
+  (oljT ? oljT.rows : []).forEach(function (r) {
+    var at = r['Last Message At'] instanceof Date ? r['Last Message At'].getTime() : Date.parse(String(r['Last Message At'] || ''));
+    if (!at || at < since) return;
+    var post = String(r['Job Post'] || '').replace(/&amp;/g, '&').trim();
+    var pos = standardPosition(post, overrides);
+    if (!pos) return;
+    var o = olj[pos] || (olj[pos] = { posts: {}, last: 0 });
+    o.posts[post] = true;
+    if (at > o.last) o.last = at;
+  });
+  var names = OPEN_POSITIONS.concat(Object.keys(olj).filter(function (p) { return OPEN_POSITIONS.indexOf(p) === -1 && p !== 'Other'; }));
+  return names.map(function (p) {
+    var o = olj[p];
+    return {
+      position: p, active: PAUSED_POSITIONS.indexOf(p) === -1, open: OPEN_POSITIONS.indexOf(p) !== -1,
+      oljPosts: o ? Object.keys(o.posts) : [], oljLast: o ? Utilities.formatDate(new Date(o.last), TZ, 'yyyy-MM-dd') : ''
+    };
+  });
+}
+
+/** The tab may not exist yet on older sheets. */
+function optionalTable_(name) {
+  try { return table_(name); } catch (e) { return null; }
+}
+
+var ON_HOLD_STAGES = ['Applied', 'Invited', 'Confirmed'];
+var ON_HOLD_TAG = 'Position on hold';
+var ON_HOLD_TEMPLATE = 'Position on hold';
+var ON_HOLD_FALLBACK = {
+  subject: 'ClubWealth | Update on Your Application',
+  body: 'Dear [First Name],\n\nThank you for your interest in the [Position] role at Club Wealth and for the time and effort you put into ' +
+    'your application. We truly appreciate it.\n\nWe\'d like to let you know that this position is currently on hold. This is simply a ' +
+    'matter of timing on our end, and we\'ll keep your application on file and reach out to you directly once it reopens, so there\'s ' +
+    'no need to reapply.\n\nThank you for your patience, and we wish you all the best.'
+};
+
+/**
+ * Save on Job Ads. req.active = the ticked positions, req.shown = every position on the page. A position that goes
+ * from Active to Paused emails its Applied, Invited and Confirmed applicants the saved "Position on hold" template
+ * (OLJ applicants without an email get it as an OLJ message), cancels their queued invites and reminders, and tags
+ * them "Position on hold". Ticking it again removes the tag (nobody is emailed).
+ */
 function setActivePositions_(st, req) {
-  var list = (req.active || []).map(String).filter(function (p) { return OPEN_POSITIONS.indexOf(p) !== -1; });
-  st.set('ACTIVE_POSITIONS', list.length ? list.join(', ') : 'NONE');
-  setActivePositions(list.length ? list.join(', ') : 'NONE');
-  return { active: ACTIVE_POSITIONS };
+  var shown = (req.shown || OPEN_POSITIONS).map(String);
+  var active = (req.active || []).map(String);
+  var before = PAUSED_POSITIONS.slice();
+  var paused = before.filter(function (p) { return shown.indexOf(p) === -1; })
+    .concat(shown.filter(function (p) { return active.indexOf(p) === -1; }));
+  st.set('PAUSED_POSITIONS', paused.length ? paused.join(', ') : 'NONE');
+  // kept for older copies of the site that still read it
+  var openActive = OPEN_POSITIONS.filter(function (p) { return paused.indexOf(p) === -1; });
+  st.set('ACTIVE_POSITIONS', openActive.length ? openActive.join(', ') : 'NONE');
+  setPausedPositions(paused.join(', '));
+  var newly = paused.filter(function (p) { return before.indexOf(p) === -1; });
+  var reopened = before.filter(function (p) { return paused.indexOf(p) === -1; });
+  var res = { active: ACTIVE_POSITIONS, paused: paused, emailed: 0, olj: 0, skipped: [], reopened: reopened };
+  if (!newly.length && !reopened.length) return res;
+  var apps = table_(SH.APPLICANTS);
+  var out = table_(SH.OUTBOX);
+  var tpl = templateByName_(ON_HOLD_TEMPLATE) || ON_HOLD_FALLBACK;
+  apps.rows.forEach(function (a) {
+    if (a.Historical) return;
+    var tags = String(a.Tags || '').split(',').map(function (x) { return x.trim(); }).filter(String);
+    var held = tags.indexOf(ON_HOLD_TAG) !== -1;
+    if (reopened.indexOf(String(a.Position)) !== -1 && held) {
+      update_(apps, a, { Tags: tags.filter(function (x) { return x !== ON_HOLD_TAG; }).join(', ') });
+      return;
+    }
+    if (newly.indexOf(String(a.Position)) === -1 || ON_HOLD_STAGES.indexOf(a.Stage) === -1 || held) return;
+    var name = (a['First Name'] + ' ' + a['Last Name']).trim() || a['Applicant ID'];
+    if (doNotInvite_(st, a)) { res.skipped.push(name + ' (do not contact)'); return; }
+    out.rows.forEach(function (e) {
+      if (e['Applicant ID'] !== a['Applicant ID'] || e.Status !== 'Queued') return;
+      if (['Invite', 'Re-invite', 'OLJ Invite', 'Reminder', 'Confirmation'].indexOf(e.Type) === -1) return;
+      update_(out, e, { Status: 'Cancelled', Error: 'Position on hold (job ad paused by ' + req.by + ')' });
+    });
+    var text = personalize(tpl.body, a);
+    if (a.Email && st.get('EMAIL_SENDING') === 'ON') {
+      var mail = replyEmail(text);
+      mail.subject = String(tpl.subject || ON_HOLD_FALLBACK.subject);
+      if (queueEmail_(st, a, 'Reply', mail, ymdOf_(a['Interview Date']), req.by)) res.emailed++;
+    } else if (a.Source === 'OLJ' && a['Source Ref']) {
+      append_(out, {
+        'Email ID': id_('E'), 'Applicant ID': a['Applicant ID'], Type: 'OLJ Message', To: 'OLJ:' + a['Source Ref'],
+        Subject: '(OnlineJobs.ph message)', Body: text, 'Interview Date': ymdOf_(a['Interview Date']), 'Queued At': nowStr_(),
+        Status: 'Queued', 'Queued By': req.by
+      });
+      res.olj++;
+    } else { res.skipped.push(name + ' (no email address)'); return; }
+    tags.push(ON_HOLD_TAG);
+    update_(apps, a, { Tags: tags.join(', '), Notes: (a.Notes ? a.Notes + '\n' : '') + nowStr_() + ' ' + req.by + ': job ad paused; "Position on hold" message sent' });
+  });
+  log_('jobAds', 'paused ' + newly.join(', '), { emailed: res.emailed, olj: res.olj, skipped: res.skipped.length, by: req.by }, '');
+  return res;
+}
+
+/** A saved Email Templates row by name: {subject, body}, or null. */
+function templateByName_(name) {
+  var t = optionalTable_(SH.TEMPLATES);
+  var r = t && t.rows.filter(function (x) { return String(x.Name).trim().toLowerCase() === name.toLowerCase(); })[0];
+  return r && String(r.Body || '').trim() ? { subject: String(r.Subject || ''), body: String(r.Body) } : null;
 }
 
 /** Profile "Pause invites" / "Resume invites": the tag "Invites paused" keeps every automatic invite away from them. */

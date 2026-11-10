@@ -2,6 +2,9 @@ import { NextResponse } from 'next/server';
 import { currentUser } from '@/lib/auth';
 import { getEmailThread } from '@/lib/sheet';
 
+/** Google Sheets can take a while (Tara, 2026-11-10): give it up to a minute instead of failing early. */
+export const maxDuration = 60;
+
 /** GET /api/thread?email=… : the CareersCW emails from one address (Needs Attention, unmatched replies). */
 export async function GET(req: Request) {
   if (!(await currentUser())) return NextResponse.json({ ok: false, error: 'Please sign in again.' }, { status: 401 });

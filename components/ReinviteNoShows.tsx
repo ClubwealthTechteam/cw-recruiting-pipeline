@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import { upcomingSessions, formatDate } from '@/lib/pipeline';
 import { useAction } from './useAction';
-import SendPreview from './SendPreview';
+import SendPreview, { type SendEdits } from './SendPreview';
 
 /**
  * After a session: everyone who was No Show or No Confirmation goes to Open for re-invite on the chosen Wednesday
@@ -19,15 +19,15 @@ export default function ReinviteNoShows({ session, count, sampleId }: { session:
     if (sampleId) { setPreview(true); return; }
     if (confirm(`Re-invite ${count} ${count === 1 ? 'person' : 'people'} (No Show / No Confirmation) to Wednesday, ${formatDate(date)}? Each gets the pre-interview invite.`)) void go();
   }
-  async function go() {
+  async function go(edits?: SendEdits) {
     setPreview(false);
-    const r = await run({ action: 'reinviteNoShows', session, date });
+    const r = await run({ action: 'reinviteNoShows', session, date, ...(edits?.edited ? { edited: edits.edited } : {}) });
     if (r) setDone(`${Number(r.reinvited) + Number(r.olj)} re-invited (${r.reinvited} by email, ${r.olj} on OLJ)${Array.isArray(r.skipped) && r.skipped.length ? `, ${r.skipped.length} skipped` : ''}.`);
   }
   if (!count) return null;
   return (
     <div className="inline-form" data-tour="reinvite">
-      {preview && sampleId && <SendPreview req={{ kind: 'reinvite', id: sampleId, date }} count={count} title={`Re-invite to Wednesday, ${formatDate(date)}`} onClose={() => setPreview(false)} onSend={go} />}
+      {preview && sampleId && <SendPreview req={{ kind: 'reinvite', id: sampleId, date }} count={count} title={`Re-invite to Wednesday, ${formatDate(date)}`} onClose={() => setPreview(false)} onSend={(e) => go(e)} />}
       <strong>{count} No Show / No Confirmation</strong>
       <select value={date} onChange={(e) => setDate(e.target.value)} disabled={busy} aria-label="Re-invite to">
         {options.map((d) => <option key={d} value={d}>Wed, {formatDate(d)}</option>)}

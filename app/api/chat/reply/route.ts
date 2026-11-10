@@ -2,6 +2,9 @@ import { NextResponse } from 'next/server';
 import { read } from '@/lib/sheet';
 import { validChatToken } from '@/lib/chat';
 
+/** Google Sheets can take a while (Tara, 2026-11-10): give it up to a minute instead of failing early. */
+export const maxDuration = 60;
+
 /** The chat routine posts its answer here, once per question. */
 export async function POST(req: Request) {
   const body = await req.json().catch(() => ({}));

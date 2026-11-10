@@ -10,10 +10,15 @@ export default async function JobAds() {
   try { d = await getData(); } catch (e) { return <DataError error={e} />; }
   const ads = d.jobAds || [];
   const since = daysAgoPT(7);
-  const stats: Record<string, { week: number; held: number }> = {};
+  const stats: Record<string, { week: number; held: number; waiting: number }> = {};
   for (const ad of ads) {
     const mine = d.applicants.filter((a) => s(a.Position) === ad.position && s(a.Historical) !== 'Y');
-    stats[ad.position] = { week: mine.filter((a) => ymd(a['Applied At (PT)']) > since).length, held: mine.filter((a) => s(a['Invite Hold']).startsWith('Job ad paused')).length };
+    stats[ad.position] = {
+      week: mine.filter((a) => ymd(a['Applied At (PT)']) > since).length,
+      held: mine.filter((a) => s(a['Invite Hold']).startsWith('Job ad paused')).length,
+      // who gets the "Position on hold" email if this ad is paused
+      waiting: mine.filter((a) => ['Applied', 'Invited', 'Confirmed'].includes(s(a.Stage)) && !/Position on hold/.test(s(a.Tags)) && s(a.Source) !== 'Test').length
+    };
   }
   return (
     <>

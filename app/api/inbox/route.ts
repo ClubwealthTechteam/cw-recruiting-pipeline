@@ -2,6 +2,9 @@ import { NextResponse } from 'next/server';
 import { currentUser } from '@/lib/auth';
 import { getInbox, getConversation } from '@/lib/sheet';
 
+/** Google Sheets can take a while (Tara, 2026-11-10): give it up to a minute instead of failing early. */
+export const maxDuration = 60;
+
 /** GET /api/inbox?channel=email|olj : the inbox panel's list. GET /api/inbox?id=… : one applicant's conversation. */
 export async function GET(req: Request) {
   if (!(await currentUser())) return NextResponse.json({ ok: false, error: 'Please sign in again.' }, { status: 401 });

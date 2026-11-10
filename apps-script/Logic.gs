@@ -308,7 +308,19 @@ var ACTIVE_POSITIONS = OPEN_POSITIONS.slice();
 function setActivePositions(value) {
   var v = String(value || '').trim();
   ACTIVE_POSITIONS = v ? v.split(',').map(function (x) { return x.trim(); }).filter(function (x) { return OPEN_POSITIONS.indexOf(x) !== -1; }) : OPEN_POSITIONS.slice();
+  PAUSED_POSITIONS = OPEN_POSITIONS.filter(function (p) { return ACTIVE_POSITIONS.indexOf(p) === -1; });
 }
+/**
+ * Paused job ads (Settings PAUSED_POSITIONS, any position name; 'NONE' = nothing paused). Until it is first saved,
+ * the paused positions are the open ones missing from ACTIVE_POSITIONS.
+ */
+var PAUSED_POSITIONS = [];
+function setPausedPositions(value) {
+  var v = String(value || '').trim();
+  PAUSED_POSITIONS = v && v !== 'NONE' ? v.split(',').map(function (x) { return x.trim(); }).filter(String) : [];
+  ACTIVE_POSITIONS = OPEN_POSITIONS.filter(function (p) { return PAUSED_POSITIONS.indexOf(p) === -1; });
+}
+
 /** The tag that pauses invites for one applicant (the profile's Pause invites button). */
 var PAUSE_TAG = 'Invites paused';
 function invitesPaused(a) {
@@ -382,13 +394,15 @@ var ACCEPTS = /\b(confirm(ed|ing)?|accept(ed|ing)?|available|attend(ing)?|will (
  * it names them (first name + surname anywhere) or says they accept/confirm/will attend, and is not a
  * can't-attend or a question. (Today's replies: "I confirm my availability…, <full name>", "I gladly accept".)
  */
-function confirmsFor(text, first, last) {
+function confirmsFor(text, first, last, fromOwnEmail) {
   var body = stripQuoted(text);
   if (!body || CANNOT_ATTEND.test(body) || body.indexOf('?') !== -1) return false;
-  var words = normName(body).split(' ');
+  var words = normName(body).split(' ').filter(String);
   var f = normName(first).split(' ')[0], l = normName(last).split(' ').pop();
   var named = !!(f && l && words.indexOf(f) !== -1 && words.indexOf(l) !== -1);
-  return named || ACCEPTS.test(body);
+  // Just their first name (e.g. "Krista") counts when it came from their own email address (Tara, 2026-11-10).
+  var firstOnly = !!(fromOwnEmail && f && words.length <= 4 && words.indexOf(f) !== -1);
+  return named || firstOnly || ACCEPTS.test(body);
 }
 
 function classifyReply(subject, text) {

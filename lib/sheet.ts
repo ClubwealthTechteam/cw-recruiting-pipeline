@@ -1,10 +1,12 @@
 import 'server-only';
 import { unstable_cache, revalidateTag } from 'next/cache';
-import { ptStamp, setCancelledSessions } from '@/lib/pipeline';
+import { ptStamp, setCancelledSessions, linkApplications } from '@/lib/pipeline';
 
 export type Row = Record<string, string | number>;
 /** One Active Team Members row: the Onboarding copy with site edits on top; edited = { field: value in the Onboarding sheet }. */
 export type TeamMember = Record<string, string> & { edited?: Record<string, string> };
+/** One Job Ads row. oljPosts: OnlineJobs.ph posts for it with applicants in the last 14 days (oljLast = latest). */
+export type JobAd = { position: string; active: boolean; open?: boolean; oljPosts?: string[]; oljLast?: string };
 export type PipelineData = {
   applicants: Row[];
   history: Row[];
@@ -18,7 +20,7 @@ export type PipelineData = {
   emailSending?: string;
   cancelledSessions?: string[];
   autoInvites?: 'ON' | 'OFF';
-  jobAds?: { position: string; active: boolean }[];
+  jobAds?: JobAd[];
   emailTemplates?: Row[];
   zoomTracking?: { day?: string; since?: string; by?: string; lastPoll?: string; done?: boolean; configured?: boolean };
   fetchedAt?: number;
@@ -28,10 +30,18 @@ export type PipelineData = {
 function normalize(d: PipelineData): PipelineData {
   setCancelledSessions(d.cancelledSessions);
   for (const a of d.applicants) if (a['Applied At (PT)']) a['Applied At (PT)'] = ptStamp(a['Applied At (PT)']);
+  linkApplications(d.applicants, d.team || []);
   return d;
 }
 
-async function call<T>(body: Record<string, unknown>): Promise<T> {
+const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * One request to the Apps Script. When it answers "busy" (another save or the 5-minute update held the sheet and
+ * nothing was changed) it is tried again, up to twice, a few seconds apart, so a save rarely fails for that reason
+ * (Tara, 2026-11-10).
+ */
+async function call<T>(body: Record<string, unknown>, tries = 3): Promise<T> {
   const url = process.env.APPS_SCRIPT_URL;
   const secret = process.env.APPS_SCRIPT_SECRET;
   if (!url || !secret) throw new Error('APPS_SCRIPT_URL / APPS_SCRIPT_SECRET are not set');
@@ -42,8 +52,11 @@ async function call<T>(body: Record<string, unknown>): Promise<T> {
     cache: 'no-store',
     redirect: 'follow'
   });
-  if (!res.ok) throw new Error(`Pipeline service returned ${res.status}`);
-  const json = (await res.json()) as { ok: boolean; data?: T; error?: string };
+  if (!res.ok) throw new Error(res.status >= 500 ? 'Google did not respond in time. Refresh the page to check whether your change was saved.' : `Pipeline service returned ${res.status}`);
+  const raw = await res.text();
+  let json: { ok: boolean; data?: T; error?: string; busy?: boolean };
+  try { json = JSON.parse(raw); } catch { throw new Error('Google sent back an error page instead of an answer. Refresh the page to check whether your change was saved.'); }
+  if (!json.ok && json.busy && tries > 1) { await wait(4000); return call<T>(body, tries - 1); }
   if (!json.ok) throw new Error(json.error || 'Pipeline service error');
   return json.data as T;
 }

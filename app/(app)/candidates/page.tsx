@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { Suspense } from 'react';
 import { getData, getDataWithHistory } from '@/lib/sheet';
-import { STAGES, s, fullName, ymd, formatDate, formatDateTime, positionCounts, weekOf, scoreSummary, splitTags, isTest, SOURCES, SOURCE_LABEL, zoomLive, appliedRange, APPLIED_OPTIONS } from '@/lib/pipeline';
+import { STAGES, s, fullName, ymd, formatDate, formatDateTime, positionCounts, weekOf, scoreSummary, splitTags, isTest, counted, isRepeat, SOURCES, SOURCE_LABEL, zoomLive, appliedRange, APPLIED_OPTIONS } from '@/lib/pipeline';
 import SavedViews from '@/components/SavedViews';
 import CandidatesTable, { type CandidateRow } from '@/components/CandidatesTable';
 import AddApplicant from '@/components/AddApplicant';
@@ -19,7 +19,7 @@ export default async function Candidates({ searchParams }: { searchParams: Promi
   try { d = await (showHistory ? getDataWithHistory() : getData()); } catch (e) { return <DataError error={e} />; }
   const base = d.applicants.filter((a) => showHistory || s(a.Historical) !== 'Y');
   const stage = p.stage || 'Active';
-  const real = base.filter((a) => !isTest(a)); // test applicants are listed but not counted
+  const real = base.filter(counted); // test applicants and second applications are listed but not counted
   const counts: Record<string, number> = { Active: real.filter((a) => !CLOSED.includes(s(a.Stage))).length, All: real.length };
   for (const st of STAGES) counts[st] = real.filter((a) => s(a.Stage) === st).length;
 
@@ -44,7 +44,7 @@ export default async function Candidates({ searchParams }: { searchParams: Promi
     (!p.score || (p.score === 'rated' ? score(a).count > 0 : p.score === 'unrated' ? score(a).count === 0 : score(a).suggestion === p.score)) &&
     (!q || `${fullName(a)} ${s(a.Email)} ${s(a['Position (as typed)'])}`.toLowerCase().includes(q))
   );
-  const byPosition = positionCounts(matchOthers.filter((a) => !isTest(a)));
+  const byPosition = positionCounts(matchOthers.filter(counted));
   let rows = matchOthers.filter((a) => !p.position || s(a.Position) === p.position);
   rows = rows.sort((x, y) => s(y['Applied At (PT)']).localeCompare(s(x['Applied At (PT)'])));
   const page = Math.max(1, Number(p.page) || 1);
@@ -59,7 +59,7 @@ export default async function Candidates({ searchParams }: { searchParams: Promi
     changed: [s(a['Applied At (PT)']), s(a['Stage Updated At']), s(a['Confirmed At'])],
     position: s(a.Position), applied: formatDateTime(s(a['Applied At (PT)'])), interview: formatDate(ymd(a['Interview Date'])),
     confirmed: a['Confirmed At'] ? formatDate(ymd(a['Confirmed At'])) : '', minutes: s(a['Zoom Minutes']),
-    invites: s(a['Invite Count']), historical: s(a.Historical) === 'Y', test: isTest(a),
+    invites: s(a['Invite Count']), historical: s(a.Historical) === 'Y', test: isTest(a), repeat: isRepeat(a), otherPositions: s(a['Other Positions']), formerVA: s(a['Former VA']),
     fit: s(a['Screen Tag']), fitTrack: s(a['Screen Track']), fitSummary: s(a['Screen Summary']), hold: s(a['Invite Hold']),
     score: score(a).count ? score(a).average.toFixed(1) : '', scoreSuggestion: score(a).suggestion, tags: splitTags(a.Tags),
     zoom: live.get(s(a['Applicant ID']))
@@ -93,9 +93,9 @@ export default async function Candidates({ searchParams }: { searchParams: Promi
         <span className="hint">Filter by Fit, Score, Stage, Position, Source, Applied or Session with the ▾ on each column header.</span>
       </form>
       <div className="result-count">
-        <p><strong>{rows.filter((a) => !isTest(a)).length}</strong> applicant{rows.filter((a) => !isTest(a)).length === 1 ? '' : 's'}{p.position ? <> for <strong>{p.position}</strong></> : ''}{p.tag ? <> tagged <strong>{p.tag}</strong></> : ''}{p.week ? <> who applied the week of <strong>{formatDate(p.week)}</strong></> : ''}{range ? <> who applied <strong>{p.applied === 'custom' ? `${range[0].startsWith('0000') ? 'up to' : `${formatDate(range[0])} –`} ${range[1].startsWith('9999') ? 'now' : formatDate(range[1])}` : (APPLIED_OPTIONS.find(([k]) => k === p.applied)?.[1] || '').replace(/^Applied /, '')}</strong></> : ''} match these filters{rows.some(isTest) ? <span className="muted"> (plus {rows.filter(isTest).length} test applicant, not counted)</span> : ''}</p>
+        <p><strong>{rows.filter(counted).length}</strong> applicant{rows.filter(counted).length === 1 ? '' : 's'}{p.position ? <> for <strong>{p.position}</strong></> : ''}{p.tag ? <> tagged <strong>{p.tag}</strong></> : ''}{p.week ? <> who applied the week of <strong>{formatDate(p.week)}</strong></> : ''}{range ? <> who applied <strong>{p.applied === 'custom' ? `${range[0].startsWith('0000') ? 'up to' : `${formatDate(range[0])} –`} ${range[1].startsWith('9999') ? 'now' : formatDate(range[1])}` : (APPLIED_OPTIONS.find(([k]) => k === p.applied)?.[1] || '').replace(/^Applied /, '')}</strong></> : ''} match these filters{rows.some((a) => !counted(a)) ? <span className="muted"> (plus {rows.filter((a) => !counted(a)).length} test or repeat application{rows.filter((a) => !counted(a)).length === 1 ? '' : 's'}, not counted)</span> : ''}</p>
         <div className="position-chips" aria-label="Applicants by position">
-          <Link href={link({ position: undefined })} className={!p.position ? 'chip active' : 'chip'}>All positions <span className="count">{matchOthers.filter((a) => !isTest(a)).length}</span></Link>
+          <Link href={link({ position: undefined })} className={!p.position ? 'chip active' : 'chip'}>All positions <span className="count">{matchOthers.filter(counted).length}</span></Link>
           {byPosition.map((x) => (
             <Link key={x.position} href={link({ position: x.position })} className={p.position === x.position ? 'chip active' : 'chip'}>
               {x.position} <span className="count">{x.count}</span>
