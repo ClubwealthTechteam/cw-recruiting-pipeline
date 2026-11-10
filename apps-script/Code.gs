@@ -2425,6 +2425,8 @@ function setActivePositions_(st, req) {
   var apps = table_(SH.APPLICANTS);
   var out = table_(SH.OUTBOX);
   var tpl = templateByName_(ON_HOLD_TEMPLATE) || ON_HOLD_FALLBACK;
+  // the wording as checked (and maybe edited) in the preview on Job Ads (Miguel, 2026-11-10)
+  if (String(req.text || '').trim()) tpl = { subject: String(req.subject || '').trim() || tpl.subject, body: String(req.text).slice(0, 5000) };
   apps.rows.forEach(function (a) {
     if (a.Historical) return;
     var tags = String(a.Tags || '').split(',').map(function (x) { return x.trim(); }).filter(String);
