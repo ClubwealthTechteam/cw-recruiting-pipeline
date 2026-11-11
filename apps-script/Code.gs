@@ -862,14 +862,26 @@ function processZoom_(st) {
   var apps = table_(SH.APPLICANTS);
   var n = 0;
   var byId = indexBy_(apps.rows, 'Applicant ID');
+  // While the session is being tracked, an unmatched Zoom name is tried again every check (Miguel, 2026-11-11);
+  // it becomes "Not an invitee" only when the session is finalized.
+  var liveDay = st.get('ZOOM_TRACKING_FOR');
+  var tracking = !!liveDay && st.get('ZOOM_TRACKING_DONE') !== liveDay;
   z.rows.forEach(function (r) {
+    var day = ymdOf_(r['Interview Date']);
+    var liveRow = tracking && day === liveDay;
     // Live during the session: matched rows are rewritten every few minutes, so keep the applicant's minutes so far current.
     if (r['Matched Applicant ID'] && !r.Result) {
-      if (liveZoom_(apps, byId[r['Matched Applicant ID']], r)) n++;
-      return;
+      var ma = byId[r['Matched Applicant ID']];
+      if (liveRow && ma && !nameMatches(r['Parsed Name'], ma['First Name'], ma['Last Name'])) {
+        // matched by the older, looser rule: undo and match again
+        update_(z, r, { 'Matched Applicant ID': '' });
+        if (PRE_INTERVIEW.indexOf(ma.Stage) !== -1) update_(apps, ma, { 'Zoom Minutes': '', Arrival: '', 'Minutes Early': '' });
+      } else {
+        if (liveZoom_(apps, ma, r)) n++;
+        return;
+      }
     }
-    if (r['Matched Applicant ID'] || r.Result) return;
-    var day = ymdOf_(r['Interview Date']);
+    if (r['Matched Applicant ID'] || (r.Result && !(liveRow && r.Result === 'Not an invitee'))) return;
     var cands = apps.rows.filter(function (a) {
       return ymdOf_(a['Interview Date']) === day && PRE_INTERVIEW.indexOf(a.Stage) !== -1 &&
         nameMatches(r['Parsed Name'], a['First Name'], a['Last Name']);
@@ -880,8 +892,11 @@ function processZoom_(st) {
       if (tie.length === 1) cands = tie;
     }
     if (cands.length === 1) {
-      update_(z, r, { 'Matched Applicant ID': cands[0]['Applicant ID'] });
+      update_(z, r, { 'Matched Applicant ID': cands[0]['Applicant ID'], Result: '' });
       liveZoom_(apps, cands[0], r);
+    } else if (liveRow && !cands.length) {
+      if (r.Result) update_(z, r, { Result: '' }); // not matched yet: try again next check
+      return;
     } else {
       update_(z, r, { Result: cands.length ? 'Ambiguous' : 'Not an invitee' });
       if (cands.length) flag_('', 'Zoom name matches several applicants', r['Zoom Display Name'] + ' on ' + day);
@@ -2368,7 +2383,7 @@ function writeZoomRows_(day, rows) {
     var f = { 'Recorded At': nowStr_() };
     cols.forEach(function (c) { f[c] = row[c]; });
     if (old) {
-      if (old.Result) return; // finalized rows are never rewritten
+      if (old.Result && old.Result !== 'Not an invitee') return; // finalized rows are never rewritten
       update_(z, old, f);
     } else {
       f['Interview Date'] = day; f['Parsed Name'] = row['Parsed Name'];

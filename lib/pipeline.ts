@@ -312,7 +312,8 @@ export const splitTags = (v: unknown) => s(v).split(',').map((t) => t.trim()).fi
 export type ZoomLive = { inNow: boolean; lastLeave: string; minutes: string };
 export function zoomLive(zoom: Row[], now = new Date()): Map<string, ZoomLive> {
   const today = todayPT(now);
-  const hm = (v: unknown) => s(v).replace(/^(\d):/, '0$1:');
+  // "13:50", or a time the sheet turned into "1899-12-30 13:50:00": always "HH:mm"
+  const hm = (v: unknown) => { const m = s(v).match(/(\d{1,2}):(\d{2})(?::\d{2})?$/); return m ? `${m[1].padStart(2, '0')}:${m[2]}` : ''; };
   const rows = zoom.filter((z) => ymd(z['Interview Date']) === today && s(z['Matched Applicant ID']) && !s(z.Result));
   const latest = rows.reduce((m, z) => (hm(z['Last Leave']) > m ? hm(z['Last Leave']) : m), '');
   const out = new Map<string, ZoomLive>();
