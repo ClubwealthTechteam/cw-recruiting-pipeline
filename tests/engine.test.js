@@ -1424,3 +1424,14 @@ test('No Show / No Confirmation asking to reschedule: Open for re-invite, the Re
   assert.equal(r.data.backTo, 'No Confirmation');
   assert.equal(a().Stage, 'No Confirmation');
 });
+
+test('Needs Approval bulk send: several approved at once, the ones that cannot go are listed', () => {
+  const env = batchEnv();
+  env.api({ action: 'setStage', by: 'Am', ids: ['F-2', 'F-3'], stage: 'Benched' });
+  const pend = env.rows('Outbox').filter((e) => e.Status === 'Pending approval').map((e) => e['Email ID']);
+  assert.equal(pend.length, 2);
+  const r = env.api({ action: 'approveEmails', by: 'Miguel', emailIds: [...pend, 'E-nope'] });
+  assert.equal(r.data.queued, 2);
+  assert.equal(r.data.failed.length, 1);
+  assert.equal(env.rows('Outbox').filter((e) => pend.includes(e['Email ID']) && e.Status === 'Queued').length, 2);
+});
