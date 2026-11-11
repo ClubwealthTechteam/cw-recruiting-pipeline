@@ -20,6 +20,8 @@ export default function MassSend({ people, templates, stages }: { people: Recipi
   const [subject, setSubject] = useState('');
   const [text, setText] = useState('');
   const [preview, setPreview] = useState(false);
+  // "Put them on hold" (Miguel, 2026-11-11): ticked by itself when the Position on hold template is inserted
+  const [hold, setHold] = useState(false);
   const [showList, setShowList] = useState(false);
   const { run, busy } = useAction();
   const positions = [...new Set(people.map((p) => p.position).filter(Boolean))].sort();
@@ -33,11 +35,11 @@ export default function MassSend({ people, templates, stages }: { people: Recipi
   const filtered = !!(f.stage || f.position || f.session || f.after);
   async function send(edits?: SendEdits) {
     setPreview(false);
-    const r = await run({ action: 'bulkMessage', channel, ids, subject: edits?.subject ?? subject, text: edits?.text ?? text }, { success: channel === 'olj' ? 'OLJ messages queued ✓ (sent on the next OLJ run)' : 'Emails queued ✓ (about 6 go out every 5 minutes)' });
+    const r = await run({ action: 'bulkMessage', channel, ids, subject: edits?.subject ?? subject, text: edits?.text ?? text, hold }, { success: channel === 'olj' ? 'OLJ messages queued ✓ (sent on the next OLJ run)' : 'Emails queued ✓ (about 6 go out every 5 minutes)' });
     if (r && typeof r === 'object') {
       const d = r as { queued?: number; skipped?: string[] };
       toast(`${d.queued || 0} queued${d.skipped?.length ? ` · ${d.skipped.length} skipped: ${d.skipped.slice(0, 3).join(', ')}${d.skipped.length > 3 ? '…' : ''}` : ''}`);
-      setText(''); setSubject(''); setLeft([]);
+      setText(''); setSubject(''); setLeft([]); setHold(false);
     }
   }
   const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLSelectElement | HTMLInputElement>) => { setF({ ...f, [k]: e.target.value }); setLeft([]); };
@@ -70,7 +72,7 @@ export default function MassSend({ people, templates, stages }: { people: Recipi
       )}
       <div className="stack-form" style={{ alignItems: 'stretch', marginTop: 8 }}>
         {templates.length > 0 && (
-          <select value="" onChange={(e) => { const tp = templates.find((x) => x.name === e.target.value); if (tp) { setText(tp.body); if (tp.subject && channel === 'email') setSubject(tp.subject); } }} aria-label="Insert a template">
+          <select value="" onChange={(e) => { const tp = templates.find((x) => x.name === e.target.value); if (tp) { setText(tp.body); if (tp.subject && channel === 'email') setSubject(tp.subject); setHold(/on hold/i.test(tp.name)); } }} aria-label="Insert a template">
             <option value="">Insert a template…</option>
             {templates.map((x) => <option key={x.name} value={x.name}>{x.name}</option>)}
           </select>
@@ -78,6 +80,7 @@ export default function MassSend({ people, templates, stages }: { people: Recipi
         {channel === 'email' && <input value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="Subject (blank = RE: ClubWealth | Pre-Interview invite)" />}
         <textarea rows={8} value={text} onChange={(e) => setText(e.target.value)} placeholder={'Hi {first_name},\n\n…'} />
         <p className="hint" style={{ margin: 0 }}>{channel === 'olj' ? 'Plain text on OnlineJobs.ph, sent at the next OLJ run (4 times a day).' : 'Club Wealth sign-off and banner are added. Sent from CareersCW, about 6 every 5 minutes.'} [First Name], [Name] and [Position] are filled in for each person.</p>
+        <label className="check-label"><input type="checkbox" checked={hold} onChange={(e) => setHold(e.target.checked)} /> Put them on hold: no Wednesday reminder or invites after this, and not marked No Show (tag &quot;Position on hold&quot;)</label>
         <div><button className="btn primary" disabled={!ids.length || !text.trim() || busy} onClick={() => setPreview(true)}>Preview and send to {ids.length}</button></div>
       </div>
       {preview && ids[0] && (

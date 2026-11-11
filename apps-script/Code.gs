@@ -211,7 +211,7 @@ function doNotInvite_(st, a) {
 function queueInvite_(st, a, interviewYmd, type) {
   // Before Zapier is connected Am invites by hand; AUTO_INVITES = OFF keeps the system from queuing duplicates.
   if (st.get('MODE') === 'LIVE' && st.get('AUTO_INVITES') === 'OFF') return null;
-  if (invitesPaused(a)) return null; // the profile's Pause invites (Miguel, 2026-11-10)
+  if (invitesPaused(a) || onHold(a)) return null; // the profile's Pause invites / Position on hold
   var blocked = doNotInvite_(st, a);
   if (blocked) {
     var already = table_(SH.FLAGS).rows.some(function (f) {
@@ -826,6 +826,7 @@ function processZoom_(st) {
     apps.rows.forEach(function (a) {
       if (ymdOf_(a['Interview Date']) !== fin || PRE_INTERVIEW.indexOf(a.Stage) === -1) return;
       var m = minutes[a['Applicant ID']];
+      if (m === undefined && onHold(a)) return; // told the position is on hold: not a no-show
       // Not seen in Zoom: No Show only for people who confirmed; invited but never confirmed is No Confirmation.
       var res = m !== undefined ? zoomResult(m, minMin) : a.Stage === 'Confirmed' ? 'No Show' : 'No Confirmation';
       if (m !== undefined) update_(apps, a, { 'Zoom Minutes': Math.round(m) });
@@ -883,7 +884,7 @@ function queueReminders_(st) {
   var n = 0;
   apps.rows.forEach(function (a) {
     // OLJ applicants get their reminder as an OLJ message (routines/olj_confirm.js), never by email.
-    if (a.Stage === 'Confirmed' && a.Source !== 'OLJ' && ymdOf_(a['Interview Date']) === today && !a['Reminder Sent At']) {
+    if (a.Stage === 'Confirmed' && a.Source !== 'OLJ' && ymdOf_(a['Interview Date']) === today && !a['Reminder Sent At'] && !onHold(a)) {
       queueEmail_(st, a, 'Reminder', reminderEmail(today), today);
       n++;
     }
@@ -1010,6 +1011,7 @@ function tick() {
   var st, c = {};
   var steps = [
     ['rename', function () { renameStageOnce_(st, 'Onboarded', 'Onboarding', 'STAGE_RENAMED_ONBOARDING'); return 0; }],
+    ['onHold', function () { return onHoldBackfill_(st); }],
     ['intake', function () { return importNewFormRows_(st); }],
     ['manualInvites', function () { return syncManualInvites_(st); }],
     ['screenTracks', function () { return backfillScreenTracks_(); }],
@@ -2391,6 +2393,48 @@ function optionalTable_(name) {
 }
 
 var ON_HOLD_STAGES = ['Applied', 'Invited', 'Confirmed'];
+
+/**
+ * Puts one applicant on hold (Miguel, 2026-11-11): tag "Position on hold" and cancel their queued invites,
+ * reminders and confirmations. A tagged applicant gets no reminder or invite and is not marked No Show.
+ */
+function putOnHold_(apps, out, a, by, note) {
+  out.rows.forEach(function (e) {
+    if (e['Applicant ID'] !== a['Applicant ID'] || e.Status !== 'Queued') return;
+    if (['Invite', 'Re-invite', 'OLJ Invite', 'Reminder', 'Confirmation'].indexOf(e.Type) === -1) return;
+    update_(out, e, { Status: 'Cancelled', Error: 'Position on hold (' + by + ')' });
+  });
+  var tags = String(a.Tags || '').split(',').map(function (x) { return x.trim(); }).filter(String);
+  if (tags.indexOf(ON_HOLD_TAG) === -1) tags.push(ON_HOLD_TAG);
+  update_(apps, a, { Tags: tags.join(', '), Notes: (a.Notes ? a.Notes + '\n' : '') + nowStr_() + ' ' + by + ': ' + note });
+}
+
+/**
+ * One time (Miguel, 2026-11-11): the "Position on hold" email went out by mass email on Nov 10, which did not put
+ * anyone on hold, so the Wednesday reminder still reached them. Everyone who got an email with the template's
+ * subject and is still Applied / Invited / Confirmed is put on hold now.
+ */
+function onHoldBackfill_(st) {
+  if (st.get('ON_HOLD_BACKFILL') === 'DONE') return 0;
+  var subject = (templateByName_(ON_HOLD_TEMPLATE) || ON_HOLD_FALLBACK).subject;
+  var out = table_(SH.OUTBOX);
+  var apps = table_(SH.APPLICANTS);
+  var byId = indexBy_(apps.rows, 'Applicant ID');
+  var got = {};
+  out.rows.forEach(function (e) {
+    if (e.Type === 'Reply' && e.Status === 'Sent' && String(e.Subject).replace(/^\[TEST\] /, '') === subject) got[e['Applicant ID']] = true;
+  });
+  var n = 0;
+  Object.keys(got).forEach(function (id) {
+    var a = byId[id];
+    if (!a || ON_HOLD_STAGES.indexOf(a.Stage) === -1 || onHold(a)) return;
+    putOnHold_(apps, out, a, 'System', '"Position on hold" email was sent; now on hold (no reminders or invites)');
+    n++;
+  });
+  st.set('ON_HOLD_BACKFILL', 'DONE');
+  log_('onHoldBackfill', 'ok', { onHold: n }, '');
+  return n;
+}
 var ON_HOLD_TAG = 'Position on hold';
 var ON_HOLD_TEMPLATE = 'Position on hold';
 var ON_HOLD_FALLBACK = {
@@ -2438,11 +2482,6 @@ function setActivePositions_(st, req) {
     if (newly.indexOf(String(a.Position)) === -1 || ON_HOLD_STAGES.indexOf(a.Stage) === -1 || held) return;
     var name = (a['First Name'] + ' ' + a['Last Name']).trim() || a['Applicant ID'];
     if (doNotInvite_(st, a)) { res.skipped.push(name + ' (do not contact)'); return; }
-    out.rows.forEach(function (e) {
-      if (e['Applicant ID'] !== a['Applicant ID'] || e.Status !== 'Queued') return;
-      if (['Invite', 'Re-invite', 'OLJ Invite', 'Reminder', 'Confirmation'].indexOf(e.Type) === -1) return;
-      update_(out, e, { Status: 'Cancelled', Error: 'Position on hold (job ad paused by ' + req.by + ')' });
-    });
     var text = personalize(tpl.body, a);
     if (a.Email && st.get('EMAIL_SENDING') === 'ON') {
       var mail = replyEmail(text);
@@ -2456,8 +2495,7 @@ function setActivePositions_(st, req) {
       });
       res.olj++;
     } else { res.skipped.push(name + ' (no email address)'); return; }
-    tags.push(ON_HOLD_TAG);
-    update_(apps, a, { Tags: tags.join(', '), Notes: (a.Notes ? a.Notes + '\n' : '') + nowStr_() + ' ' + req.by + ': job ad paused; "Position on hold" message sent' });
+    putOnHold_(apps, out, a, req.by, 'job ad paused; "Position on hold" message sent');
   });
   log_('jobAds', 'paused ' + newly.join(', '), { emailed: res.emailed, olj: res.olj, skipped: res.skipped.length, by: req.by }, '');
   return res;
@@ -2625,7 +2663,8 @@ function bulkMessage_(st, byId, req) {
   if (channel === 'email' && st.get('EMAIL_SENDING') !== 'ON') throw new Error('Email sending is off (Settings EMAIL_SENDING).');
   var subject = String(req.subject || '').trim().slice(0, 200);
   var out = channel === 'olj' ? table_(SH.OUTBOX) : null;
-  var res = { queued: 0, skipped: [] };
+  var res = { queued: 0, skipped: [], held: 0 };
+  var holdApps = null, holdOut = null;
   ids.forEach(function (id) {
     var a = byId[id];
     if (!a) return;
@@ -2634,6 +2673,11 @@ function bulkMessage_(st, byId, req) {
       (channel === 'email' && !a.Email ? 'no email address' : '') || (channel === 'olj' && (a.Source !== 'OLJ' || !a['Source Ref']) ? 'not from OnlineJobs.ph' : '');
     if (why) { res.skipped.push(name + ' (' + why + ')'); return; }
     var body = personalize(text, a);
+    if (req.hold && ON_HOLD_STAGES.indexOf(a.Stage) !== -1) {
+      // "Put them on hold" (Miguel, 2026-11-11): no reminder, invite or No Show for them after this message
+      putOnHold_(holdApps || (holdApps = table_(SH.APPLICANTS)), holdOut || (holdOut = table_(SH.OUTBOX)), holdApps.rows.filter(function (r) { return r['Applicant ID'] === a['Applicant ID']; })[0] || a, req.by, 'put on hold with a mass ' + channel + ' message');
+      res.held++;
+    }
     if (channel === 'email') {
       var mail = replyEmail(body);
       if (subject) mail.subject = subject;

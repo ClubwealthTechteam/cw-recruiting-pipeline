@@ -321,6 +321,11 @@ function setPausedPositions(value) {
   ACTIVE_POSITIONS = OPEN_POSITIONS.filter(function (p) { return PAUSED_POSITIONS.indexOf(p) === -1; });
 }
 
+/** Told their position is on hold (tag "Position on hold"): no reminders, no invites, never marked No Show. */
+function onHold(a) {
+  return String(a && a.Tags || '').split(',').some(function (t) { return t.trim() === 'Position on hold'; });
+}
+
 /** The tag that pauses invites for one applicant (the profile's Pause invites button). */
 var PAUSE_TAG = 'Invites paused';
 function invitesPaused(a) {
@@ -332,6 +337,7 @@ function inviteHoldReason(a) {
   if (OPEN_POSITIONS.indexOf(pos) === -1) return 'Position not open: ' + (pos || 'unknown');
   if (ACTIVE_POSITIONS.indexOf(pos) === -1) return 'Job ad paused: ' + pos;
   if (invitesPaused(a)) return 'Invites paused for this applicant';
+  if (onHold(a)) return 'Position on hold';
   if (String(a.Source) === 'OLJ') return '';
   if (/^\s*no\b/i.test(String(a['Has Experience'] || ''))) return 'No experience';
   if (/below/i.test(String(a['Internet Speed'] || ''))) return 'Internet below 50 Mbps';

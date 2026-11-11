@@ -1356,3 +1356,35 @@ test('job ads list positions that are live on OnlineJobs.ph (applicants in the l
   assert.deepEqual(m.oljPosts, ['AI-SAVVY MARKETING & ADS SPECIALIST']);
   assert.equal(ads.some((x) => x.position === 'General VA'), false, 'older than 14 days');
 });
+
+test('position on hold: mass email with "Put them on hold" stops the reminder and the No Show; Nov 10 emails are backfilled once', () => {
+  const env = invitedEnv({ EMAIL_SENDING: 'ON' });
+  env.ctx.setup();
+  addRow(env, 'Replies', { 'Message ID': 'h1', 'From Email': 'maria@example.com', 'Reply Text': 'Maria Santos', Category: 'Confirmed' });
+  addRow(env, 'Replies', { 'Message ID': 'h2', 'From Email': 'jose@example.com', 'Reply Text': 'Jose Dela Cruz', Category: 'Confirmed' });
+  env.ctx.tick();
+  const st = (id) => env.rows('Applicants').find((a) => a['Applicant ID'] === id);
+  assert.equal(st('F-2').Stage, 'Confirmed');
+  // Maria: mass email with the box ticked
+  const r = env.api({ action: 'bulkMessage', by: 'Miguel', channel: 'email', ids: ['F-2'], subject: 'ClubWealth | Update on Your Application', text: 'Dear [First Name], on hold.', hold: true });
+  assert.equal(r.ok, true, r.error);
+  assert.equal(r.data.held, 1);
+  assert.match(st('F-2').Tags, /Position on hold/);
+  // Jose: an older on-hold email without the box (like Nov 10), marked sent: the backfill puts him on hold
+  env.api({ action: 'bulkMessage', by: 'Miguel', channel: 'email', ids: ['F-3'], subject: 'ClubWealth | Update on Your Application', text: 'Dear [First Name], on hold.' });
+  const O = env.sheets.Outbox.data, oh = O[0];
+  O.forEach((row, i) => { if (i && row[oh.indexOf('Applicant ID')] === 'F-3' && row[oh.indexOf('Type')] === 'Reply') row[oh.indexOf('Status')] = 'Sent'; });
+  const S = env.sheets.Settings.data; const k = S.findIndex((x) => x[0] === 'ON_HOLD_BACKFILL'); if (k > 0) S.splice(k, 1);
+  env.ctx.tick();
+  assert.match(st('F-3').Tags, /Position on hold/);
+  // Wednesday 6 AM: no reminder for either
+  env.setNow(pdt('2026-10-28T06:00:00'));
+  env.ctx.tick();
+  assert.deepEqual(env.rows('Outbox').filter((e) => e.Type === 'Reminder').map((e) => e['Applicant ID']), []);
+  // after the session: not marked No Show
+  env.setNow(pdt('2026-10-28T15:35:00'));
+  env.ctx.tick();
+  assert.equal(st('F-2').Stage, 'Confirmed');
+  assert.equal(st('F-3').Stage, 'Confirmed');
+  assert.equal(env.ctx.inviteHoldReason({ Position: 'Collections VA', Tags: 'Position on hold' }), 'Position on hold');
+});
