@@ -1388,3 +1388,21 @@ test('position on hold: mass email with "Put them on hold" stops the reminder an
   assert.equal(st('F-3').Stage, 'Confirmed');
   assert.equal(env.ctx.inviteHoldReason({ Position: 'Collections VA', Tags: 'Position on hold' }), 'Position on hold');
 });
+
+test('replies from an applicant in any stage are matched by email (flagged to read, stage unchanged); old unmatched items are relinked once', () => {
+  const env = invitedEnv({ EMAIL_SENDING: 'ON', UNMATCHED_RELINKED: 'DONE' });
+  env.ctx.tick();
+  const A = env.sheets.Applicants.data, h = A[0];
+  A.find((r) => r[0] === 'F-2')[h.indexOf('Stage')] = 'No Confirmation';
+  const S = env.sheets.Settings.data; S.splice(S.findIndex((x) => x[0] === 'UNMATCHED_RELINKED'), 1);
+  addRow(env, 'Needs Attention', { 'Flag ID': 'N-old', 'Created At': '2026-10-28 10:00:00', Type: 'Unmatched reply', Detail: 'No matching applicant | From: Maria@Example.com | I accept the invitation.', Status: 'Open' });
+  addRow(env, 'Replies', { 'Message ID': 'u1', 'From Email': 'maria@example.com', 'Reply Text': 'I accept the invitation.' });
+  env.ctx.tick();
+  const flags = env.rows('Needs Attention');
+  const old = flags.find((f) => f['Flag ID'] === 'N-old');
+  assert.equal(old['Applicant ID'], 'F-2');
+  assert.equal(old.Type, 'Reply needs reading');
+  assert.equal(flags.filter((f) => f.Type === 'Unmatched reply' && f.Status === 'Open').length, 0);
+  assert.ok(flags.some((f) => f['Applicant ID'] === 'F-2' && /No Confirmation/.test(f.Detail)));
+  assert.equal(env.rows('Applicants').find((a) => a['Applicant ID'] === 'F-2').Stage, 'No Confirmation');
+});

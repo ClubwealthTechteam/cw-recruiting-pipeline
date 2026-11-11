@@ -515,11 +515,51 @@ function matchReply_(rows, rep, today) {
     return ymdOf_(a['Interview Date']) >= today && nameMatches(typed, a['First Name'], a['Last Name']);
   });
   if (byName.length === 1) return { applicant: byName[0], method: 'Full name' };
+  // Anyone else with that email, whatever their stage (Miguel, 2026-11-11): e.g. a reply after No Confirmation.
+  var anyEmail = anyByEmail_(rows, from);
+  if (anyEmail) return { applicant: anyEmail, method: 'Email (any stage)' };
   return { applicant: null, why: byName.length ? 'Name matches ' + byName.length + ' applicants' : 'No matching applicant' };
+}
+
+/** The applicant with this email, current applications first, newest first; null when none. */
+function anyByEmail_(rows, email) {
+  var e = String(email || '').trim().toLowerCase();
+  if (!e) return null;
+  var hits = rows.filter(function (a) { return String(a.Email || '').trim().toLowerCase() === e; });
+  hits.sort(function (x, y) {
+    return (x.Historical ? 1 : 0) - (y.Historical ? 1 : 0) || String(y['Applied At (PT)']).localeCompare(String(x['Applied At (PT)']));
+  });
+  return hits[0] || null;
+}
+
+/**
+ * One time (Miguel, 2026-11-11): open "Unmatched reply" items whose sender email is an applicant's email are linked
+ * to that applicant and shown as "Reply needs reading".
+ */
+function relinkUnmatched_(st) {
+  if (st.get('UNMATCHED_RELINKED') === 'DONE') return 0;
+  var flags = table_(SH.FLAGS);
+  var rows = table_(SH.APPLICANTS).rows;
+  var n = 0;
+  flags.rows.forEach(function (f) {
+    if (f.Type !== 'Unmatched reply' || f.Status !== 'Open' || f['Applicant ID']) return;
+    var m = String(f.Detail || '').match(/From: ([^\s|]+)/);
+    var a = m && anyByEmail_(rows, m[1]);
+    if (!a) return;
+    update_(flags, f, { 'Applicant ID': a['Applicant ID'], Type: 'Reply needs reading', Detail: String(f.Detail).replace(/^No matching applicant \| /, '') });
+    n++;
+  });
+  st.set('UNMATCHED_RELINKED', 'DONE');
+  return n;
 }
 
 function applyReply_(st, apps, a, rep) {
   var cat = String(rep.Category);
+  // Matched outside the invite stages (e.g. No Confirmation, Benched): never changes their stage; someone reads it.
+  if (PRE_INTERVIEW.concat(['Open for re-invite']).indexOf(a.Stage) === -1) {
+    flag_(a['Applicant ID'], cat === 'Question' ? 'Applicant question' : 'Reply needs reading', '(' + a.Stage + ') ' + stripQuoted(rep['Reply Text']).slice(0, 500));
+    return 'Flagged for Recruitment (stage ' + a.Stage + ')';
+  }
   if (cat === 'Confirmed') {
     if (a.Stage === 'Confirmed') return 'Already confirmed';
     setStage_(apps, a, 'Confirmed', 'System', 'Replied with full name');
@@ -1012,6 +1052,7 @@ function tick() {
   var steps = [
     ['rename', function () { renameStageOnce_(st, 'Onboarded', 'Onboarding', 'STAGE_RENAMED_ONBOARDING'); return 0; }],
     ['onHold', function () { return onHoldBackfill_(st); }],
+    ['relinked', function () { return relinkUnmatched_(st); }],
     ['intake', function () { return importNewFormRows_(st); }],
     ['manualInvites', function () { return syncManualInvites_(st); }],
     ['screenTracks', function () { return backfillScreenTracks_(); }],
