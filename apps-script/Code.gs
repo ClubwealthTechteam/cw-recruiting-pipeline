@@ -29,6 +29,8 @@ var FORM = {
 };
 
 var PRE_INTERVIEW = ['Invited', 'Confirmed'];
+/** In a session's Zoom: invited, confirmed, or moved to it as a re-invite (Miguel, 2026-11-11). */
+var IN_SESSION = ['Invited', 'Confirmed', 'Open for re-invite'];
 
 // ---------- sheet helpers ----------
 
@@ -881,7 +883,7 @@ function processZoom_(st) {
       if (liveRow && ma && !nameMatches(r['Parsed Name'], ma['First Name'], ma['Last Name'])) {
         // matched by the older, looser rule: undo and match again
         update_(z, r, { 'Matched Applicant ID': '' });
-        if (PRE_INTERVIEW.indexOf(ma.Stage) !== -1) update_(apps, ma, { 'Zoom Minutes': '', Arrival: '', 'Minutes Early': '' });
+        if (IN_SESSION.indexOf(ma.Stage) !== -1) update_(apps, ma, { 'Zoom Minutes': '', Arrival: '', 'Minutes Early': '' });
       } else {
         if (liveZoom_(apps, ma, r)) n++;
         return;
@@ -889,7 +891,7 @@ function processZoom_(st) {
     }
     if (r['Matched Applicant ID'] || (r.Result && !(liveRow && r.Result === 'Not an invitee'))) return;
     var cands = apps.rows.filter(function (a) {
-      return ymdOf_(a['Interview Date']) === day && PRE_INTERVIEW.indexOf(a.Stage) !== -1 &&
+      return ymdOf_(a['Interview Date']) === day && IN_SESSION.indexOf(a.Stage) !== -1 &&
         nameMatches(r['Parsed Name'], a['First Name'], a['Last Name']);
     });
     if (cands.length > 1) {
@@ -921,11 +923,12 @@ function processZoom_(st) {
     });
     var counts = { completed: 0, dnc: 0, noshow: 0, noconf: 0, min: minMin };
     apps.rows.forEach(function (a) {
-      if (ymdOf_(a['Interview Date']) !== fin || PRE_INTERVIEW.indexOf(a.Stage) === -1) return;
+      if (ymdOf_(a['Interview Date']) !== fin || IN_SESSION.indexOf(a.Stage) === -1) return;
       var m = minutes[a['Applicant ID']];
       if (m === undefined && onHold(a)) return; // told the position is on hold: not a no-show
       // Not seen in Zoom: No Show only for people who confirmed; invited but never confirmed is No Confirmation.
-      var res = m !== undefined ? zoomResult(m, minMin) : a.Stage === 'Confirmed' ? 'No Show' : 'No Confirmation';
+      var confirmed = a.Stage === 'Confirmed' || (a.Stage === 'Open for re-invite' && !!a['Confirmed At']);
+      var res = m !== undefined ? zoomResult(m, minMin) : confirmed ? 'No Show' : 'No Confirmation';
       if (m !== undefined) update_(apps, a, { 'Zoom Minutes': Math.round(m) });
       setStage_(apps, a, res, 'System', m === undefined ? 'Not seen in Zoom' : Math.round(m) + ' minutes in Zoom');
       if (!isTest_(a)) counts[{ 'No Show': 'noshow', 'No Confirmation': 'noconf', 'Did Not Complete': 'dnc' }[res] || 'completed']++;
@@ -955,7 +958,7 @@ function isTest_(a) {
 }
 
 function liveZoom_(apps, a, r) {
-  if (!a || PRE_INTERVIEW.indexOf(a.Stage) === -1) return false;
+  if (!a || IN_SESSION.indexOf(a.Stage) === -1) return false;
   var f = {};
   if (r.Arrival && !a.Arrival && Number(r['Minutes Early']) < 0 && !isTest_(a)) {
     lateArrivals_.push({ name: (a['First Name'] + ' ' + a['Last Name']).trim(), minutesLate: -Number(r['Minutes Early']) });

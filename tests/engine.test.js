@@ -1447,3 +1447,17 @@ test('live Zoom: an unmatched name is retried each check (no early "Not an invit
   const row = env.rows('Zoom Attendance').find((r) => r['Parsed Name'] === 'Nobody Here');
   assert.equal(row.Result, '', 'cleared while the session is tracked');
 });
+
+test('Zoom: applicants moved to the session as Open for re-invite are matched and get a result', () => {
+  const env = invitedEnv();
+  const A = env.sheets.Applicants.data, h = A[0];
+  A.find((r) => r[0] === 'F-2')[h.indexOf('Stage')] = 'Open for re-invite';
+  env.setNow(pdt('2026-10-28T15:35:00'));
+  addRow(env, 'Zoom Attendance', { 'Interview Date': '2026-10-28', 'Zoom Display Name': 'Maria Santos_Collections', 'Parsed Name': 'Maria Santos', 'Parsed Position': 'Collections', 'Total Minutes': 75 });
+  env.ctx.tick();
+  env.sheets.Settings.appendRow(['ZOOM_FINALIZE', '2026-10-28', '']);
+  env.ctx.tick();
+  const z = env.rows('Zoom Attendance').find((r) => r['Parsed Name'] === 'Maria Santos');
+  assert.equal(z['Matched Applicant ID'], 'F-2');
+  assert.equal(env.rows('Applicants').find((a) => a['Applicant ID'] === 'F-2').Stage, 'Interview Completed');
+});
