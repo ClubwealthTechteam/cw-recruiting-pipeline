@@ -1179,7 +1179,8 @@ function decideStatusEmail_(st, req, approve) {
     return { cancelled: true, backTo: revertAfterSkip_(e, req.by) };
   }
   if (st.get('EMAIL_SENDING') !== 'ON') throw new Error('Email sending is off (Settings EMAIL_SENDING).');
-  var twice = out.rows.some(function (r) {
+  // once-only for status emails; a Reply waiting for approval (e.g. a correction) may follow earlier replies
+  var twice = e.Type !== 'Reply' && out.rows.some(function (r) {
     return r !== e && r['Applicant ID'] === e['Applicant ID'] && r.Type === e.Type && (r.Status === 'Sent' || r.Status === 'Queued');
   });
   if (twice) throw new Error('A ' + e.Type + ' email was already sent to this applicant.');
