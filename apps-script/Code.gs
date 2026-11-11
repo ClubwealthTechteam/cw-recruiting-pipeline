@@ -521,6 +521,29 @@ function matchReply_(rows, rep, today) {
   return { applicant: null, why: byName.length ? 'Name matches ' + byName.length + ' applicants' : 'No matching applicant' };
 }
 
+/**
+ * A No Show / No Confirmation applicant asked to reschedule: they go to Open for re-invite on the next Wednesday,
+ * and their Re-invite email is prepared with Status "Pending approval" (sent only after Approve & send; Don't send
+ * puts them back). OLJ applicants without an email, do-not-contact and on-hold applicants are flagged instead.
+ */
+function rescheduleRequest_(st, apps, a, text) {
+  var why = doNotInvite_(st, a) || (onHold(a) ? 'position on hold' : '') || (!a.Email ? 'no email address' : '');
+  if (why) {
+    flag_(a['Applicant ID'], 'Reply needs reading', 'Asks to reschedule (' + a.Stage + '; not prepared: ' + why + '): ' + text);
+    return 'Flagged: asks to reschedule (' + why + ')';
+  }
+  var next = interviewDateFor(new Date());
+  var reason = 'Asked to reschedule after ' + a.Stage + ': ' + text.slice(0, 200);
+  setStage_(apps, a, 'Open for re-invite', 'System', reason);
+  update_(apps, a, { 'Interview Date': next, 'Reminder Sent At': '', 'Confirmed At': '', 'Re-invite Reason': reason });
+  var q = queueEmail_(st, a, 'Re-invite', inviteEmail(next, new Date()), next, 'System (reschedule request)');
+  if (q) {
+    var out = table_(SH.OUTBOX);
+    update_(out, out.rows.filter(function (r) { return r['Email ID'] === q['Email ID']; })[0], { Status: 'Pending approval' });
+  }
+  return 'Open for re-invite; Re-invite for ' + next + ' waiting in Needs Approval';
+}
+
 /** The applicant with this email, current applications first, newest first; null when none. */
 function anyByEmail_(rows, email) {
   var e = String(email || '').trim().toLowerCase();
@@ -539,14 +562,22 @@ function anyByEmail_(rows, email) {
 function relinkUnmatched_(st) {
   if (st.get('UNMATCHED_RELINKED') === 'DONE') return 0;
   var flags = table_(SH.FLAGS);
-  var rows = table_(SH.APPLICANTS).rows;
+  var apps = table_(SH.APPLICANTS);
+  var rows = apps.rows;
   var n = 0;
   flags.rows.forEach(function (f) {
     if (f.Type !== 'Unmatched reply' || f.Status !== 'Open' || f['Applicant ID']) return;
     var m = String(f.Detail || '').match(/From: ([^\s|]+)/);
     var a = m && anyByEmail_(rows, m[1]);
     if (!a) return;
-    update_(flags, f, { 'Applicant ID': a['Applicant ID'], Type: 'Reply needs reading', Detail: String(f.Detail).replace(/^No matching applicant \| /, '') });
+    var text = String(f.Detail).split(' | ').slice(2).join(' | ');
+    if ((a.Stage === 'No Show' || a.Stage === 'No Confirmation') && wantsReschedule(text)) {
+      // asked for another chance: handled like a new reply (re-invite waiting in Needs Approval)
+      var done = rescheduleRequest_(st, apps, a, text);
+      update_(flags, f, { 'Applicant ID': a['Applicant ID'], Status: /^Flagged/.test(done) ? 'Open' : 'Resolved', Detail: String(f.Detail).replace(/^No matching applicant \| /, '') + ' → ' + done });
+    } else {
+      update_(flags, f, { 'Applicant ID': a['Applicant ID'], Type: 'Reply needs reading', Detail: String(f.Detail).replace(/^No matching applicant \| /, '') });
+    }
     n++;
   });
   st.set('UNMATCHED_RELINKED', 'DONE');
@@ -555,7 +586,12 @@ function relinkUnmatched_(st) {
 
 function applyReply_(st, apps, a, rep) {
   var cat = String(rep.Category);
-  // Matched outside the invite stages (e.g. No Confirmation, Benched): never changes their stage; someone reads it.
+  // Missed the session and asks for another chance (Miguel, 2026-11-11): Open for re-invite, and the invite for the
+  // next Wednesday waits in Needs Approval.
+  if ((a.Stage === 'No Show' || a.Stage === 'No Confirmation') && wantsReschedule(rep['Reply Text'])) {
+    return rescheduleRequest_(st, apps, a, stripQuoted(rep['Reply Text']).slice(0, 500));
+  }
+  // Matched outside the invite stages (e.g. Benched, Not Fit): never changes their stage; someone reads it.
   if (PRE_INTERVIEW.concat(['Open for re-invite']).indexOf(a.Stage) === -1) {
     flag_(a['Applicant ID'], cat === 'Question' ? 'Applicant question' : 'Reply needs reading', '(' + a.Stage + ') ' + stripQuoted(rep['Reply Text']).slice(0, 500));
     return 'Flagged for Recruitment (stage ' + a.Stage + ')';
@@ -1221,7 +1257,7 @@ function decideStatusEmail_(st, req, approve) {
   }
   if (st.get('EMAIL_SENDING') !== 'ON') throw new Error('Email sending is off (Settings EMAIL_SENDING).');
   // once-only for status emails; a Reply waiting for approval (e.g. a correction) may follow earlier replies
-  var twice = e.Type !== 'Reply' && out.rows.some(function (r) {
+  var twice = e.Type !== 'Reply' && e.Type !== 'Re-invite' && out.rows.some(function (r) {
     return r !== e && r['Applicant ID'] === e['Applicant ID'] && r.Type === e.Type && (r.Status === 'Sent' || r.Status === 'Queued');
   });
   if (twice) throw new Error('A ' + e.Type + ' email was already sent to this applicant.');
@@ -2674,7 +2710,7 @@ function offboardSync_(st) {
  * "Don't send" on a status email (Miguel, 2026-11-10): the applicant goes back to the stage they had before the move
  * that prepared it (e.g. Hired → Passed Interview), and a Hired | company tag is removed. Returns the stage or ''.
  */
-var EMAIL_FROM_STAGES = { Hired: ['Hired', 'Onboarding'], Onboarding: ['Onboarding', 'Hired'], Rejected: ['Not Fit'], Benched: ['Benched'] };
+var EMAIL_FROM_STAGES = { Hired: ['Hired', 'Onboarding'], Onboarding: ['Onboarding', 'Hired'], Rejected: ['Not Fit'], Benched: ['Benched'], 'Re-invite': ['Open for re-invite'] };
 function revertAfterSkip_(e, by) {
   var apps = table_(SH.APPLICANTS);
   var a = apps.rows.filter(function (r) { return r['Applicant ID'] === e['Applicant ID']; })[0];

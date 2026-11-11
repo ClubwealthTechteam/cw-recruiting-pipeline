@@ -1395,8 +1395,8 @@ test('replies from an applicant in any stage are matched by email (flagged to re
   const A = env.sheets.Applicants.data, h = A[0];
   A.find((r) => r[0] === 'F-2')[h.indexOf('Stage')] = 'No Confirmation';
   const S = env.sheets.Settings.data; S.splice(S.findIndex((x) => x[0] === 'UNMATCHED_RELINKED'), 1);
-  addRow(env, 'Needs Attention', { 'Flag ID': 'N-old', 'Created At': '2026-10-28 10:00:00', Type: 'Unmatched reply', Detail: 'No matching applicant | From: Maria@Example.com | I accept the invitation.', Status: 'Open' });
-  addRow(env, 'Replies', { 'Message ID': 'u1', 'From Email': 'maria@example.com', 'Reply Text': 'I accept the invitation.' });
+  addRow(env, 'Needs Attention', { 'Flag ID': 'N-old', 'Created At': '2026-10-28 10:00:00', Type: 'Unmatched reply', Detail: 'No matching applicant | From: Maria@Example.com | Got it, thanks.', Status: 'Open' });
+  addRow(env, 'Replies', { 'Message ID': 'u1', 'From Email': 'maria@example.com', 'Reply Text': 'Thanks for the update.' });
   env.ctx.tick();
   const flags = env.rows('Needs Attention');
   const old = flags.find((f) => f['Flag ID'] === 'N-old');
@@ -1405,4 +1405,22 @@ test('replies from an applicant in any stage are matched by email (flagged to re
   assert.equal(flags.filter((f) => f.Type === 'Unmatched reply' && f.Status === 'Open').length, 0);
   assert.ok(flags.some((f) => f['Applicant ID'] === 'F-2' && /No Confirmation/.test(f.Detail)));
   assert.equal(env.rows('Applicants').find((a) => a['Applicant ID'] === 'F-2').Stage, 'No Confirmation');
+});
+
+test('No Show / No Confirmation asking to reschedule: Open for re-invite, the Re-invite waits in Needs Approval; Don\'t send puts them back', () => {
+  const env = invitedEnv({ EMAIL_SENDING: 'ON', UNMATCHED_RELINKED: 'DONE', ON_HOLD_BACKFILL: 'DONE' });
+  env.ctx.setup();
+  env.ctx.tick();
+  const A = env.sheets.Applicants.data, h = A[0];
+  A.find((r) => r[0] === 'F-2')[h.indexOf('Stage')] = 'No Confirmation';
+  addRow(env, 'Replies', { 'Message ID': 'rs9', 'From Email': 'maria@example.com', 'Reply Text': 'Hi, I sincerely apologize for missing my scheduled Zoom interview. Is there any possibility of rescheduling?' });
+  env.ctx.tick();
+  const a = () => env.rows('Applicants').find((x) => x['Applicant ID'] === 'F-2');
+  assert.equal(a().Stage, 'Open for re-invite');
+  const pend = env.rows('Outbox').filter((e) => e['Applicant ID'] === 'F-2' && e.Status === 'Pending approval');
+  assert.deepEqual(pend.map((e) => e.Type), ['Re-invite']);
+  assert.equal(pend[0]['Interview Date'], a()['Interview Date']);
+  const r = env.api({ action: 'skipEmail', by: 'Miguel', emailId: pend[0]['Email ID'] });
+  assert.equal(r.data.backTo, 'No Confirmation');
+  assert.equal(a().Stage, 'No Confirmation');
 });
