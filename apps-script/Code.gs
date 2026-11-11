@@ -1897,6 +1897,15 @@ function api_(req) {
     if (req.action === 'attachToEmail') return attachToEmail_(req);
     if (req.action === 'saveTemplate' || req.action === 'deleteTemplate') return saveTemplate_(req);
     if (req.action === 'approveEmail') return decideStatusEmail_(st2, req, true);
+    if (req.action === 'approveEmails') {
+      // Needs Approval bulk send (Miguel, 2026-11-11): each one is checked like a single Approve & send
+      var res = { queued: 0, failed: [] };
+      (req.emailIds || []).slice(0, 300).forEach(function (eid) {
+        try { decideStatusEmail_(st2, { emailId: eid, by: req.by }, true); res.queued++; }
+        catch (err) { res.failed.push(eid + ': ' + String(err && err.message || err)); }
+      });
+      return res;
+    }
     if (req.action === 'skipEmail') return decideStatusEmail_(st2, req, false);
     if (req.action === 'updateTeam') {
       var tf = String(req.field || '');

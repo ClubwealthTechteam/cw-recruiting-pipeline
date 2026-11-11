@@ -4,7 +4,7 @@ import { useAction } from './useAction';
 import { toast } from './Toaster';
 
 export type StatusEmail = {
-  id: string; type: string; to: string; subject: string; body?: string; status: string;
+  id: string; applicantId?: string; type: string; to: string; subject: string; body?: string; status: string;
   queuedAt: string; queuedBy: string; decidedBy?: string; decidedAt?: string; sentAt?: string; error?: string;
 };
 
