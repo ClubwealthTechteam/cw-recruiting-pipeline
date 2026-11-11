@@ -107,6 +107,12 @@ function settings_() {
       var v = map[k].Value;
       return Object.prototype.toString.call(v) === '[object Date]' ? Utilities.formatDate(v, TZ, 'yyyy-MM-dd') : String(v);
     },
+    // a date with its time (Sheets turns "2026-11-11 13:50:19" into a Date; get() would drop the time)
+    stamp: function (k) {
+      if (!map[k]) return '';
+      var v = map[k].Value;
+      return Object.prototype.toString.call(v) === '[object Date]' ? Utilities.formatDate(v, TZ, 'yyyy-MM-dd HH:mm:ss') : String(v);
+    },
     set: function (k, v) {
       if (map[k]) update_(t, map[k], { Value: v });
       else map[k] = append_(t, { Key: k, Value: v });
@@ -2417,8 +2423,8 @@ function startZoomTracking_(st, req) {
 /** For the site: tracking state of today's (or the last tracked) session. */
 function zoomTrackingStatus_(st) {
   return {
-    day: st.get('ZOOM_TRACKING_FOR'), since: st.get('ZOOM_TRACKING_SINCE'), by: st.get('ZOOM_TRACKING_BY'),
-    lastPoll: st.get('ZOOM_TRACKING_LAST'), done: st.get('ZOOM_TRACKING_DONE') === st.get('ZOOM_TRACKING_FOR') && !!st.get('ZOOM_TRACKING_FOR'),
+    day: st.get('ZOOM_TRACKING_FOR'), since: st.stamp('ZOOM_TRACKING_SINCE'), by: st.get('ZOOM_TRACKING_BY'),
+    lastPoll: st.stamp('ZOOM_TRACKING_LAST'), done: st.get('ZOOM_TRACKING_DONE') === st.get('ZOOM_TRACKING_FOR') && !!st.get('ZOOM_TRACKING_FOR'),
     configured: zoomConfigured_()
   };
 }
@@ -2430,6 +2436,7 @@ function zoomTrackTick_(st) {
   var now = new Date();
   var today = todayPT(now);
   var ended = today > day || Utilities.formatDate(now, TZ, 'HH:mm') >= ZOOM_TRACK.end;
+  zoomTimer_(!ended); // the every-minute Zoom check runs only while a session is tracked
   var n = 0;
   if (today === day) {
     var rows = zoomRowsFromParticipants(zoomLiveParticipants_(st), day, now.getTime(), ZOOM_TRACK);
@@ -2442,6 +2449,34 @@ function zoomTrackTick_(st) {
     log_('zoomTracking', 'finalized', { rows: n }, day);
   }
   return n;
+}
+
+/**
+ * Zoom every minute during the session (Miguel, 2026-11-11): a 1-minute timer is switched on while a session is
+ * tracked. Each run: read Zoom, write the rows, match names, then refresh the site. It switches itself off when the
+ * session ends, so it uses no time on other days.
+ */
+function zoomTimer_(on) {
+  try {
+    var have = ScriptApp.getProjectTriggers().filter(function (t) { return t.getHandlerFunction() === 'zoomEveryMinute'; });
+    if (on && !have.length) ScriptApp.newTrigger('zoomEveryMinute').timeBased().everyMinutes(1).create();
+    if (!on) have.forEach(function (t) { ScriptApp.deleteTrigger(t); });
+  } catch (e) {
+    log_('zoomTracking', 'timer ' + (on ? 'on' : 'off') + ' failed', { error: String(e).slice(0, 200) }, '');
+  }
+}
+
+function zoomEveryMinute() {
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(20000)) return; // the 5-minute update is running; it checks Zoom itself
+  var n = 0;
+  try {
+    var st = settings_();
+    n = safeZoomTrack_(st) + processZoom_(st);
+  } finally {
+    lock.releaseLock();
+  }
+  if (n) notifySite_();
 }
 
 /** The tick never fails because of Zoom: an error is logged and the next tick tries again. */

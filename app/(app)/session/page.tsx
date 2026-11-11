@@ -68,7 +68,7 @@ export default async function Session({ searchParams }: { searchParams: Promise<
       {isToday && <div className="session-day" data-tour="session-day"><span className="dot-live" /><span><b>Session day mode.</b> Decide right from the list: Pass, Not Fit, Left Zoom or Did not finish. Each one can be undone from the message at the bottom.</span></div>}
       {isToday && live.size > 0 && (
         <section className="panel live-zoom">
-          <h2><span className="dot-live" /> Live in Zoom <span className="muted small">updates every few minutes during the session</span></h2>
+          <h2><span className="dot-live" /> Live in Zoom <span className="muted small">Zoom is checked every minute during the session</span></h2>
           <div className="live-cols">
             <div><h3>In Zoom now ({inNow.length})</h3><ul>{inNow.map((a) => <li key={s(a['Applicant ID'])}><Link href={`/candidates/${encodeURIComponent(s(a['Applicant ID']))}`}>{fullName(a)}</Link> <span className="muted small">{live.get(s(a['Applicant ID']))?.minutes} min</span></li>)}</ul></div>
             <div><h3>Left Zoom ({leftZoom.length})</h3><ul>{leftZoom.map((a) => <li key={s(a['Applicant ID'])}><Link href={`/candidates/${encodeURIComponent(s(a['Applicant ID']))}`}>{fullName(a)}</Link> <ZoomBadge z={live.get(s(a['Applicant ID']))} /></li>)}</ul></div>
@@ -129,7 +129,7 @@ function TrackingStatus({ date, z }: { date: string; z?: { day?: string; since?:
   const on = z?.day === date;
   let text = 'Attendance tracking: not started. It starts when someone clicks Open session from 1:30 PM PT.';
   if (on && z?.done) text = `Attendance tracking: finished. Started ${hm(z.since)} by ${z.by}; stages were set from the Zoom minutes.`;
-  else if (on) text = `Attendance tracking: on since ${hm(z?.since)}${z?.by ? ` (${z.by})` : ''}${z?.lastPoll ? ` · last Zoom check ${hm(z.lastPoll)}` : ''}. Updates every 5 minutes; results are set after 3:30 PM.`;
+  else if (on) text = `Attendance tracking: on since ${hm(z?.since)}${z?.by ? ` (${z.by})` : ''}${z?.lastPoll ? ` · last Zoom check ${hm(z.lastPoll)}` : ''}. Zoom is checked every minute; results are set after 3:30 PM.`;
   else if (z && z.configured === false) text = 'Attendance tracking: Zoom is not connected to Apps Script yet.';
   return (
     <div className={`panel ${on ? 'info' : ''}`} data-tour="tracking" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
