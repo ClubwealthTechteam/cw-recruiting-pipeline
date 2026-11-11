@@ -1356,3 +1356,71 @@ test('job ads list positions that are live on OnlineJobs.ph (applicants in the l
   assert.deepEqual(m.oljPosts, ['AI-SAVVY MARKETING & ADS SPECIALIST']);
   assert.equal(ads.some((x) => x.position === 'General VA'), false, 'older than 14 days');
 });
+
+test('position on hold: mass email with "Put them on hold" stops the reminder and the No Show; Nov 10 emails are backfilled once', () => {
+  const env = invitedEnv({ EMAIL_SENDING: 'ON' });
+  env.ctx.setup();
+  addRow(env, 'Replies', { 'Message ID': 'h1', 'From Email': 'maria@example.com', 'Reply Text': 'Maria Santos', Category: 'Confirmed' });
+  addRow(env, 'Replies', { 'Message ID': 'h2', 'From Email': 'jose@example.com', 'Reply Text': 'Jose Dela Cruz', Category: 'Confirmed' });
+  env.ctx.tick();
+  const st = (id) => env.rows('Applicants').find((a) => a['Applicant ID'] === id);
+  assert.equal(st('F-2').Stage, 'Confirmed');
+  // Maria: mass email with the box ticked
+  const r = env.api({ action: 'bulkMessage', by: 'Miguel', channel: 'email', ids: ['F-2'], subject: 'ClubWealth | Update on Your Application', text: 'Dear [First Name], on hold.', hold: true });
+  assert.equal(r.ok, true, r.error);
+  assert.equal(r.data.held, 1);
+  assert.match(st('F-2').Tags, /Position on hold/);
+  // Jose: an older on-hold email without the box (like Nov 10), marked sent: the backfill puts him on hold
+  env.api({ action: 'bulkMessage', by: 'Miguel', channel: 'email', ids: ['F-3'], subject: 'ClubWealth | Update on Your Application', text: 'Dear [First Name], on hold.' });
+  const O = env.sheets.Outbox.data, oh = O[0];
+  O.forEach((row, i) => { if (i && row[oh.indexOf('Applicant ID')] === 'F-3' && row[oh.indexOf('Type')] === 'Reply') row[oh.indexOf('Status')] = 'Sent'; });
+  const S = env.sheets.Settings.data; const k = S.findIndex((x) => x[0] === 'ON_HOLD_BACKFILL'); if (k > 0) S.splice(k, 1);
+  env.ctx.tick();
+  assert.match(st('F-3').Tags, /Position on hold/);
+  // Wednesday 6 AM: no reminder for either
+  env.setNow(pdt('2026-10-28T06:00:00'));
+  env.ctx.tick();
+  assert.deepEqual(env.rows('Outbox').filter((e) => e.Type === 'Reminder').map((e) => e['Applicant ID']), []);
+  // after the session: not marked No Show
+  env.setNow(pdt('2026-10-28T15:35:00'));
+  env.ctx.tick();
+  assert.equal(st('F-2').Stage, 'Confirmed');
+  assert.equal(st('F-3').Stage, 'Confirmed');
+  assert.equal(env.ctx.inviteHoldReason({ Position: 'Collections VA', Tags: 'Position on hold' }), 'Position on hold');
+});
+
+test('replies from an applicant in any stage are matched by email (flagged to read, stage unchanged); old unmatched items are relinked once', () => {
+  const env = invitedEnv({ EMAIL_SENDING: 'ON', UNMATCHED_RELINKED: 'DONE' });
+  env.ctx.tick();
+  const A = env.sheets.Applicants.data, h = A[0];
+  A.find((r) => r[0] === 'F-2')[h.indexOf('Stage')] = 'No Confirmation';
+  const S = env.sheets.Settings.data; S.splice(S.findIndex((x) => x[0] === 'UNMATCHED_RELINKED'), 1);
+  addRow(env, 'Needs Attention', { 'Flag ID': 'N-old', 'Created At': '2026-10-28 10:00:00', Type: 'Unmatched reply', Detail: 'No matching applicant | From: Maria@Example.com | Got it, thanks.', Status: 'Open' });
+  addRow(env, 'Replies', { 'Message ID': 'u1', 'From Email': 'maria@example.com', 'Reply Text': 'Thanks for the update.' });
+  env.ctx.tick();
+  const flags = env.rows('Needs Attention');
+  const old = flags.find((f) => f['Flag ID'] === 'N-old');
+  assert.equal(old['Applicant ID'], 'F-2');
+  assert.equal(old.Type, 'Reply needs reading');
+  assert.equal(flags.filter((f) => f.Type === 'Unmatched reply' && f.Status === 'Open').length, 0);
+  assert.ok(flags.some((f) => f['Applicant ID'] === 'F-2' && /No Confirmation/.test(f.Detail)));
+  assert.equal(env.rows('Applicants').find((a) => a['Applicant ID'] === 'F-2').Stage, 'No Confirmation');
+});
+
+test('No Show / No Confirmation asking to reschedule: Open for re-invite, the Re-invite waits in Needs Approval; Don\'t send puts them back', () => {
+  const env = invitedEnv({ EMAIL_SENDING: 'ON', UNMATCHED_RELINKED: 'DONE', ON_HOLD_BACKFILL: 'DONE' });
+  env.ctx.setup();
+  env.ctx.tick();
+  const A = env.sheets.Applicants.data, h = A[0];
+  A.find((r) => r[0] === 'F-2')[h.indexOf('Stage')] = 'No Confirmation';
+  addRow(env, 'Replies', { 'Message ID': 'rs9', 'From Email': 'maria@example.com', 'Reply Text': 'Hi, I sincerely apologize for missing my scheduled Zoom interview. Is there any possibility of rescheduling?' });
+  env.ctx.tick();
+  const a = () => env.rows('Applicants').find((x) => x['Applicant ID'] === 'F-2');
+  assert.equal(a().Stage, 'Open for re-invite');
+  const pend = env.rows('Outbox').filter((e) => e['Applicant ID'] === 'F-2' && e.Status === 'Pending approval');
+  assert.deepEqual(pend.map((e) => e.Type), ['Re-invite']);
+  assert.equal(pend[0]['Interview Date'], a()['Interview Date']);
+  const r = env.api({ action: 'skipEmail', by: 'Miguel', emailId: pend[0]['Email ID'] });
+  assert.equal(r.data.backTo, 'No Confirmation');
+  assert.equal(a().Stage, 'No Confirmation');
+});

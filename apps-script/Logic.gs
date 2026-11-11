@@ -321,6 +321,11 @@ function setPausedPositions(value) {
   ACTIVE_POSITIONS = OPEN_POSITIONS.filter(function (p) { return PAUSED_POSITIONS.indexOf(p) === -1; });
 }
 
+/** Told their position is on hold (tag "Position on hold"): no reminders, no invites, never marked No Show. */
+function onHold(a) {
+  return String(a && a.Tags || '').split(',').some(function (t) { return t.trim() === 'Position on hold'; });
+}
+
 /** The tag that pauses invites for one applicant (the profile's Pause invites button). */
 var PAUSE_TAG = 'Invites paused';
 function invitesPaused(a) {
@@ -332,6 +337,7 @@ function inviteHoldReason(a) {
   if (OPEN_POSITIONS.indexOf(pos) === -1) return 'Position not open: ' + (pos || 'unknown');
   if (ACTIVE_POSITIONS.indexOf(pos) === -1) return 'Job ad paused: ' + pos;
   if (invitesPaused(a)) return 'Invites paused for this applicant';
+  if (onHold(a)) return 'Position on hold';
   if (String(a.Source) === 'OLJ') return '';
   if (/^\s*no\b/i.test(String(a['Has Experience'] || ''))) return 'No experience';
   if (/below/i.test(String(a['Internet Speed'] || ''))) return 'Internet below 50 Mbps';
@@ -370,6 +376,16 @@ function stripQuoted(text) {
 }
 
 var CANNOT_ATTEND = /\b(can ?not|can'?t|cant|unable|won'?t be able|will not be able|not (be )?available|unavailable|resched|another (date|day|time|schedule)|different (date|day|time)|next week instead|conflict|emergency|not attend|can'?t make it|couldn'?t)\b/i;
+/**
+ * A late reply from a No Show / No Confirmation applicant that asks for another chance (Miguel, 2026-11-11):
+ * reschedule, missed it, another session, still interested, I accept, sorry I was not able to...
+ */
+var WANTS_RESCHEDULE = /\b(re-?sched\w*|missed|miss(ed)? (the|my)|another (date|day|time|schedule|session|slot|chance)|other schedule|next (session|schedule|wednesday|week)|still (very )?interested|second chance|accept(ed)?( the)? invitation|i accept|not able to (attend|join|make)|was(n'?t| not) able to|sorry|apologi[sz]e)\b/i;
+function wantsReschedule(text) {
+  var body = stripQuoted(text);
+  return !!body && !AUTO_REPLY.test(body.slice(0, 200)) && WANTS_RESCHEDULE.test(body);
+}
+
 var AUTO_REPLY = /(automatic reply|auto(matic)?[- ]?reply|out of office|undeliverable|delivery status|mail delivery|returned mail|failure notice)/i;
 var NAME_FILLER = /\b(confirm(ed|ing)?|yes|yup|noted|thank you|thanks|ty|po|sir|ma'?am|available|i am|i'?m|attend(ing)?|will|be there|my full name is|full name|name|here|hello|hi|good (day|morning|afternoon|evening))\b/gi;
 
