@@ -2470,16 +2470,18 @@ function zoomTimer_(on) {
 }
 
 function zoomEveryMinute() {
+  // Never queue up: if another update holds the sheet, skip this minute (Miguel, 2026-11-11).
   var lock = LockService.getScriptLock();
-  if (!lock.tryLock(20000)) return; // the 5-minute update is running; it checks Zoom itself
-  var n = 0;
+  if (!lock.tryLock(2000)) return;
   try {
     var st = settings_();
-    n = safeZoomTrack_(st) + processZoom_(st);
+    safeZoomTrack_(st);
+    processZoom_(st);
   } finally {
     lock.releaseLock();
   }
-  if (n) notifySite_();
+  // no site refresh from here: the CRM re-reads on its own within 30 seconds, and refreshing every minute
+  // made every open tab reload all the data at once, which slowed the sheet down.
 }
 
 /** The tick never fails because of Zoom: an error is logged and the next tick tries again. */
