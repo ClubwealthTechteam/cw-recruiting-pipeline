@@ -260,6 +260,8 @@ function nameMatches(typed, first, last) {
   if (!t.length || !a.length) return false;
   var lastTok = normName(last).split(' ').pop();
   if (lastTok && t.indexOf(lastTok) === -1) return false;
+  // No last name on file (e.g. "Kris"): every typed word must be one of theirs, so "Jolan Kris Cabildo" is not "Kris"
+  if (!lastTok) return t.every(function (x) { return a.indexOf(x) !== -1; });
   var shorter = t.length <= a.length ? t : a;
   var longer = t.length <= a.length ? a : t;
   return shorter.every(function (x) { return longer.indexOf(x) !== -1; });

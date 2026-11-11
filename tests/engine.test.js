@@ -1435,3 +1435,15 @@ test('Needs Approval bulk send: several approved at once, the ones that cannot g
   assert.equal(r.data.failed.length, 1);
   assert.equal(env.rows('Outbox').filter((e) => pend.includes(e['Email ID']) && e.Status === 'Queued').length, 2);
 });
+
+test('live Zoom: an unmatched name is retried each check (no early "Not an invitee"); no last name on file needs every word to match', () => {
+  const env = invitedEnv({ ZOOM_TRACKING_FOR: '2026-10-28' });
+  env.ctx.setup();
+  env.setNow(pdt('2026-10-28T14:05:00'));
+  assert.equal(env.ctx.nameMatches('Jolan Kris Cabildo', 'Kris', ''), false);
+  assert.equal(env.ctx.nameMatches('Kris', 'Kris', ''), true);
+  addRow(env, 'Zoom Attendance', { 'Interview Date': '2026-10-28', 'Zoom Display Name': 'Nobody Here_ISA', 'Parsed Name': 'Nobody Here', 'Parsed Position': 'ISA', 'Total Minutes': 5, Result: 'Not an invitee' });
+  env.ctx.processZoom_(env.ctx.settings_());
+  const row = env.rows('Zoom Attendance').find((r) => r['Parsed Name'] === 'Nobody Here');
+  assert.equal(row.Result, '', 'cleared while the session is tracked');
+});
