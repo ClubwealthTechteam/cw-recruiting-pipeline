@@ -621,3 +621,6 @@ input:focus, select:focus, textarea:focus { outline: 3px solid #dbe7fb; border-c
 .row-notes { margin-top: 4px; display: flex; flex-wrap: wrap; gap: 4px; }
 .note-chip { font-size: 11px; line-height: 1.4; padding: 1px 7px; border-radius: 10px; background: #eef4ff; color: #3538cd; max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .note-chip.warn { background: #fef6ee; color: #b93815; }
+
+/* Don't send: keep stage / move back (Miguel, 2026-11-11) */
+.skip-choice { display: inline-flex; gap: 6px; flex-wrap: wrap; align-items: center; }

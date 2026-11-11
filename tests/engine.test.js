@@ -1461,3 +1461,14 @@ test('Zoom: applicants moved to the session as Open for re-invite are matched an
   assert.equal(z['Matched Applicant ID'], 'F-2');
   assert.equal(env.rows('Applicants').find((a) => a['Applicant ID'] === 'F-2').Stage, 'Interview Completed');
 });
+
+test("Don't send can keep the stage (keepStage) or move back (default)", () => {
+  const env = batchEnv();
+  env.api({ action: 'setStage', by: 'Am', ids: ['F-2', 'F-3'], stage: 'Benched' });
+  const pend = env.rows('Outbox').filter((e) => e.Status === 'Pending approval');
+  const keep = env.api({ action: 'skipEmail', by: 'Miguel', emailId: pend[0]['Email ID'], keepStage: true });
+  assert.equal(keep.data.backTo, '');
+  assert.equal(env.rows('Applicants').find((a) => a['Applicant ID'] === pend[0]['Applicant ID']).Stage, 'Benched');
+  const back = env.api({ action: 'skipEmail', by: 'Miguel', emailId: pend[1]['Email ID'] });
+  assert.notEqual(back.data.backTo, '');
+});

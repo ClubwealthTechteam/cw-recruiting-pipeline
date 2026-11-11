@@ -1277,7 +1277,8 @@ function decideStatusEmail_(st, req, approve) {
   if (e.Status !== 'Pending approval') throw new Error('This email is no longer waiting for approval (it is ' + e.Status + ').');
   if (!approve) {
     update_(out, e, { Status: 'Cancelled', Error: "Don't send: " + req.by, 'Decided By': req.by, 'Decided At': nowStr_() });
-    return { cancelled: true, backTo: revertAfterSkip_(e, req.by) };
+    // "Don't send" alone keeps the stage; "Don't send & move back" returns them to the stage before (Miguel, 2026-11-11)
+    return { cancelled: true, backTo: req.keepStage ? '' : revertAfterSkip_(e, req.by) };
   }
   if (st.get('EMAIL_SENDING') !== 'ON') throw new Error('Email sending is off (Settings EMAIL_SENDING).');
   // once-only for status emails; a Reply waiting for approval (e.g. a correction) may follow earlier replies

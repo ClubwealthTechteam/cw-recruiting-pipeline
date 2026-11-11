@@ -14,6 +14,7 @@ const NAME: Record<string, string> = { Hired: 'Hired email', Rejected: 'Rejected
 export function PendingStatusEmail({ e, name }: { e: StatusEmail; name?: string }) {
   const { run, busy, error } = useAction();
   const [editing, setEditing] = useState(false);
+  const [skipping, setSkipping] = useState(false);
   if (editing) return <EditStatusEmail e={e} onDone={() => setEditing(false)} />;
   return (
     <div className="approval">
@@ -39,14 +40,24 @@ export function PendingStatusEmail({ e, name }: { e: StatusEmail; name?: string 
           onClick={() => confirm(`Send the ${NAME[e.type] || e.type} to ${e.to} from CareersCW now?`) && run({ action: 'approveEmail', emailId: e.id }, { success: `${NAME[e.type] || e.type} approved ✓ (sends within 5 minutes)` })}>
           Approve &amp; send
         </button>
-        <button className="btn ghost" disabled={busy}
-          onClick={async () => {
-            if (!confirm("Don't send this email? It is cancelled and the applicant goes back to the stage they had before (e.g. Hired → Passed Interview).")) return;
-            const r = await run({ action: 'skipEmail', emailId: e.id }, { success: 'Email cancelled' });
-            if (r && typeof r === 'object' && (r as { backTo?: string }).backTo) toast(`Moved back to ${(r as { backTo: string }).backTo} ✓`);
-          }}>
-          Don&apos;t send
-        </button>
+        {!skipping ? (
+          <button className="btn ghost" disabled={busy} onClick={() => setSkipping(true)}>Don&apos;t send</button>
+        ) : (
+          <span className="skip-choice">
+            <button className="btn ghost" disabled={busy} title="Cancel the email; the applicant stays where they are"
+              onClick={() => run({ action: 'skipEmail', emailId: e.id, keepStage: true }, { success: 'Email cancelled ✓ (stage kept)' })}>
+              Don&apos;t send
+            </button>
+            <button className="btn ghost" disabled={busy} title="Cancel the email and put the applicant back in the stage they had before"
+              onClick={async () => {
+                const r = await run({ action: 'skipEmail', emailId: e.id }, { success: 'Email cancelled' });
+                if (r && typeof r === 'object' && (r as { backTo?: string }).backTo) toast(`Moved back to ${(r as { backTo: string }).backTo} ✓`);
+              }}>
+              Don&apos;t send &amp; move to previous stage
+            </button>
+            <button className="btn ghost" disabled={busy} onClick={() => setSkipping(false)}>Back</button>
+          </span>
+        )}
         {error && <span className="error">{error}</span>}
       </div>
     </div>
