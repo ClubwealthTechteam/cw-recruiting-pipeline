@@ -639,3 +639,9 @@ input:focus, select:focus, textarea:focus { outline: 3px solid #dbe7fb; border-c
 .board-find { display: flex; gap: 8px; align-items: center; margin: 0 0 10px; }
 .board-find input { width: 320px; max-width: 100%; padding: 6px 10px; font: inherit; border: 1px solid #cfd5df; border-radius: 6px; }
 .board .card.found { outline: 2px solid #1f6feb; outline-offset: 1px; background: #eaf2ff; box-shadow: 0 0 0 4px rgba(31, 111, 235, .18); }
+
+/* Sending tiles open their list (Miguel, 2026-11-12) */
+.tile-btn { text-align: left; font: inherit; color: inherit; cursor: pointer; border: 1px solid var(--line, #e4e7ec); }
+.tile-btn:hover { border-color: #9fb3d9; }
+.tile-btn.on { border-color: #1f6feb; box-shadow: 0 0 0 3px rgba(31, 111, 235, .12); }
+.table-scroll { overflow-x: auto; max-height: 420px; overflow-y: auto; }
