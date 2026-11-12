@@ -1,6 +1,6 @@
 import { getData } from '@/lib/sheet';
 import { s, fullName, ymd, isTest, STAGES, todayPT } from '@/lib/pipeline';
-import SendCounts, { type SendStats } from '@/components/SendCounts';
+import SendCounts, { type SendStats, type SendLists, type SentItem } from '@/components/SendCounts';
 import DataError from '@/components/DataError';
 import TemplatesManager from '@/components/TemplatesManager';
 import MassSend, { type Recipient } from '@/components/MassSend';
@@ -28,10 +28,24 @@ export default async function Templates() {
     oljSent: out.filter((e) => isOlj(e) && s(e.Status) === 'Sent' && ymd(e['Sent At'] || e['Queued At']) >= from).length,
     failed: out.filter((e) => !isOlj(e) && s(e.Status) === 'Failed' && ymd(e['Queued At']) >= from).length
   });
+  // the emails behind each tile: when, who, where to, what (Miguel, 2026-11-12)
+  const nameOf = new Map(d.applicants.map((a) => [s(a['Applicant ID']), fullName(a)]));
+  const LABEL: Record<string, string> = { Invite: 'Pre-interview invite', 'Re-invite': 'Re-invite', Reminder: 'Wednesday reminder', Confirmation: 'Confirmation', Reply: 'Reply', 'OLJ Invite': 'OLJ invite', 'OLJ Message': 'OLJ message' };
+  const item = (e: Record<string, unknown>, at: unknown): SentItem => ({
+    at: s(at), id: s(e['Applicant ID']), name: nameOf.get(s(e['Applicant ID'])) || '',
+    to: s(e.To).replace(/^OLJ:/, 'OnlineJobs.ph '), what: `${LABEL[s(e.Type)] || s(e.Type)}${s(e.Subject) && !isOlj(e) ? ': ' + s(e.Subject) : ''}`,
+    by: s(e['Queued By']) || s(e['Decided By']), status: s(e.Status)
+  });
+  const newest = (a: SentItem, b: SentItem) => b.at.localeCompare(a.at);
+  const lists = (from: string): SendLists => ({
+    waiting: out.filter((e) => !isOlj(e) && s(e.Status) === 'Queued').map((e) => item(e, e['Queued At'])).sort(newest).slice(0, 300),
+    sent: out.filter((e) => !isOlj(e) && s(e.Status) === 'Sent' && ymd(e['Sent At']) >= from).map((e) => item(e, e['Sent At'])).sort(newest).slice(0, 300),
+    olj: out.filter((e) => isOlj(e) && s(e.Status) === 'Sent' && ymd(e['Sent At'] || e['Queued At']) >= from).map((e) => item(e, e['Sent At'] || e['Queued At'])).sort(newest).slice(0, 300)
+  });
   return (
     <>
       <header className="page-head"><h1>Email Templates</h1><p className="sub">Saved answers, and one message to many applicants. On a profile, pick a template from &quot;Insert a template…&quot; above the reply box.</p></header>
-      <SendCounts today={stats(today)} week={stats(since)} />
+      <SendCounts today={stats(today)} week={stats(since)} todayLists={lists(today)} weekLists={lists(since)} />
       <MassSend people={people} templates={templates} stages={STAGES.filter((x) => x !== 'Banned')} />
       <TemplatesManager templates={templates} />
     </>
