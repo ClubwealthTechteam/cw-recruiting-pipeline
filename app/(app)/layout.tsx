@@ -11,7 +11,7 @@ import Toaster from '@/components/Toaster';
 import InboxPanel from '@/components/InboxPanel';
 import CommandBar, { type CommandItem } from '@/components/CommandBar';
 import { Suspense } from 'react';
-import { requireUser } from '@/lib/auth';
+import { requireUser, isDbAdmin } from '@/lib/auth';
 import { getData } from '@/lib/sheet';
 import { s, fullName } from '@/lib/pipeline';
 import FailedSaves, { type FailedSave } from '@/components/FailedSaves';
@@ -60,7 +60,7 @@ export default async function AppLayout({ children, panel }: { children: React.R
         <Logo tone="light" />
         <div className="product">Club Wealth Recruiting Pipeline</div>
         <SearchButton />
-        <NavLinks open={open} approvals={approvals} />
+        <NavLinks open={open} approvals={approvals} dbAdmin={isDbAdmin(user)} />
         <div className="sidebar-foot" data-tour="me">
           {mode !== 'LIVE' && <div className="test-mode">TEST MODE</div>}
           <div className="side-me"><span className="av" style={{ background: '#1f5fbf' }}>{user.slice(0, 1)}</span><span>{user === 'Am' ? 'Am Marbella' : user}</span></div>
