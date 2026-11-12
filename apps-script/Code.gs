@@ -73,6 +73,7 @@ function update_(t, row, fields) {
     t.sheet.getRange(row._row, c + 1).setValue(fields[k]);
     row[k] = fields[k];
   });
+  markDirty_(t.sheet.getName(), row);
 }
 
 function append_(t, fields) {
@@ -81,6 +82,7 @@ function append_(t, fields) {
   var o = { _row: t.sheet.getLastRow() };
   t.headers.forEach(function (h, j) { o[h] = r[j]; });
   t.rows.push(o);
+  markDirty_(t.sheet.getName(), o);
   return o;
 }
 
@@ -88,7 +90,118 @@ function append_(t, fields) {
 function appendTo_(name, fields) {
   var s = sheet_(name);
   var headers = s.getRange(1, 1, 1, s.getLastColumn()).getValues()[0];
-  s.appendRow(headers.map(function (h) { return fields[h] !== undefined ? fields[h] : ''; }));
+  var r = headers.map(function (h) { return fields[h] !== undefined ? fields[h] : ''; });
+  s.appendRow(r);
+  if (DB_TABS.indexOf(name) !== -1) {
+    var o = { _row: s.getLastRow() };
+    headers.forEach(function (h, j) { if (h) o[h] = r[j]; });
+    markDirty_(name, o);
+  }
+}
+
+// ---------- copy to the CRM's database (Neon), stage 1 of moving off the sheet (Miguel, 2026-11-12) ----------
+// The sheet stays in charge. Every row the script writes is sent to the site (/api/db/ingest) at the end of the
+// request or tick, so the CRM can read from its database instead of reading the whole sheet. A full copy of one tab
+// is sent every 5-minute tick in turn (all tabs about once an hour), which also picks up edits made by hand.
+
+var DB_TABS = ['Applicants', 'History', 'Needs Attention', 'Zoom Attendance', 'Outbox', 'Replies', 'Scorecards',
+  'Views', 'Email Templates', 'Settings', 'OLJ', 'Positions'];
+var DIRTY_ = {};
+function markDirty_(tab, row) {
+  if (DB_TABS.indexOf(tab) === -1 || !row || !row._row) return;
+  (DIRTY_[tab] || (DIRTY_[tab] = {}))[row._row] = row;
+}
+
+function dbRow_(o) {
+  var p = plain_([o])[0];
+  return { row: o._row, data: p };
+}
+
+function dbPost_(payload) {
+  var props = PropertiesService.getScriptProperties();
+  var url = props.getProperty('SITE_URL');
+  if (!url) return false;
+  payload.secret = props.getProperty('API_SECRET');
+  var res = UrlFetchApp.fetch(url.replace(/\/$/, '') + '/api/db/ingest', {
+    method: 'post', contentType: 'application/json', muteHttpExceptions: true, payload: JSON.stringify(payload)
+  });
+  return res.getResponseCode() === 200;
+}
+
+/** On after the first "Copy everything now" (Script Property DB_SYNC = ON); set it to OFF to stop sending. */
+function dbOn_() {
+  return PropertiesService.getScriptProperties().getProperty('DB_SYNC') === 'ON';
+}
+
+/** Sends the rows written in this run. Never fails the run: the hourly full copy catches anything missed. */
+function dbFlush_() {
+  var tabs = Object.keys(DIRTY_);
+  if (!tabs.length || !dbOn_()) { DIRTY_ = {}; return 0; }
+  var n = 0;
+  try {
+    tabs.forEach(function (tab) {
+      var rows = Object.keys(DIRTY_[tab]).map(function (k) { return dbRow_(DIRTY_[tab][k]); });
+      for (var i = 0; i < rows.length; i += 400) {
+        if (dbPost_({ op: 'upsert', tab: tab, rows: rows.slice(i, i + 400) })) n += Math.min(400, rows.length - i);
+      }
+    });
+  } catch (e) {
+    // the site may be redeploying; the next full copy fixes it
+  }
+  DIRTY_ = {};
+  return n;
+}
+
+/** A full copy of one tab: every row, then the extra rows past the end are removed on the site. */
+function dbPushTab_(tab) {
+  if (!ss_().getSheetByName(tab)) return 0;
+  var rows = table_(tab).rows.map(dbRow_);
+  for (var i = 0; i < rows.length; i += 400) {
+    if (!dbPost_({ op: 'upsert', tab: tab, rows: rows.slice(i, i + 400) })) throw new Error('The site did not accept ' + tab + '.');
+  }
+  var last = sheet_(tab).getLastRow();
+  dbPost_({ op: 'trim', tab: tab, lastRow: last, count: rows.length });
+  return rows.length;
+}
+
+/** Values the site cannot work out from the copied tabs. */
+function dbPushExtras_() {
+  dbPost_({ op: 'kv', key: 'team', value: teamForSite_() });
+  dbPost_({ op: 'kv', key: 'jobAds', value: jobAds_() });
+  dbPost_({ op: 'kv', key: 'zoomConfigured', value: zoomConfigured_() });
+}
+
+/** Everything at once ("Copy everything now" on the site's Database page). */
+function dbPushAll_() {
+  PropertiesService.getScriptProperties().setProperty('DB_SYNC', 'ON');
+  var counts = {};
+  DB_TABS.forEach(function (tab) { counts[tab] = dbPushTab_(tab); });
+  dbPushExtras_();
+  dbPost_({ op: 'kv', key: 'lastFullCopy', value: nowStr_() });
+  return counts;
+}
+
+/** Each tick: the next tab in turn, plus the team / job ads values every half hour. */
+function dbRotate_(st) {
+  if (!dbOn_() || !PropertiesService.getScriptProperties().getProperty('SITE_URL')) return 0;
+  var props = PropertiesService.getScriptProperties();
+  var i = (Number(props.getProperty('DB_ROTATE_I')) || 0) % DB_TABS.length;
+  props.setProperty('DB_ROTATE_I', String(i + 1));
+  var n = 0;
+  try {
+    n = dbPushTab_(DB_TABS[i]);
+    if (i % 6 === 0) dbPushExtras_();
+  } catch (e) {
+    log_('dbCopy', 'failed', { tab: DB_TABS[i], error: String(e).slice(0, 200) }, '');
+  }
+  return n;
+}
+
+/** Row counts per tab, for the Database page's check against the copy. */
+function dbCounts_() {
+  var o = {};
+  DB_TABS.forEach(function (tab) { o[tab] = ss_().getSheetByName(tab) ? table_(tab).rows.length : 0; });
+  return o;
 }
 
 function settings_() {
@@ -1127,7 +1240,8 @@ function tick() {
     ['offboarded', function () { return offboardSync_(st); }],
     ['zoom', function () { return processZoom_(st); }],
     ['reminders', function () { return queueReminders_(st); }],
-    ['slack', function () { return slackAlerts_(st); }]
+    ['slack', function () { return slackAlerts_(st); }],
+    ['dbCopy', function () { return dbRotate_(st); }]
   ];
   try {
     for (var i = 0; i < steps.length; i++) {
@@ -1140,7 +1254,8 @@ function tick() {
         lock.releaseLock();
       }
     }
-    if (Object.keys(c).some(function (k) { return c[k]; })) {
+    c.dbSent = dbFlush_();
+    if (Object.keys(c).some(function (k) { return k !== 'dbCopy' && k !== 'dbSent' && c[k]; })) {
       log_('tick', 'ok', c);
       notifySite_();
     }
@@ -1439,7 +1554,9 @@ function doPost(e) {
     if (!secret || req.secret !== secret) throw new Error('unauthorized');
     res = { ok: true, data: api_(req) };
     if (['zoomRows', 'chatAsk', 'chatAnswer'].indexOf(req.action) !== -1) notifySite_();
+    dbFlush_();
   } catch (err) {
+    dbFlush_(); // anything written before the error
     var msg = String(err && err.message || err);
     // The 5-minute update or another save was still running (Tara, 2026-11-10): say so plainly; the site retries once.
     if (/lock timeout|another process was holding the lock/i.test(msg)) {
@@ -1740,6 +1857,7 @@ function api_(req) {
   if (req.action === 'preview') return preview_(req);
   if (req.action === 'presence') return presence_(req);
   if (req.action === 'zoomTrackingStatus') return zoomTrackingStatus_(settings_());
+  if (req.action === 'dbCounts') return dbCounts_();
   var lock = LockService.getScriptLock();
   lock.waitLock(30000);
   try {
@@ -1922,6 +2040,7 @@ function api_(req) {
     if (req.action === 'attachToEmail') return attachToEmail_(req);
     if (req.action === 'saveTemplate' || req.action === 'deleteTemplate') return saveTemplate_(req);
     if (req.action === 'approveEmail') return decideStatusEmail_(st2, req, true);
+    if (req.action === 'dbPushAll') return { counts: dbPushAll_() };
     if (req.action === 'approveEmails') {
       // Needs Approval bulk send (Miguel, 2026-11-11): each one is checked like a single Approve & send
       var res = { queued: 0, failed: [] };
@@ -2481,6 +2600,7 @@ function zoomEveryMinute() {
   } finally {
     lock.releaseLock();
   }
+  dbFlush_();
   // no site refresh from here: the CRM re-reads on its own within 30 seconds, and refreshing every minute
   // made every open tab reload all the data at once, which slowed the sheet down.
 }

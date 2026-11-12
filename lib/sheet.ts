@@ -1,6 +1,8 @@
 import 'server-only';
 import { unstable_cache, revalidateTag } from 'next/cache';
 import { ptStamp, setCancelledSessions, linkApplications } from '@/lib/pipeline';
+import { dbConfigured, getKvs } from '@/lib/db';
+import { buildFromDb } from '@/lib/dbdata.server';
 
 export type Row = Record<string, string | number>;
 /** One Active Team Members row: the Onboarding copy with site edits on top; edited = { field: value in the Onboarding sheet }. */
@@ -69,15 +71,36 @@ export const PIPELINE_TAG = 'pipeline';
  * also loads the fresh copy straight away) or anything is changed on the site; otherwise refreshed in the background.
  * Applicants from before the system come with a few fields only (enough for counts) and without their history.
  */
+/**
+ * Where the page data comes from (Miguel, 2026-11-12): the Neon copy once "Read from the database" is switched on
+ * (Database page) and a full copy exists; otherwise, or if the database fails, the sheet through Apps Script as before.
+ */
+export async function dataSource(): Promise<'database' | 'sheet'> {
+  if (!dbConfigured()) return 'sheet';
+  try {
+    const kv = await getKvs(['readFromDb', 'lastFullCopy']);
+    return kv.readFromDb === true && kv.lastFullCopy ? 'database' : 'sheet';
+  } catch {
+    return 'sheet';
+  }
+}
+
+async function loadData(withHistory: boolean): Promise<PipelineData> {
+  if ((await dataSource()) === 'database') {
+    try { return await buildFromDb(withHistory); } catch { /* fall back to the sheet */ }
+  }
+  return call<PipelineData>({ action: 'data', slim: true, ...(withHistory ? { withHistory: true } : {}) });
+}
+
 const getDataCached = unstable_cache(
-  async () => ({ ...normalize(await call<PipelineData>({ action: 'data', slim: true })), fetchedAt: Date.now() }),
+  async () => ({ ...normalize(await loadData(false)), fetchedAt: Date.now() }),
   ['pipeline-data-v3'],
   { revalidate: 30, tags: [PIPELINE_TAG] }
 );
 
 /** Everything, including the ~2,000 applicants from before the system. Only for "Include applicants from before the system". */
 const getDataWithHistoryCached = unstable_cache(
-  async () => ({ ...normalize(await call<PipelineData>({ action: 'data', slim: true, withHistory: true })), fetchedAt: Date.now() }),
+  async () => ({ ...normalize(await loadData(true)), fetchedAt: Date.now() }),
   ['pipeline-data-all-v1'],
   { revalidate: 120, tags: [PIPELINE_TAG] }
 );
