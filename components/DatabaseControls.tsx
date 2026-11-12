@@ -10,7 +10,7 @@ export default function DatabaseControls({ readFromDb, ready }: { readFromDb: bo
   const router = useRouter();
   const [saving, setSaving] = useState(false);
   async function copyAll() {
-    const r = await run({ action: 'dbPushAll' }, { success: 'Everything copied to the database ✓' });
+    const r = await run({ action: 'dbPushAll' }, { success: 'Copy started ✓ It takes 1–3 minutes; this page updates as rows arrive.' });
     if (r) router.refresh();
   }
   async function setRead(on: boolean) {
@@ -25,7 +25,7 @@ export default function DatabaseControls({ readFromDb, ready }: { readFromDb: bo
   }
   return (
     <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
-      <button className="btn" disabled={busy} onClick={copyAll}>{busy ? 'Copying… (up to a minute)' : 'Copy everything now'}</button>
+      <button className="btn" disabled={busy} onClick={copyAll}>{busy ? 'Starting…' : 'Copy everything now'}</button>
       {readFromDb
         ? <button className="btn" disabled={saving} onClick={() => setRead(false)}>Switch back to reading the Google Sheet</button>
         : <button className="btn primary" disabled={saving || !ready} onClick={() => setRead(true)} title={ready ? '' : 'Copy everything first, and check the counts match'}>Read the CRM from the database</button>}

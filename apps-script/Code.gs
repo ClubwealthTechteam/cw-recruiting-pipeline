@@ -181,6 +181,27 @@ function dbPushAll_() {
   return counts;
 }
 
+/**
+ * "Copy everything now": runs in the background (a one-time timer a few seconds later), because copying every tab
+ * takes longer than the site waits for an answer. The Database page shows the rows arriving.
+ */
+function dbStartFullCopy_() {
+  PropertiesService.getScriptProperties().setProperty('DB_SYNC', 'ON');
+  ScriptApp.getProjectTriggers().forEach(function (t) { if (t.getHandlerFunction() === 'dbFullCopyJob') ScriptApp.deleteTrigger(t); });
+  ScriptApp.newTrigger('dbFullCopyJob').timeBased().after(5 * 1000).create();
+  return { started: true };
+}
+
+function dbFullCopyJob() {
+  ScriptApp.getProjectTriggers().forEach(function (t) { if (t.getHandlerFunction() === 'dbFullCopyJob') ScriptApp.deleteTrigger(t); });
+  try {
+    var counts = dbPushAll_();
+    log_('dbCopy', 'full copy done', counts, '');
+  } catch (e) {
+    log_('dbCopy', 'full copy failed', { error: String(e).slice(0, 300) }, '');
+  }
+}
+
 /** Each tick: the next tab in turn, plus the team / job ads values every half hour. */
 function dbRotate_(st) {
   if (!dbOn_() || !PropertiesService.getScriptProperties().getProperty('SITE_URL')) return 0;
@@ -1853,11 +1874,11 @@ function api_(req) {
   if (req.action === 'zoomRows') return zoomRowsApi_(req);
   if (req.action === 'chatGet') return chatGet_(req.id);
   if (req.action === 'chatAnswer') return chatAnswer_(req.id, req.answer);
+  if (req.action === 'dbCounts') return dbCounts_(); // read-only, for the Database page
   if (MANUAL_BY.indexOf(req.by) === -1) throw new Error('unknown user');
   if (req.action === 'preview') return preview_(req);
   if (req.action === 'presence') return presence_(req);
   if (req.action === 'zoomTrackingStatus') return zoomTrackingStatus_(settings_());
-  if (req.action === 'dbCounts') return dbCounts_();
   var lock = LockService.getScriptLock();
   lock.waitLock(30000);
   try {
@@ -2040,7 +2061,7 @@ function api_(req) {
     if (req.action === 'attachToEmail') return attachToEmail_(req);
     if (req.action === 'saveTemplate' || req.action === 'deleteTemplate') return saveTemplate_(req);
     if (req.action === 'approveEmail') return decideStatusEmail_(st2, req, true);
-    if (req.action === 'dbPushAll') return { counts: dbPushAll_() };
+    if (req.action === 'dbPushAll') return dbStartFullCopy_();
     if (req.action === 'approveEmails') {
       // Needs Approval bulk send (Miguel, 2026-11-11): each one is checked like a single Approve & send
       var res = { queued: 0, failed: [] };

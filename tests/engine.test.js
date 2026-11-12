@@ -1481,7 +1481,9 @@ test('database copy: off until the first full copy; then each save sends only th
   assert.equal(ctxCalls.posts.filter((p) => /db\/ingest/.test(p.url)).length, 0, 'nothing before the first copy');
   const r = env.api({ action: 'dbPushAll', by: 'Miguel' });
   assert.equal(r.ok, true, r.error);
-  assert.ok(r.data.counts.Applicants >= 3);
+  assert.equal(r.data.started, true);
+  env.ctx.dbFullCopyJob(); // the background timer
+  assert.ok(env.api({ action: 'dbCounts' }).data.Applicants >= 3, 'counts need no user');
   const full = ctxCalls.posts.filter((p) => /db\/ingest/.test(p.url)).map((p) => JSON.parse(p.body));
   assert.ok(full.some((b) => b.op === 'trim' && b.tab === 'Applicants'));
   assert.ok(full.some((b) => b.op === 'kv' && b.key === 'jobAds'));
