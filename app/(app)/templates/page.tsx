@@ -32,7 +32,7 @@ export default async function Templates() {
   const nameOf = new Map(d.applicants.map((a) => [s(a['Applicant ID']), fullName(a)]));
   const LABEL: Record<string, string> = { Invite: 'Pre-interview invite', 'Re-invite': 'Re-invite', Reminder: 'Wednesday reminder', Confirmation: 'Confirmation', Reply: 'Reply', 'OLJ Invite': 'OLJ invite', 'OLJ Message': 'OLJ message' };
   const item = (e: Record<string, unknown>, at: unknown): SentItem => ({
-    at: s(at), id: s(e['Applicant ID']), name: nameOf.get(s(e['Applicant ID'])) || '',
+    emailId: s(e['Email ID']), at: s(at), id: s(e['Applicant ID']), name: nameOf.get(s(e['Applicant ID'])) || '',
     to: s(e.To).replace(/^OLJ:/, 'OnlineJobs.ph '), what: `${LABEL[s(e.Type)] || s(e.Type)}${s(e.Subject) && !isOlj(e) ? ': ' + s(e.Subject) : ''}`,
     by: s(e['Queued By']) || s(e['Decided By']), status: s(e.Status)
   });

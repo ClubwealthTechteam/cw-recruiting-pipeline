@@ -645,3 +645,6 @@ input:focus, select:focus, textarea:focus { outline: 3px solid #dbe7fb; border-c
 .tile-btn:hover { border-color: #9fb3d9; }
 .tile-btn.on { border-color: #1f6feb; box-shadow: 0 0 0 3px rgba(31, 111, 235, .12); }
 .table-scroll { overflow-x: auto; max-height: 420px; overflow-y: auto; }
+.email-preview-row td { background: #f8fafc; }
+.email-preview-row .mail-frame { width: 100%; min-height: 420px; border: 1px solid #e4e7ec; border-radius: 6px; background: #fff; }
+tr.row-open td { background: #eef4ff; }

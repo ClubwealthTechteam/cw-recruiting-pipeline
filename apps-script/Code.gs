@@ -1891,6 +1891,10 @@ function api_(req) {
   if (req.action === 'chatGet') return chatGet_(req.id);
   if (req.action === 'chatAnswer') return chatAnswer_(req.id, req.answer);
   if (req.action === 'dbCounts') return dbCounts_(); // read-only, for the Database page
+  if (req.action === 'emailBody') { // read-only: one email as sent (Sending lists on Email Templates)
+    var em1 = table_(SH.OUTBOX).rows.filter(function (r) { return r['Email ID'] === req.id; })[0];
+    return em1 ? { subject: String(em1.Subject || ''), body: String(em1.Body || ''), to: String(em1.To || '') } : null;
+  }
   if (MANUAL_BY.indexOf(req.by) === -1) throw new Error('unknown user');
   if (req.action === 'preview') return preview_(req);
   if (req.action === 'presence') return presence_(req);
