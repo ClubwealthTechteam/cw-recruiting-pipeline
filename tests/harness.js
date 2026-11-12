@@ -108,7 +108,7 @@ function load({ now, formRows = [], mode = 'TEST', settings = {}, rejected = [],
     // secrets and hook URLs read as 's3cret'; anything the script stores itself (setProperty) reads back as stored
     PropertiesService: { getScriptProperties: () => ({ getProperty: (k) => (k in props ? props[k] : /_AT$/.test(k) ? null : 's3cret'), setProperty: (k, v) => { props[k] = String(v); } }) },
     ContentService: { createTextOutput: (s) => ({ s, setMimeType() { return this; } }), MimeType: { JSON: 'json' } },
-    ScriptApp: { getOAuthToken: () => 'tok', WeekDay: { THURSDAY: 'THURSDAY' }, getProjectTriggers: () => [], deleteTrigger() {}, newTrigger: () => ({ timeBased: () => ({ everyMinutes: () => ({ create() {} }), onWeekDay: () => ({ atHour: () => ({ create() {} }) }) }), forSpreadsheet: () => ({ onFormSubmit: () => ({ create() {} }), onChange: () => ({ create() {} }) }) }) },
+    ScriptApp: { getOAuthToken: () => 'tok', WeekDay: { THURSDAY: 'THURSDAY' }, getProjectTriggers: () => [], deleteTrigger() {}, newTrigger: () => ({ timeBased: () => ({ everyMinutes: () => ({ create() {} }), after: () => ({ create() {} }), onWeekDay: () => ({ atHour: () => ({ create() {} }) }) }), forSpreadsheet: () => ({ onFormSubmit: () => ({ create() {} }), onChange: () => ({ create() {} }) }) }) },
     UrlFetchApp: { fetch: (url, opts) => {
       (ctxCalls.fetches = ctxCalls.fetches || []).push(url);
       if (/googleapis\.com\/(upload\/)?drive\//.test(url)) return fakeDrive(url, opts);
