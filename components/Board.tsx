@@ -9,7 +9,7 @@ import { useSince, isNew } from './useSince';
 import { hireFields, notFitFields } from './hirePrompt';
 import { initials, avatarColor } from './CandidatesTable';
 
-export type BoardCard = { id: string; name: string; stage: string; position: string; source: string; fit: string; session: string; score: string; arrival: string; changed?: string[]; company?: string; test?: boolean; zoom?: ZoomLive };
+export type BoardCard = { id: string; name: string; email?: string; phone?: string; stage: string; position: string; source: string; fit: string; session: string; score: string; arrival: string; changed?: string[]; company?: string; test?: boolean; zoom?: ZoomLive };
 const PER_COLUMN = 60;
 const FIT_TONE: Record<string, string> = { Great: 'green', Good: 'blue', 'Not Fit': 'grey' };
 
@@ -20,6 +20,27 @@ export default function Board({ stages, cards }: { stages: string[]; cards: Boar
   const [over, setOver] = useState('');
   const [moved, setMoved] = useState<Record<string, string>>({}); // shows the move at once, before the sheet confirms
   const stageOf = (c: BoardCard) => moved[c.id] || c.stage;
+
+  // Find on the board (Miguel, 2026-11-12): name, email or phone. Nothing is hidden: the board scrolls to the card
+  // and it is outlined in blue. Enter (or ↓) goes to the next match, Shift+Enter (or ↑) to the one before.
+  const [find, setFind] = useState('');
+  const [hit, setHit] = useState(0);
+  const norm = (v: string) => v.toLowerCase().replace(/\s+/g, ' ').trim();
+  const digits = (v: string) => v.replace(/\D/g, '');
+  const q = norm(find);
+  const qd = digits(find);
+  const matches = q.length < 2 ? [] : cards.filter((c) => norm(c.name).includes(q) || norm(c.email || '').includes(q) || (qd.length >= 4 && digits(c.phone || '').includes(qd)));
+  const focusId = matches.length ? matches[Math.min(hit, matches.length - 1)].id : '';
+  useEffect(() => { setHit(0); }, [find]);
+  useEffect(() => {
+    if (!focusId) return;
+    const el = boardRef.current?.querySelector(`[data-card="${CSS.escape(focusId)}"]`);
+    el?.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
+  }, [focusId]);
+  function step(dir: 1 | -1) {
+    if (!matches.length) return;
+    setHit((h) => (h + dir + matches.length) % matches.length);
+  }
   // fresh data from the sheet (after a move, an undo or the auto refresh) replaces the shown-at-once moves
   useEffect(() => { setMoved({}); }, [cards]);
 
@@ -81,6 +102,18 @@ export default function Board({ stages, cards }: { stages: string[]; cards: Boar
   }
 
   return (
+    <>
+    <div className="board-find">
+      <input type="search" value={find} onChange={(e) => setFind(e.target.value)} placeholder="Find on the board: name, email or phone"
+        aria-label="Find on the board"
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === 'ArrowDown') { e.preventDefault(); step(e.shiftKey ? -1 : 1); }
+          if (e.key === 'ArrowUp') { e.preventDefault(); step(-1); }
+          if (e.key === 'Escape') setFind('');
+        }} />
+      {q.length >= 2 && <span className="muted small">{matches.length ? `${Math.min(hit, matches.length - 1) + 1} of ${matches.length}` : 'Not on the board'}</span>}
+      {matches.length > 1 && <><button type="button" className="btn small-btn" onClick={() => step(-1)} aria-label="Previous match">↑</button><button type="button" className="btn small-btn" onClick={() => step(1)} aria-label="Next match">↓</button></>}
+    </div>
     <div className="board-wrap">
       {dragging && <div className="board-edge left" aria-hidden="true">‹</div>}
       {dragging && <div className="board-edge right" aria-hidden="true">›</div>}
@@ -91,8 +124,8 @@ export default function Board({ stages, cards }: { stages: string[]; cards: Boar
           <section key={st} className={`board-col ${over === st ? 'over' : ''}`}
             onDragOver={(e) => { e.preventDefault(); setOver(st); }} onDragLeave={() => setOver('')} onDrop={(e) => { e.preventDefault(); drop(st); }}>
             <h2>{st} <span className="count">{col.filter((c) => !c.test).length}</span></h2>
-            {col.slice(0, PER_COLUMN).map((c) => (
-              <article key={c.id} className={`card ${busy && dragging?.id === c.id ? 'busy' : ''}`} draggable
+            {[...col.slice(0, PER_COLUMN), ...col.slice(PER_COLUMN).filter((c) => c.id === focusId)].map((c) => (
+              <article key={c.id} data-card={c.id} className={`card ${busy && dragging?.id === c.id ? 'busy' : ''} ${c.id === focusId ? 'found' : ''}`} draggable
                 onDragStart={() => setDragging(c)} onDragEnd={() => { setDragging(null); setOver(''); }}>
                 <div className="card-top">
                   <span className="av" style={{ background: avatarColor(c.id) }}>{initials(c.name)}</span>
@@ -118,5 +151,6 @@ export default function Board({ stages, cards }: { stages: string[]; cards: Boar
       })}
     </div>
     </div>
+    </>
   );
 }
