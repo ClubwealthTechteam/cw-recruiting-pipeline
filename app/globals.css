@@ -626,8 +626,14 @@ input:focus, select:focus, textarea:focus { outline: 3px solid #dbe7fb; border-c
 .skip-choice { display: inline-flex; gap: 6px; flex-wrap: wrap; align-items: center; }
 
 /* Candidates stage dropdown (Miguel, 2026-11-12) */
-.stage-select { display: inline-flex; align-items: center; gap: 8px; margin: 4px 0 12px; }
-.stage-select select { min-width: 240px; padding: 6px 10px; font: inherit; border: 1px solid #cfd5df; border-radius: 6px; background: #fff; }
+.stage-select { display: inline-flex; align-items: center; gap: 6px; }
+.stage-select select { min-width: 200px; padding: 6px 10px; font: inherit; border: 1px solid #cfd5df; border-radius: 6px; background: #fff; }
+
+/* Candidates: filters in one row (Miguel, 2026-11-12) */
+.cand-toolbar { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; margin: 4px 0 10px; }
+.cand-search { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; flex: 1; min-width: 300px; }
+.cand-search input[name=q] { flex: 1; min-width: 200px; padding: 6px 10px; font: inherit; border: 1px solid #cfd5df; border-radius: 6px; }
+.cand-search select { padding: 6px 8px; font: inherit; border: 1px solid #cfd5df; border-radius: 6px; background: #fff; }
 
 /* Find on the board (Miguel, 2026-11-12) */
 .board-find { display: flex; gap: 8px; align-items: center; margin: 0 0 10px; }

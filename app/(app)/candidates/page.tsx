@@ -77,28 +77,30 @@ export default async function Candidates({ searchParams }: { searchParams: Promi
     <>
       <header className="page-head"><h1>Candidates</h1><p className="sub">A blue dot marks applicants who are new or changed since your last visit.</p></header>
       <Suspense fallback={null}><div data-tour="views"><SavedViews views={(d.views || []).map((v) => ({ name: s(v.Name), query: s(v.Query), by: s(v['Created By']) }))} /></div></Suspense>
-      <StageSelect value={stage} options={['Active', ...STAGES, 'All'].map((t) => ({
-        value: t, href: link({ stage: t }),
-        label: `${t === 'Active' ? 'Active (not closed)' : t === 'All' ? 'All stages' : t} (${counts[t] ?? 0})`
-      }))} />
-      <form className="filters" action="/candidates">
-        <input type="hidden" name="stage" value={stage} />
-        <input name="q" defaultValue={p.q} placeholder="Search name, email or position" />
-        {['fit', 'source', 'position', 'score', 'session', 'applied', 'from', 'to'].map((k) => p[k as keyof Q] ? <input key={k} type="hidden" name={k} value={p[k as keyof Q]} /> : null)}
-        {allTags.length > 0 && <select name="tag" defaultValue={p.tag || ''}><option value="">All tags</option>{allTags.map((t) => <option key={t}>{t}</option>)}</select>}
-        {p.week && <input type="hidden" name="week" value={p.week} />}
-        <label className="check-label"><input type="checkbox" name="history" value="1" defaultChecked={showHistory} /> Include applicants from before the system</label>
-        <button className="btn">Filter</button>
-        <Link href="/candidates" className="btn ghost">Clear all filters</Link>
-        <span className="hint">Filter by Fit, Score, Stage, Position, Source, Applied or Session with the ▾ on each column header.</span>
-      </form>
-      <div className="result-count">
-        <p><strong>{rows.filter(counted).length}</strong> applicant{rows.filter(counted).length === 1 ? '' : 's'}{p.position ? <> for <strong>{p.position}</strong></> : ''}{p.tag ? <> tagged <strong>{p.tag}</strong></> : ''}{p.week ? <> who applied the week of <strong>{formatDate(p.week)}</strong></> : ''}{range ? <> who applied <strong>{p.applied === 'custom' ? `${range[0].startsWith('0000') ? 'up to' : `${formatDate(range[0])} –`} ${range[1].startsWith('9999') ? 'now' : formatDate(range[1])}` : (APPLIED_OPTIONS.find(([k]) => k === p.applied)?.[1] || '').replace(/^Applied /, '')}</strong></> : ''} match these filters{rows.some((a) => !counted(a)) ? <span className="muted"> (plus {rows.filter((a) => !counted(a)).length} test or repeat application{rows.filter((a) => !counted(a)).length === 1 ? '' : 's'}, not counted)</span> : ''}</p>
+      {/* one row of filters (Miguel, 2026-11-12): stage, position, search, tag */}
+      <div className="cand-toolbar">
+        <StageSelect value={stage} options={['Active', ...STAGES, 'All'].map((t) => ({
+          value: t, href: link({ stage: t }),
+          label: `${t === 'Active' ? 'Active (not closed)' : t === 'All' ? 'All stages' : t} (${counts[t] ?? 0})`
+        }))} />
         <StageSelect label="Position" value={p.position || ''} options={[
           { value: '', label: `All positions (${matchOthers.filter(counted).length})`, href: link({ position: undefined }) },
           ...byPosition.map((x) => ({ value: x.position, label: `${x.position} (${x.count})`, href: link({ position: x.position }) })),
           ...(p.position && !byPosition.some((x) => x.position === p.position) ? [{ value: p.position, label: `${p.position} (0)`, href: link({ position: p.position }) }] : [])
         ]} />
+        <form className="cand-search" action="/candidates">
+          <input type="hidden" name="stage" value={stage} />
+          <input name="q" defaultValue={p.q} placeholder="Search name, email or position" aria-label="Search" />
+          {['fit', 'source', 'position', 'score', 'session', 'applied', 'from', 'to'].map((k) => p[k as keyof Q] ? <input key={k} type="hidden" name={k} value={p[k as keyof Q]} /> : null)}
+          {allTags.length > 0 && <select name="tag" defaultValue={p.tag || ''} aria-label="Tag"><option value="">All tags</option>{allTags.map((t) => <option key={t}>{t}</option>)}</select>}
+          {p.week && <input type="hidden" name="week" value={p.week} />}
+          <label className="check-label small"><input type="checkbox" name="history" value="1" defaultChecked={showHistory} /> Include before the system</label>
+          <button className="btn">Search</button>
+          <Link href="/candidates" className="btn ghost">Clear all</Link>
+        </form>
+      </div>
+      <div className="result-count">
+        <p><strong>{rows.filter(counted).length}</strong> applicant{rows.filter(counted).length === 1 ? '' : 's'}{p.position ? <> for <strong>{p.position}</strong></> : ''}{p.tag ? <> tagged <strong>{p.tag}</strong></> : ''}{p.week ? <> who applied the week of <strong>{formatDate(p.week)}</strong></> : ''}{range ? <> who applied <strong>{p.applied === 'custom' ? `${range[0].startsWith('0000') ? 'up to' : `${formatDate(range[0])} –`} ${range[1].startsWith('9999') ? 'now' : formatDate(range[1])}` : (APPLIED_OPTIONS.find(([k]) => k === p.applied)?.[1] || '').replace(/^Applied /, '')}</strong></> : ''} match these filters{rows.some((a) => !counted(a)) ? <span className="muted"> (plus {rows.filter((a) => !counted(a)).length} test or repeat application{rows.filter((a) => !counted(a)).length === 1 ? '' : 's'}, not counted)</span> : ''} <span className="muted small">· more filters: ▾ on each column header</span></p>
       </div>
       <AddApplicant />
       <div data-tour="cand-table"><CandidatesTable rows={tableRows} filters={{
