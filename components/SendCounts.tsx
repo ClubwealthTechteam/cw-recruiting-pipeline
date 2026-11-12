@@ -1,10 +1,10 @@
 'use client';
 import Link from 'next/link';
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
 
 export type SendStats = { emailWaiting: number; oljWaiting: number; queued: number; sent: number; oljSent: number; failed: number };
 /** One email or OLJ message in the lists under the tiles. */
-export type SentItem = { at: string; id: string; name: string; to: string; what: string; by: string; status: string };
+export type SentItem = { emailId: string; at: string; id: string; name: string; to: string; what: string; by: string; status: string };
 export type SendLists = { waiting: SentItem[]; sent: SentItem[]; olj: SentItem[] };
 
 /**
@@ -15,6 +15,16 @@ export type SendLists = { waiting: SentItem[]; sent: SentItem[]; olj: SentItem[]
 export default function SendCounts({ today, week, todayLists, weekLists }: { today: SendStats; week: SendStats; todayLists: SendLists; weekLists: SendLists }) {
   const [range, setRange] = useState<'today' | 'week'>('today');
   const [open, setOpen] = useState<'' | keyof SendLists>('');
+  // click a row: the email as it was sent, under the row (Miguel, 2026-11-12)
+  const [shownEmail, setShownEmail] = useState('');
+  const [mail, setMail] = useState<Record<string, { subject: string; body: string } | { error: string }>>({});
+  async function toggleEmail(emailId: string) {
+    if (shownEmail === emailId) { setShownEmail(''); return; }
+    setShownEmail(emailId);
+    if (mail[emailId]) return;
+    const j = await fetch(`/api/email/${encodeURIComponent(emailId)}`).then((r) => r.json()).catch(() => ({ ok: false }));
+    setMail((m) => ({ ...m, [emailId]: j.ok ? j.data : { error: j.error || 'Could not load the email' } }));
+  }
   const c = range === 'today' ? today : week;
   const lists = range === 'today' ? todayLists : weekLists;
   const when = range === 'today' ? 'today' : 'in the last 7 days';
@@ -47,17 +57,30 @@ export default function SendCounts({ today, week, todayLists, weekLists }: { tod
           {shown.length === 0 ? <p className="muted">None.</p> : (
             <div className="table-scroll">
               <table className="table">
-                <thead><tr><th>When (PT)</th><th>Applicant</th><th>Sent to</th><th>Email</th><th>By</th>{open === 'waiting' && <th>Status</th>}</tr></thead>
+                <thead><tr><th>When (PT)</th><th>Applicant</th><th>Sent to</th><th>Email</th><th>By</th>{open === 'waiting' && <th>Status</th>}<th></th></tr></thead>
                 <tbody>
                   {shown.map((e, i) => (
-                    <tr key={e.at + e.to + i}>
+                    <Fragment key={e.emailId || e.at + e.to + i}>
+                    <tr className={shownEmail === e.emailId ? 'row-open' : ''}>
                       <td className="small">{e.at.slice(5, 16).replace(' ', ' · ')}</td>
                       <td>{e.id ? <Link href={`/candidates/${encodeURIComponent(e.id)}`}>{e.name || e.id}</Link> : <span className="muted">{e.name || '—'}</span>}</td>
                       <td className="small">{e.to}</td>
                       <td className="small">{e.what}</td>
                       <td className="small">{e.by || 'System'}</td>
                       {open === 'waiting' && <td className="small">{e.status}</td>}
+                      <td>{e.emailId && !e.to.startsWith('OnlineJobs') && <button type="button" className="btn small-btn" onClick={() => toggleEmail(e.emailId)}>{shownEmail === e.emailId ? 'Hide' : 'View email'}</button>}</td>
                     </tr>
+                    {shownEmail === e.emailId && (
+                      <tr className="email-preview-row"><td colSpan={open === 'waiting' ? 7 : 6}>
+                        {!mail[e.emailId] ? <p className="muted">Loading the email…</p>
+                          : 'error' in mail[e.emailId] ? <p className="error">{(mail[e.emailId] as { error: string }).error}</p>
+                          : <>
+                              <div className="small" style={{ margin: '0 0 6px' }}><b>Subject:</b> {(mail[e.emailId] as { subject: string }).subject} · <b>To:</b> {e.to}</div>
+                              <iframe className="mail-frame" sandbox="allow-popups allow-popups-to-escape-sandbox" title="Email as sent" srcDoc={`<!doctype html><meta charset="utf-8"><base target="_blank"><body style="font:14px/1.5 Arial,sans-serif;color:#222;margin:16px">${(mail[e.emailId] as { body: string }).body}</body>`} />
+                            </>}
+                      </td></tr>
+                    )}
+                    </Fragment>
                   ))}
                 </tbody>
               </table>
