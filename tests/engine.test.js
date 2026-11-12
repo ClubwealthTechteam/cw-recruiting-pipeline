@@ -1472,3 +1472,25 @@ test("Don't send can keep the stage (keepStage) or move back (default)", () => {
   const back = env.api({ action: 'skipEmail', by: 'Miguel', emailId: pend[1]['Email ID'] });
   assert.notEqual(back.data.backTo, '');
 });
+
+test('database copy: off until the first full copy; then each save sends only the rows it changed', () => {
+  const { ctxCalls } = require('./harness');
+  const env = batchEnv();
+  ctxCalls.posts = [];
+  env.api({ action: 'addNote', by: 'Am', id: 'F-2', note: 'hello' });
+  assert.equal(ctxCalls.posts.filter((p) => /db\/ingest/.test(p.url)).length, 0, 'nothing before the first copy');
+  const r = env.api({ action: 'dbPushAll', by: 'Miguel' });
+  assert.equal(r.ok, true, r.error);
+  assert.ok(r.data.counts.Applicants >= 3);
+  const full = ctxCalls.posts.filter((p) => /db\/ingest/.test(p.url)).map((p) => JSON.parse(p.body));
+  assert.ok(full.some((b) => b.op === 'trim' && b.tab === 'Applicants'));
+  assert.ok(full.some((b) => b.op === 'kv' && b.key === 'jobAds'));
+  ctxCalls.posts = [];
+  env.api({ action: 'setStage', by: 'Am', ids: ['F-2'], stage: 'Benched' });
+  const sent = ctxCalls.posts.filter((p) => /db\/ingest/.test(p.url)).map((p) => JSON.parse(p.body));
+  const apps = sent.filter((b) => b.tab === 'Applicants').flatMap((b) => b.rows);
+  assert.deepEqual(apps.map((x) => x.data['Applicant ID']), ['F-2']);
+  assert.equal(apps[0].data.Stage, 'Benched');
+  assert.ok(sent.some((b) => b.tab === 'History'), 'history row sent');
+  assert.ok(sent.some((b) => b.tab === 'Outbox'), 'prepared email sent');
+});

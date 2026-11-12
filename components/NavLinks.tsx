@@ -17,6 +17,7 @@ const ICON: Record<string, string> = {
   '/jobs': 'M4 7h16v12H4zM9 7V5h6v2M4 12h16',
   '/templates': 'M5 4h14v16H5zM8 8h8M8 12h8M8 16h5',
   '/team': 'M9 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6zm8 0a3 3 0 1 0 0-6M3 20a6 6 0 0 1 12 0m2-6a6 6 0 0 1 4 6',
+  '/database': 'M4 6c0-1.7 3.6-3 8-3s8 1.3 8 3-3.6 3-8 3-8-1.3-8-3zm0 0v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3',
   '/help': 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zm-2.5-11a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6v.6M12 17v.5'
 };
 const LINKS = [
@@ -31,6 +32,7 @@ const LINKS = [
   { href: '/attention', label: 'Needs Attention' },
   { href: '/approvals', label: 'Needs Approval' },
   { href: '/team', label: 'Active Team Members' },
+  { href: '/database', label: 'Database' },
   { href: '/help', label: 'Help' }
 ];
 const KEY = 'cw-sidebar';

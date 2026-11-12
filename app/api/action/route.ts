@@ -6,7 +6,7 @@ import { fireRoutine } from '@/lib/chat';
 /** Google Sheets can take a while (Tara, 2026-11-10): give it up to a minute instead of failing early. */
 export const maxDuration = 60;
 
-const ALLOWED = ['setStage', 'addNote', 'setEmail', 'resolveFlag', 'sendInvite', 'saveScore', 'setTags', 'saveView', 'deleteView', 'sendReply', 'sendOljMessage', 'undoStage', 'undoNote', 'addApplicant', 'replyToEmail', 'linkReply', 'updateApplicant', 'approveEmail', 'approveEmails', 'skipEmail', 'updateTeam', 'moveSession', 'sendTemplate', 'reinviteNoShows', 'editPendingEmail', 'startZoomTracking', 'setAutoInvites', 'setActivePositions', 'pauseInvites', 'attachToEmail', 'saveTemplate', 'deleteTemplate', 'bulkMessage'];
+const ALLOWED = ['setStage', 'addNote', 'setEmail', 'resolveFlag', 'sendInvite', 'saveScore', 'setTags', 'saveView', 'deleteView', 'sendReply', 'sendOljMessage', 'undoStage', 'undoNote', 'addApplicant', 'replyToEmail', 'linkReply', 'updateApplicant', 'approveEmail', 'approveEmails', 'dbPushAll', 'skipEmail', 'updateTeam', 'moveSession', 'sendTemplate', 'reinviteNoShows', 'editPendingEmail', 'startZoomTracking', 'setAutoInvites', 'setActivePositions', 'pauseInvites', 'attachToEmail', 'saveTemplate', 'deleteTemplate', 'bulkMessage'];
 
 export async function POST(req: Request) {
   const user = await currentUser();
