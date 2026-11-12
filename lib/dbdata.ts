@@ -4,7 +4,7 @@ import type { PipelineData, Row, TeamMember, JobAd } from '@/lib/sheet';
  * Builds the same data the Apps Script "data" action returns (Code.gs api_), from the copy in Postgres.
  * Kept in step with Code.gs: LIST_FIELDS / OLD_FIELDS, the "mine" filters, Body only on emails waiting for approval.
  */
-const LIST_FIELDS = ['Applicant ID', 'Source', 'Applied At (PT)', 'First Name', 'Last Name', 'Email', 'Position (as typed)',
+const LIST_FIELDS = ['Applicant ID', 'Source', 'Applied At (PT)', 'First Name', 'Last Name', 'Email', 'Phone', 'Position (as typed)',
   'Position', 'Stage', 'Stage Updated At', 'Stage Updated By', 'Interview Date', 'Invite Count', 'Confirmed At',
   'Reminder Sent At', 'Zoom Minutes', 'Historical', 'Screen Track', 'Screen Tag', 'Screen Summary', 'Invite Hold',
   'Minutes Early', 'Arrival', 'Tags'];

@@ -24,7 +24,7 @@ export default async function BoardPage({ searchParams }: { searchParams: Promis
     .map((a) => {
       const sc = scoreSummary(cards.get(s(a['Applicant ID'])) || []);
       return {
-        id: s(a['Applicant ID']), name: fullName(a) || '(no name)', stage: boardColumnOf(s(a.Stage), a.Tags), company: hiredCompany(a.Tags), position: s(a.Position), source: s(a.Source),
+        id: s(a['Applicant ID']), name: fullName(a) || '(no name)', email: s(a.Email), phone: s(a.Phone), stage: boardColumnOf(s(a.Stage), a.Tags), company: hiredCompany(a.Tags), position: s(a.Position), source: s(a.Source),
         fit: s(a['Screen Tag']), session: a['Interview Date'] ? formatDate(ymd(a['Interview Date'])).replace(/, \d{4}$/, '') : '',
         changed: [s(a['Applied At (PT)']), s(a['Stage Updated At']), s(a['Confirmed At'])],
         score: sc.count ? sc.average.toFixed(1) : '', arrival: s(a.Arrival), test: isTest(a), zoom: live.get(s(a['Applicant ID']))

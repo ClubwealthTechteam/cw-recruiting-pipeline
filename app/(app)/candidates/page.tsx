@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import StageSelect from '@/components/StageSelect';
 import { Suspense } from 'react';
 import { getData, getDataWithHistory } from '@/lib/sheet';
 import { STAGES, s, fullName, ymd, formatDate, formatDateTime, positionCounts, weekOf, scoreSummary, splitTags, isTest, counted, isRepeat, SOURCES, SOURCE_LABEL, zoomLive, appliedRange, APPLIED_OPTIONS } from '@/lib/pipeline';
@@ -76,11 +77,10 @@ export default async function Candidates({ searchParams }: { searchParams: Promi
     <>
       <header className="page-head"><h1>Candidates</h1><p className="sub">A blue dot marks applicants who are new or changed since your last visit.</p></header>
       <Suspense fallback={null}><div data-tour="views"><SavedViews views={(d.views || []).map((v) => ({ name: s(v.Name), query: s(v.Query), by: s(v['Created By']) }))} /></div></Suspense>
-      <nav className="tabs">
-        {['Active', ...STAGES, 'All'].map((t) => (
-          <Link key={t} href={link({ stage: t })} className={t === stage ? 'active' : ''}>{t} <span className="count">{counts[t] ?? 0}</span></Link>
-        ))}
-      </nav>
+      <StageSelect value={stage} options={['Active', ...STAGES, 'All'].map((t) => ({
+        value: t, href: link({ stage: t }),
+        label: `${t === 'Active' ? 'Active (not closed)' : t === 'All' ? 'All stages' : t} (${counts[t] ?? 0})`
+      }))} />
       <form className="filters" action="/candidates">
         <input type="hidden" name="stage" value={stage} />
         <input name="q" defaultValue={p.q} placeholder="Search name, email or position" />
@@ -94,14 +94,11 @@ export default async function Candidates({ searchParams }: { searchParams: Promi
       </form>
       <div className="result-count">
         <p><strong>{rows.filter(counted).length}</strong> applicant{rows.filter(counted).length === 1 ? '' : 's'}{p.position ? <> for <strong>{p.position}</strong></> : ''}{p.tag ? <> tagged <strong>{p.tag}</strong></> : ''}{p.week ? <> who applied the week of <strong>{formatDate(p.week)}</strong></> : ''}{range ? <> who applied <strong>{p.applied === 'custom' ? `${range[0].startsWith('0000') ? 'up to' : `${formatDate(range[0])} –`} ${range[1].startsWith('9999') ? 'now' : formatDate(range[1])}` : (APPLIED_OPTIONS.find(([k]) => k === p.applied)?.[1] || '').replace(/^Applied /, '')}</strong></> : ''} match these filters{rows.some((a) => !counted(a)) ? <span className="muted"> (plus {rows.filter((a) => !counted(a)).length} test or repeat application{rows.filter((a) => !counted(a)).length === 1 ? '' : 's'}, not counted)</span> : ''}</p>
-        <div className="position-chips" aria-label="Applicants by position">
-          <Link href={link({ position: undefined })} className={!p.position ? 'chip active' : 'chip'}>All positions <span className="count">{matchOthers.filter(counted).length}</span></Link>
-          {byPosition.map((x) => (
-            <Link key={x.position} href={link({ position: x.position })} className={p.position === x.position ? 'chip active' : 'chip'}>
-              {x.position} <span className="count">{x.count}</span>
-            </Link>
-          ))}
-        </div>
+        <StageSelect label="Position" value={p.position || ''} options={[
+          { value: '', label: `All positions (${matchOthers.filter(counted).length})`, href: link({ position: undefined }) },
+          ...byPosition.map((x) => ({ value: x.position, label: `${x.position} (${x.count})`, href: link({ position: x.position }) })),
+          ...(p.position && !byPosition.some((x) => x.position === p.position) ? [{ value: p.position, label: `${p.position} (0)`, href: link({ position: p.position }) }] : [])
+        ]} />
       </div>
       <AddApplicant />
       <div data-tour="cand-table"><CandidatesTable rows={tableRows} filters={{

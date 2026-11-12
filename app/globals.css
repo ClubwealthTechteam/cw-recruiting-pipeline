@@ -624,3 +624,12 @@ input:focus, select:focus, textarea:focus { outline: 3px solid #dbe7fb; border-c
 
 /* Don't send: keep stage / move back (Miguel, 2026-11-11) */
 .skip-choice { display: inline-flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+
+/* Candidates stage dropdown (Miguel, 2026-11-12) */
+.stage-select { display: inline-flex; align-items: center; gap: 8px; margin: 4px 0 12px; }
+.stage-select select { min-width: 240px; padding: 6px 10px; font: inherit; border: 1px solid #cfd5df; border-radius: 6px; background: #fff; }
+
+/* Find on the board (Miguel, 2026-11-12) */
+.board-find { display: flex; gap: 8px; align-items: center; margin: 0 0 10px; }
+.board-find input { width: 320px; max-width: 100%; padding: 6px 10px; font: inherit; border: 1px solid #cfd5df; border-radius: 6px; }
+.board .card.found { outline: 2px solid #1f6feb; outline-offset: 1px; background: #eaf2ff; box-shadow: 0 0 0 4px rgba(31, 111, 235, .18); }

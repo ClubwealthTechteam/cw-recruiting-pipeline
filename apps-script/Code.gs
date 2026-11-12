@@ -1619,7 +1619,7 @@ function plain_(rows) {
 
 var MANUAL_BY = ['Miguel', 'Camille', 'Am'];
 
-var LIST_FIELDS = ['Applicant ID', 'Source', 'Applied At (PT)', 'First Name', 'Last Name', 'Email', 'Position (as typed)',
+var LIST_FIELDS = ['Applicant ID', 'Source', 'Applied At (PT)', 'First Name', 'Last Name', 'Email', 'Phone', 'Position (as typed)',
   'Position', 'Stage', 'Stage Updated At', 'Stage Updated By', 'Interview Date', 'Invite Count', 'Confirmed At',
   'Reminder Sent At', 'Zoom Minutes', 'Historical', 'Screen Track', 'Screen Tag', 'Screen Summary', 'Invite Hold',
   'Minutes Early', 'Arrival', 'Tags'];
