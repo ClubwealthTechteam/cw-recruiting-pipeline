@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { revalidateTag } from 'next/cache';
-import { currentUser } from '@/lib/auth';
+import { currentUser, isDbAdmin } from '@/lib/auth';
 import { dbConfigured, setKv } from '@/lib/db';
 import { PIPELINE_TAG } from '@/lib/sheet';
 
@@ -8,6 +8,7 @@ import { PIPELINE_TAG } from '@/lib/sheet';
 export async function POST(req: Request) {
   const user = await currentUser();
   if (!user) return NextResponse.json({ ok: false, error: 'Please sign in again.' }, { status: 401 });
+  if (!isDbAdmin(user)) return NextResponse.json({ ok: false, error: 'Only Miguel can change the database settings.' }, { status: 403 });
   if (!dbConfigured()) return NextResponse.json({ ok: false, error: 'The database is not connected (DATABASE_URL).' }, { status: 503 });
   const body = await req.json().catch(() => null) as { readFromDb?: boolean; fastSaves?: boolean } | null;
   if (typeof body?.readFromDb === 'boolean') {

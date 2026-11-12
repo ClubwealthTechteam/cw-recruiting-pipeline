@@ -1,6 +1,8 @@
 import { dbConfigured, tabStats, getKvs, opStats } from '@/lib/db';
 import { read, dataSource } from '@/lib/sheet';
 import DatabaseControls from '@/components/DatabaseControls';
+import { notFound } from 'next/navigation';
+import { requireUser, isDbAdmin } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -9,6 +11,7 @@ export const dynamic = 'force-dynamic';
  * copy, and the switch that makes the CRM read from it. The sheet stays in charge of saving in this stage.
  */
 export default async function Database() {
+  if (!isDbAdmin(await requireUser())) notFound(); // Miguel only
   if (!dbConfigured()) {
     return (<><header className="page-head"><h1>Database</h1></header>
       <section className="panel"><p>The database is not connected yet. In Vercel: cw-recruiting-pipeline → Storage → Neon → Connect (prefix DATABASE), then redeploy.</p></section></>);

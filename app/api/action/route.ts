@@ -1,6 +1,6 @@
 import { NextResponse, after } from 'next/server';
 import { revalidateTag } from 'next/cache';
-import { currentUser } from '@/lib/auth';
+import { currentUser, isDbAdmin } from '@/lib/auth';
 import { act, PIPELINE_TAG } from '@/lib/sheet';
 import { fastSave } from '@/lib/fastsave';
 import { fastSavesOn, drainOps } from '@/lib/savequeue';
@@ -18,6 +18,7 @@ export async function POST(req: Request) {
   const body = await req.json().catch(() => null);
   if (!body || !ALLOWED.includes(body.action)) return NextResponse.json({ ok: false, error: 'Bad request' }, { status: 400 });
   const { action, ...payload } = body;
+  if (action === 'dbPushAll' && !isDbAdmin(user)) return NextResponse.json({ ok: false, error: 'Only Miguel can copy the database.' }, { status: 403 });
   try {
     // Database stage 2: the common saves are shown at once and done on the sheet right after, in order.
     const fastOn = await fastSavesOn();

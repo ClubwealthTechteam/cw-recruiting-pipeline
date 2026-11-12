@@ -67,6 +67,10 @@ export async function endSession() {
   (await cookies()).delete(COOKIE);
 }
 
+/** Only Miguel sees and changes the Database page and its switches (Miguel, 2026-11-12). */
+export const DB_ADMINS: readonly string[] = ['Miguel'];
+export const isDbAdmin = (user: string | null | undefined) => !!user && DB_ADMINS.includes(user);
+
 export async function currentUser(): Promise<User | null> {
   const raw = (await cookies()).get(COOKIE)?.value;
   if (!raw) return null;

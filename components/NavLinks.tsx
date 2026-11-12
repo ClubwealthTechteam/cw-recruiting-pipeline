@@ -38,7 +38,7 @@ const LINKS = [
 const KEY = 'cw-sidebar';
 const INBOX_ICON = 'M3 5h18v14H3zm0 8h5l2 3h4l2-3h5';
 
-export default function NavLinks({ open, approvals = 0 }: { open: number; approvals?: number }) {
+export default function NavLinks({ open, approvals = 0, dbAdmin = false }: { open: number; approvals?: number; dbAdmin?: boolean }) {
   const path = usePathname();
   const [mini, setMini] = useState(false);
   const [inboxes, setInboxes] = useState(true);
@@ -63,7 +63,7 @@ export default function NavLinks({ open, approvals = 0 }: { open: number; approv
   return (
     <>
       <nav>
-        {LINKS.map((l) => {
+        {LINKS.filter((l) => l.href !== '/database' || dbAdmin).map((l) => {
           const active = l.href === '/' ? path === '/' : path.startsWith(l.href);
           const link = (
             <Link key={l.href} href={l.href} prefetch className={active && !openBox ? 'active' : ''} title={l.label} data-tour={`nav${l.href === '/' ? '-home' : l.href.replace('/', '-')}`}>
