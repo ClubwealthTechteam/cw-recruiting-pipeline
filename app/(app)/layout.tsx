@@ -14,6 +14,8 @@ import { Suspense } from 'react';
 import { requireUser } from '@/lib/auth';
 import { getData } from '@/lib/sheet';
 import { s, fullName } from '@/lib/pipeline';
+import FailedSaves, { type FailedSave } from '@/components/FailedSaves';
+import { dbConfigured, failedOpsFor } from '@/lib/db';
 
 /** Google Sheets can take a while (Tara, 2026-11-10): give it up to a minute instead of failing early. */
 export const maxDuration = 60;
@@ -42,6 +44,13 @@ export default async function AppLayout({ children, panel }: { children: React.R
   } catch {
     // pages show the error themselves
   }
+  let failed: FailedSave[] = [];
+  if (dbConfigured()) {
+    try {
+      failed = (await failedOpsFor(user)).filter((o) => o.error !== 'retry')
+        .map((o) => ({ id: Number(o.id), label: o.label, error: o.error || '', at: new Date(o.created_at).toLocaleTimeString('en-US', { timeZone: 'America/Los_Angeles', hour: 'numeric', minute: '2-digit' }) }));
+    } catch { /* no message */ }
+  }
   return (
     <div className="shell">
       {/* cancelled Wednesdays for the session lists in the browser (lib/pipeline cancelledSessions) */}
@@ -58,7 +67,7 @@ export default async function AppLayout({ children, panel }: { children: React.R
           <form action="/api/logout" method="post"><button className="link">Sign out</button></form>
         </div>
       </aside>
-      <main className="content"><Freshness at={fetchedAt} />{children}</main>
+      <main className="content"><Freshness at={fetchedAt} /><FailedSaves items={failed} />{children}</main>
       {panel}
       <InboxPanel emailReady={emailReady} />
       <ChatBubble />

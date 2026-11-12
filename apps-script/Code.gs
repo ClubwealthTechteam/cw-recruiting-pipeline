@@ -218,6 +218,21 @@ function dbRotate_(st) {
   return n;
 }
 
+/** Fast saves wait in the site's queue; each tick nudges it in case a save is still waiting (database stage 2). */
+function dbDrainPing_() {
+  if (!dbOn_()) return 0;
+  var props = PropertiesService.getScriptProperties();
+  var url = props.getProperty('SITE_URL');
+  if (!url) return 0;
+  try {
+    UrlFetchApp.fetch(url.replace(/\/$/, '') + '/api/db/drain', {
+      method: 'post', contentType: 'application/json', muteHttpExceptions: true,
+      payload: JSON.stringify({ secret: props.getProperty('API_SECRET') })
+    });
+  } catch (e) { /* the next tick tries again */ }
+  return 0;
+}
+
 /** Row counts per tab, for the Database page's check against the copy. */
 function dbCounts_() {
   var o = {};
@@ -1262,7 +1277,8 @@ function tick() {
     ['zoom', function () { return processZoom_(st); }],
     ['reminders', function () { return queueReminders_(st); }],
     ['slack', function () { return slackAlerts_(st); }],
-    ['dbCopy', function () { return dbRotate_(st); }]
+    ['dbCopy', function () { return dbRotate_(st); }],
+    ['saveQueue', function () { return dbDrainPing_(); }]
   ];
   try {
     for (var i = 0; i < steps.length; i++) {
@@ -1933,6 +1949,16 @@ function api_(req) {
       // queued that has not gone out yet. Only moves that are still as they were are undone.
       var outU = table_(SH.OUTBOX);
       var cancelled = 0, alreadySent = 0;
+      // fast saves do not know the queued email IDs yet: cancel the moved applicants' invites queued since the move
+      if (/^\d{4}-\d{2}-\d{2} /.test(String(req.since || ''))) {
+        var movedIds = (req.moves || []).map(function (m) { return m.id; });
+        outU.rows.forEach(function (e) {
+          var qa = e['Queued At'] instanceof Date ? Utilities.formatDate(e['Queued At'], TZ, 'yyyy-MM-dd HH:mm:ss') : String(e['Queued At'] || '');
+          if (movedIds.indexOf(e['Applicant ID']) === -1 || qa < req.since) return;
+          if (['Invite', 'Re-invite', 'OLJ Invite'].indexOf(e.Type) === -1 || (e.Status !== 'Queued' && e.Status !== 'Pending approval')) return;
+          if ((req.queued || []).indexOf(e['Email ID']) === -1) req.queued = (req.queued || []).concat([e['Email ID']]);
+        });
+      }
       (req.queued || []).forEach(function (eid) {
         var e = outU.rows.filter(function (r) { return r['Email ID'] === eid; })[0];
         if (!e) return;
@@ -1958,7 +1984,9 @@ function api_(req) {
     if (req.action === 'addNote') {
       var a1 = byId[req.id];
       if (!a1) throw new Error('not found');
-      var line = nowStr_() + ' ' + req.by + ': ' + String(req.note || '').slice(0, 1000);
+      // fast saves (database stage 2) send the line the CRM already shows, so Undo finds the same text
+      var line = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} /.test(String(req.line || '')) ? String(req.line).slice(0, 1100)
+        : nowStr_() + ' ' + req.by + ': ' + String(req.note || '').slice(0, 1000);
       update_(apps, a1, { Notes: a1.Notes ? a1.Notes + '\n' + line : line });
       return { ok: true, line: line };
     }

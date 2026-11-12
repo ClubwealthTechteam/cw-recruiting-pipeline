@@ -1,7 +1,7 @@
 import 'server-only';
 import { unstable_cache, revalidateTag } from 'next/cache';
 import { ptStamp, setCancelledSessions, linkApplications } from '@/lib/pipeline';
-import { dbConfigured, getKvs } from '@/lib/db';
+import { dbConfigured, getKvs, rowsByKey } from '@/lib/db';
 import { buildFromDb } from '@/lib/dbdata.server';
 
 export type Row = Record<string, string | number>;
@@ -43,7 +43,7 @@ const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
  * nothing was changed) it is tried again, up to twice, a few seconds apart, so a save rarely fails for that reason
  * (Tara, 2026-11-10).
  */
-async function call<T>(body: Record<string, unknown>, tries = 3): Promise<T> {
+export async function call<T>(body: Record<string, unknown>, tries = 3): Promise<T> {
   const url = process.env.APPS_SCRIPT_URL;
   const secret = process.env.APPS_SCRIPT_SECRET;
   if (!url || !secret) throw new Error('APPS_SCRIPT_URL / APPS_SCRIPT_SECRET are not set');
@@ -121,7 +121,11 @@ export const getApplicantDetail = unstable_cache(
   async (id: string): Promise<ApplicantDetail> => {
     try {
       const r = await call<Partial<ApplicantDetail>>({ action: 'applicant', id });
-      const a = r.applicant || null;
+      let a = r.applicant || null;
+      // reading from the database: its copy of the row already has saves the sheet is still doing (stage 2)
+      if (a && (await dataSource()) === 'database') {
+        try { const [row] = await rowsByKey('Applicants', 'Applicant ID', [id]); if (row) a = { ...a, ...(row.data as Row) }; } catch { /* the sheet's row */ }
+      }
       if (a?.['Applied At (PT)']) a['Applied At (PT)'] = ptStamp(a['Applied At (PT)']);
       return { applicant: a, thread: r.thread || [], scores: r.scores || [] };
     } catch {

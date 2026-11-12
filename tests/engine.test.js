@@ -1496,3 +1496,16 @@ test('database copy: off until the first full copy; then each save sends only th
   assert.ok(sent.some((b) => b.tab === 'History'), 'history row sent');
   assert.ok(sent.some((b) => b.tab === 'Outbox'), 'prepared email sent');
 });
+
+test('fast-save Undo (no email IDs yet): cancels the invite the move queued since the move', () => {
+  const env = batchEnv();
+  const since = env.ctx.nowStr_();
+  const r = env.api({ action: 'setStage', by: 'Am', ids: ['F-2'], stage: 'Open for re-invite', reason: 'asked' });
+  assert.equal(r.ok, true, r.error);
+  const q = env.rows('Outbox').filter((e) => e['Applicant ID'] === 'F-2' && e.Type === 'Re-invite' && e.Status === 'Queued');
+  assert.equal(q.length, 1, 'a re-invite was queued');
+  const u = env.api({ action: 'undoStage', by: 'Am', moves: r.data.undo.moves, queued: [], since });
+  assert.equal(u.ok, true, u.error);
+  assert.equal(env.rows('Outbox').find((e) => e['Email ID'] === q[0]['Email ID']).Status, 'Cancelled');
+  assert.equal(env.rows('Applicants').find((a) => a['Applicant ID'] === 'F-2').Stage, r.data.undo.moves[0].from);
+});
