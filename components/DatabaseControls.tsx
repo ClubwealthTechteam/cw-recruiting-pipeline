@@ -5,13 +5,23 @@ import { useAction } from './useAction';
 import { toast } from './Toaster';
 
 /** "Copy everything now" and the read-from-database switch (Database page). */
-export default function DatabaseControls({ readFromDb, ready }: { readFromDb: boolean; ready: boolean }) {
+export default function DatabaseControls({ readFromDb, ready, fastSaves }: { readFromDb: boolean; ready: boolean; fastSaves: boolean }) {
   const { run, busy } = useAction();
   const router = useRouter();
   const [saving, setSaving] = useState(false);
   async function copyAll() {
     const r = await run({ action: 'dbPushAll' }, { success: 'Copy started ✓ It takes 1–3 minutes; this page updates as rows arrive.' });
     if (r) router.refresh();
+  }
+  async function setFast(on: boolean) {
+    if (on && !confirm('Turn on fast saves? Moving stages, notes, tags, Mark resolved, Approve and Don\'t send will show at once, and the sheet does the work a few seconds later.')) return;
+    setSaving(true);
+    const res = await fetch('/api/db/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fastSaves: on }) });
+    const j = await res.json().catch(() => ({ ok: false }));
+    setSaving(false);
+    if (!j.ok) { toast(j.error || 'Could not save', 'error'); return; }
+    toast(on ? 'Fast saves are on ✓' : 'Fast saves are off: saves go straight to the sheet again ✓');
+    router.refresh();
   }
   async function setRead(on: boolean) {
     if (on && !confirm('Read the CRM from the database? You can switch back here at any time.')) return;
@@ -29,6 +39,9 @@ export default function DatabaseControls({ readFromDb, ready }: { readFromDb: bo
       {readFromDb
         ? <button className="btn" disabled={saving} onClick={() => setRead(false)}>Switch back to reading the Google Sheet</button>
         : <button className="btn primary" disabled={saving || !ready} onClick={() => setRead(true)} title={ready ? '' : 'Copy everything first, and check the counts match'}>Read the CRM from the database</button>}
+      {readFromDb && (fastSaves
+        ? <button className="btn" disabled={saving} onClick={() => setFast(false)}>Turn off fast saves</button>
+        : <button className="btn primary" disabled={saving} onClick={() => setFast(true)}>Turn on fast saves</button>)}
     </div>
   );
 }

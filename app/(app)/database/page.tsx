@@ -1,4 +1,4 @@
-import { dbConfigured, tabStats, getKvs } from '@/lib/db';
+import { dbConfigured, tabStats, getKvs, opStats } from '@/lib/db';
 import { read, dataSource } from '@/lib/sheet';
 import DatabaseControls from '@/components/DatabaseControls';
 
@@ -16,7 +16,8 @@ export default async function Database() {
   let stats: { tab: string; rows: number; updated: string }[] = [];
   let kv: Record<string, unknown> = {};
   let err = '';
-  try { [stats, kv] = await Promise.all([tabStats(), getKvs(['readFromDb', 'readFromDbBy', 'lastFullCopy'])]); } catch (e) { err = e instanceof Error ? e.message : 'Could not reach the database'; }
+  let ops = { pending: 0, failed: 0 };
+  try { [stats, kv, ops] = await Promise.all([tabStats(), getKvs(['readFromDb', 'readFromDbBy', 'lastFullCopy', 'fastSaves']), opStats()]); } catch (e) { err = e instanceof Error ? e.message : 'Could not reach the database'; }
   let sheet: Record<string, number> = {};
   try { sheet = await read<Record<string, number>>('dbCounts', {}); } catch { /* older Code.gs */ }
   const source = await dataSource();
@@ -33,7 +34,13 @@ export default async function Database() {
       {err && <section className="panel warn"><strong>Database error:</strong> {err}</section>}
       <section className="panel">
         <p><strong>The CRM reads from:</strong> {source === 'database' ? 'the database ✓' : 'the Google Sheet'}{kv.lastFullCopy ? <> · last full copy {String(kv.lastFullCopy)}</> : <> · no full copy yet</>}</p>
-        <DatabaseControls readFromDb={source === 'database'} ready={ready} />
+        <DatabaseControls readFromDb={source === 'database'} ready={ready} fastSaves={kv.fastSaves === true} />
+        {source === 'database' && (
+          <p className="hint" style={{ marginTop: 8 }}>
+            <b>Fast saves {kv.fastSaves === true ? 'are on' : 'are off'}.</b> Moving stages (and Undo), notes, tags, Mark resolved, Approve and Don&apos;t send show at once; the sheet does the real work a few seconds later, in order.
+            {' '}Waiting now: {ops.pending}{ops.failed ? ` · did not go through (last 7 days): ${ops.failed}` : ''}.
+          </p>
+        )}
         {!kv.lastFullCopy && <p className="hint" style={{ marginTop: 8 }}>Start with <b>Copy everything now</b>. When every row below matches, switch the CRM to read from the database.</p>}
       </section>
       <section className="panel">

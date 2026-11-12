@@ -1,6 +1,10 @@
-import { NextResponse } from 'next/server';
+import { NextResponse, after } from 'next/server';
+import { revalidateTag } from 'next/cache';
 import { currentUser } from '@/lib/auth';
-import { act } from '@/lib/sheet';
+import { act, PIPELINE_TAG } from '@/lib/sheet';
+import { fastSave } from '@/lib/fastsave';
+import { fastSavesOn, drainOps } from '@/lib/savequeue';
+import { applyPatches, enqueueOp } from '@/lib/db';
 import { fireRoutine } from '@/lib/chat';
 
 /** Google Sheets can take a while (Tara, 2026-11-10): give it up to a minute instead of failing early. */
@@ -15,6 +19,20 @@ export async function POST(req: Request) {
   if (!body || !ALLOWED.includes(body.action)) return NextResponse.json({ ok: false, error: 'Bad request' }, { status: 400 });
   const { action, ...payload } = body;
   try {
+    // Database stage 2: the common saves are shown at once and done on the sheet right after, in order.
+    const fastOn = await fastSavesOn();
+    if (fastOn) {
+      const fast = await fastSave(action, user, payload);
+      if (fast) {
+        await applyPatches(fast.patches);
+        await enqueueOp(user, fast.body, fast.revert, fast.label);
+        revalidateTag(PIPELINE_TAG);
+        after(() => drainOps().catch(() => undefined));
+        return NextResponse.json({ ok: true, data: fast.data });
+      }
+    }
+    // a save that goes straight to the sheet waits for the fast saves made before it, so they happen in order
+    if (fastOn) await drainOps(25000).catch(() => undefined);
     const data = await act(action, user, payload);
     if ((action === 'sendInvite' && payload.channel === 'olj') || action === 'sendOljMessage' || (action === 'sendTemplate' && payload.channel === 'olj')) {
       // Start the OLJ sender now if it is connected; otherwise the next scheduled OLJ run sends it.
