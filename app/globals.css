@@ -648,3 +648,7 @@ input:focus, select:focus, textarea:focus { outline: 3px solid #dbe7fb; border-c
 .email-preview-row td { background: #f8fafc; }
 .email-preview-row .mail-frame { width: 100%; min-height: 420px; border: 1px solid #e4e7ec; border-radius: 6px; background: #fff; }
 tr.row-open td { background: #eef4ff; }
+
+/* emails that did not go through (components/DeliveryProblems) */
+.panel.delivery-alert { background: var(--red-bg); border-color: #f5c2bd; color: var(--red-fg); box-shadow: none; }
+.panel.delivery-alert a { color: inherit; text-decoration: underline; }

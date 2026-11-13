@@ -80,3 +80,18 @@ export async function setSheetSetting(key: string, value: string) {
   // the database copy too, so the Database page's counts match at once
   if (row > 1) await upsertRows('Settings', [{ row, data: { Key: key, Value: value } }]);
 }
+
+/** Adds a column to row 1 of a tab when it is missing (widening the grid if needed). */
+export async function ensureColumn(tab: string, name: string, sheetId = PIPELINE_SHEET_ID) {
+  headers.delete(sheetId + '|' + tab);
+  const cols = await tabHeaders(tab, sheetId);
+  if (cols.includes(name)) return;
+  const meta = await api<{ sheets: { properties: { sheetId: number; title: string; gridProperties: { columnCount: number } } }[] }>(`${sheetId}?fields=sheets.properties`);
+  const sh = meta.sheets.find((x) => x.properties.title === tab);
+  if (!sh) throw new Error(`No tab "${tab}"`);
+  if (sh.properties.gridProperties.columnCount <= cols.length) {
+    await api(`${sheetId}:batchUpdate`, { method: 'POST', body: JSON.stringify({ requests: [{ appendDimension: { sheetId: sh.properties.sheetId, dimension: 'COLUMNS', length: 1 } }] }) });
+  }
+  await api(`${sheetId}/values/${encodeURIComponent(`${q(tab)}!${colLetter(cols.length + 1)}1`)}?valueInputOption=RAW`, { method: 'PUT', body: JSON.stringify({ values: [[name]] }) });
+  headers.delete(sheetId + '|' + tab);
+}
