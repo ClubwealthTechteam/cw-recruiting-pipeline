@@ -5,7 +5,7 @@ import { useAction } from './useAction';
 import { toast } from './Toaster';
 
 /** "Copy everything now" and the read-from-database switch (Database page). */
-export default function DatabaseControls({ readFromDb, ready, fastSaves }: { readFromDb: boolean; ready: boolean; fastSaves: boolean }) {
+export default function DatabaseControls({ readFromDb, ready, fastSaves, engineSend = false, canSend = false }: { readFromDb: boolean; ready: boolean; fastSaves: boolean; engineSend?: boolean; canSend?: boolean }) {
   const { run, busy } = useAction();
   const router = useRouter();
   const [saving, setSaving] = useState(false);
@@ -21,6 +21,16 @@ export default function DatabaseControls({ readFromDb, ready, fastSaves }: { rea
     setSaving(false);
     if (!j.ok) { toast(j.error || 'Could not save', 'error'); return; }
     toast(on ? 'Fast saves are on ✓' : 'Fast saves are off: saves go straight to the sheet again ✓');
+    router.refresh();
+  }
+  async function setSend(on: boolean) {
+    if (!confirm(on ? 'Let the CRM send the queued emails? The Apps Script stops sending first, so nothing goes out twice.' : 'Give email sending back to the Apps Script?')) return;
+    setSaving(true);
+    const res = await fetch('/api/db/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ engineSend: on }) });
+    const j = await res.json().catch(() => ({ ok: false }));
+    setSaving(false);
+    if (!j.ok) { toast(j.error || 'Could not save', 'error'); return; }
+    toast(on ? 'The CRM now sends the emails ✓' : 'The Apps Script sends the emails again ✓');
     router.refresh();
   }
   async function setRead(on: boolean) {
@@ -42,6 +52,9 @@ export default function DatabaseControls({ readFromDb, ready, fastSaves }: { rea
       {readFromDb && (fastSaves
         ? <button className="btn" disabled={saving} onClick={() => setFast(false)}>Turn off fast saves</button>
         : <button className="btn primary" disabled={saving} onClick={() => setFast(true)}>Turn on fast saves</button>)}
+      {readFromDb && (engineSend
+        ? <button className="btn" disabled={saving} onClick={() => setSend(false)}>Email sending: CRM · switch back to Apps Script</button>
+        : <button className="btn primary" disabled={saving || !canSend} title={canSend ? '' : 'Needs ZAPIER_SEND_HOOK and Google access'} onClick={() => setSend(true)}>Email sending: Apps Script · move to the CRM</button>)}
     </div>
   );
 }

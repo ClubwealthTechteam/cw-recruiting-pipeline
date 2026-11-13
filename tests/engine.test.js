@@ -1509,3 +1509,16 @@ test('fast-save Undo (no email IDs yet): cancels the invite the move queued sinc
   assert.equal(env.rows('Outbox').find((e) => e['Email ID'] === q[0]['Email ID']).Status, 'Cancelled');
   assert.equal(env.rows('Applicants').find((a) => a['Applicant ID'] === 'F-2').Stage, r.data.undo.moves[0].from);
 });
+
+test('stage 3a: with ENGINE_SEND = CRM the Apps Script sends nothing; the clock pings the CRM', () => {
+  const { ctxCalls } = require('./harness');
+  const env = invitedEnv({ EMAIL_SENDING: 'ON', ENGINE_SEND: 'CRM' });
+  env.ctx.tick();
+  env.api({ action: 'sendInvite', by: 'Am', id: 'F-2', channel: 'email' });
+  ctxCalls.posts = [];
+  env.ctx.tick();
+  assert.equal(env.rows('Outbox').filter((e) => e.Status === 'Sent').length, 0, 'nothing sent by the Apps Script');
+  assert.ok(env.rows('Outbox').some((e) => e.Status === 'Queued'));
+  env.ctx.crmClock();
+  assert.ok(ctxCalls.posts.some((p) => /\/api\/cron\/tick$/.test(p.url)));
+});

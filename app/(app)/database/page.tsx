@@ -21,7 +21,7 @@ export default async function Database() {
   let kv: Record<string, unknown> = {};
   let err = '';
   let ops = { pending: 0, failed: 0 };
-  try { [stats, kv, ops] = await Promise.all([tabStats(), getKvs(['readFromDb', 'readFromDbBy', 'lastFullCopy', 'fastSaves']), opStats()]); } catch (e) { err = e instanceof Error ? e.message : 'Could not reach the database'; }
+  try { [stats, kv, ops] = await Promise.all([tabStats(), getKvs(['readFromDb', 'readFromDbBy', 'lastFullCopy', 'fastSaves', 'engineSend', 'lastClock']), opStats()]); } catch (e) { err = e instanceof Error ? e.message : 'Could not reach the database'; }
   let sheet: Record<string, number> = {};
   try { sheet = await read<Record<string, number>>('dbCounts', {}); } catch { /* older Code.gs */ }
   const source = await dataSource();
@@ -42,7 +42,19 @@ export default async function Database() {
       {err && <section className="panel warn"><strong>Database error:</strong> {err}</section>}
       <section className="panel">
         <p><strong>The CRM reads from:</strong> {source === 'database' ? 'the database ✓' : 'the Google Sheet'}{kv.lastFullCopy ? <> · last full copy {String(kv.lastFullCopy)}</> : <> · no full copy yet</>}</p>
-        <DatabaseControls readFromDb={source === 'database'} ready={ready} fastSaves={kv.fastSaves === true} />
+        <DatabaseControls readFromDb={source === 'database'} ready={ready} fastSaves={kv.fastSaves === true}
+          engineSend={kv.engineSend === true} canSend={!!process.env.ZAPIER_SEND_HOOK && googleConfigured()} />
+        {source === 'database' && (() => {
+          const c = kv.lastClock as { at?: string; sending?: { sent?: number; skipped?: string; error?: string } } | undefined;
+          const ago = c?.at ? Math.round((Date.now() - Date.parse(c.at)) / 60000) : null;
+          return (
+            <p className="hint" style={{ marginTop: 8 }}>
+              <b>Stage 3 clock:</b> {ago === null ? 'no ping yet (paste the new Code.gs; it starts within 5 minutes)' : `last ping ${ago < 1 ? 'under a minute' : ago + ' min'} ago`}
+              {' '}· <b>email sending:</b> {kv.engineSend === true ? 'CRM' : 'Apps Script'}
+              {c?.sending?.error ? <span className="error"> · last error: {c.sending.error}</span> : c?.sending?.sent ? ` · sent ${c.sending.sent} on the last ping` : ''}
+            </p>
+          );
+        })()}
         {source === 'database' && (
           <p className="hint" style={{ marginTop: 8 }}>
             <b>Fast saves {kv.fastSaves === true ? 'are on' : 'are off'}.</b> Moving stages (and Undo), notes, tags, Mark resolved, Approve and Don&apos;t send show at once; the sheet does the real work a few seconds later, in order.

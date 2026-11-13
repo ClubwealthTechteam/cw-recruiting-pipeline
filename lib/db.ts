@@ -174,3 +174,24 @@ export async function failedOpsFor(by: string): Promise<Op[]> {
 export async function dismissOp(id: number, by: string) {
   await sql().query('update ops set dismissed = true where id = $1 and by_user = $2', [id, by]);
 }
+
+/**
+ * A short lock held in the database (stage 3), so two clock pings never run the same job at once.
+ * True when this caller got it; it ends by itself after ms.
+ */
+export async function tryLease(key: string, ms: number): Promise<boolean> {
+  await ensureSchema();
+  const now = Date.now();
+  const rows = (await sql().query(
+    `insert into kv (key, value, updated_at) values ($1, to_jsonb($2::bigint), now())
+     on conflict (key) do update set value = excluded.value, updated_at = now()
+     where coalesce((kv.value #>> '{}')::bigint, 0) < $3
+     returning key`,
+    [key, now + ms, now]
+  )) as { key: string }[];
+  return rows.length > 0;
+}
+
+export async function releaseLease(key: string) {
+  await sql().query("update kv set value = to_jsonb(0::bigint), updated_at = now() where key = $1", [key]);
+}
