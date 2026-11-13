@@ -218,6 +218,32 @@ function dbRotate_(st) {
   return n;
 }
 
+/**
+ * The clock for the CRM (stage 3, Miguel 2026-11-13): every minute, ping the CRM, which runs its own jobs (sending
+ * emails, the save queue, and more as they move over). No logic and no sheet reads here. Switched on by the tick
+ * once the database copy is on (DB_SYNC), so it needs no setup.
+ */
+function crmClock() {
+  var props = PropertiesService.getScriptProperties();
+  var url = props.getProperty('SITE_URL');
+  if (!url) return;
+  try {
+    UrlFetchApp.fetch(url.replace(/\/$/, '') + '/api/cron/tick', {
+      method: 'post', contentType: 'application/json', muteHttpExceptions: true,
+      payload: JSON.stringify({ secret: props.getProperty('API_SECRET') })
+    });
+  } catch (e) { /* next minute */ }
+}
+
+function crmClockEnsure_() {
+  if (!dbOn_()) return 0;
+  try {
+    var have = ScriptApp.getProjectTriggers().some(function (t) { return t.getHandlerFunction() === 'crmClock'; });
+    if (!have) ScriptApp.newTrigger('crmClock').timeBased().everyMinutes(1).create();
+  } catch (e) { log_('crmClock', 'could not add the 1-minute clock', { error: String(e).slice(0, 200) }, ''); }
+  return 0;
+}
+
 /** Fast saves wait in the site's queue; each tick nudges it in case a save is still waiting (database stage 2). */
 function dbDrainPing_() {
   if (!dbOn_()) return 0;
@@ -528,6 +554,7 @@ var EMAIL_TYPES = ['Invite', 'Re-invite', 'Reminder', 'Confirmation', 'Reply', '
  */
 function dispatchEmails_(st) {
   if (st.get('EMAIL_SENDING') !== 'ON') return 0;
+  if (st.get('ENGINE_SEND') === 'CRM') return 0; // stage 3a: the CRM sends (Database page switch), never both
   var hook = PropertiesService.getScriptProperties().getProperty('ZAPIER_SEND_HOOK');
   if (!hook) return 0;
   var out = table_(SH.OUTBOX);
@@ -1278,7 +1305,8 @@ function tick() {
     ['reminders', function () { return queueReminders_(st); }],
     ['slack', function () { return slackAlerts_(st); }],
     ['dbCopy', function () { return dbRotate_(st); }],
-    ['saveQueue', function () { return dbDrainPing_(); }]
+    ['saveQueue', function () { return dbDrainPing_(); }],
+    ['crmClock', function () { return crmClockEnsure_(); }]
   ];
   try {
     for (var i = 0; i < steps.length; i++) {
