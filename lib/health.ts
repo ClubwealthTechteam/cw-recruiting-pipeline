@@ -63,7 +63,7 @@ export async function runChecks(): Promise<{ at: string; summary: Record<Level, 
   const copyMin = newest ? minutes(newest, now) : Infinity;
   checks.push(copyMin > 30
     ? { id: 'db-sync', level: 'bad', title: 'Database copy of the sheet', detail: `No row copied from the sheet for ${ago(copyMin)}. The CRM may be showing old data (Apps Script dbFlush_ / tick).` }
-    : { id: 'db-sync', level: 'ok', title: 'Database copy of the sheet', detail: `Last change copied ${Math.round(copyMin)} min ago. Full copy: ${s((kv.lastFullCopy as { at?: string })?.at || kv.lastFullCopy).slice(0, 16) || 'never'}.` });
+    : { id: 'db-sync', level: 'ok', title: 'Database copy of the sheet', detail: `Last change copied ${Math.round(copyMin)} min ago. Full copy: ${(typeof kv.lastFullCopy === 'string' ? kv.lastFullCopy : s((kv.lastFullCopy as { at?: string } | undefined)?.at)).slice(0, 16) || 'never'}.` });
 
   checks.push(ops.failed || ops.pending > 5
     ? { id: 'saves', level: ops.failed ? 'warn' : 'bad', title: 'Saves from the CRM to the sheet', detail: `${ops.pending} waiting, ${ops.failed} refused in the last 7 days.` }
