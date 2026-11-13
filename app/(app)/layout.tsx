@@ -15,7 +15,10 @@ import { requireUser, isDbAdmin } from '@/lib/auth';
 import { getData } from '@/lib/sheet';
 import { s, fullName } from '@/lib/pipeline';
 import FailedSaves, { type FailedSave } from '@/components/FailedSaves';
-import { dbConfigured, failedOpsFor } from '@/lib/db';
+import { dbConfigured, failedOpsFor, getKv } from '@/lib/db';
+import DeliveryProblems from '@/components/DeliveryProblems';
+import { deliveryProblems, type DeliveryProblem } from '@/lib/delivery';
+import { ptNow } from '@/lib/fastsave';
 
 /** Google Sheets can take a while (Tara, 2026-11-10): give it up to a minute instead of failing early. */
 export const maxDuration = 60;
@@ -31,6 +34,7 @@ export default async function AppLayout({ children, panel }: { children: React.R
   let fetchedAt: number | undefined;
   let people: CommandItem[] = [];
   let cancelled: string[] = [];
+  let undelivered: DeliveryProblem[] = [];
   try {
     const d = await getData();
     open = d.flags.filter((f) => s(f.Status) === 'Open').length;
@@ -41,6 +45,8 @@ export default async function AppLayout({ children, panel }: { children: React.R
     cancelled = d.cancelledSessions || [];
     people = d.applicants.filter((a) => s(a.Historical) !== 'Y')
       .map((a) => ({ id: s(a['Applicant ID']), name: fullName(a), position: s(a.Position), stage: s(a.Stage) }));
+    const since = dbConfigured() ? await getKv<string>('zapConfirmSince').catch(() => undefined) : undefined;
+    undelivered = deliveryProblems(d.outbox, d.applicants, since, ptNow());
   } catch {
     // pages show the error themselves
   }
@@ -67,7 +73,7 @@ export default async function AppLayout({ children, panel }: { children: React.R
           <form action="/api/logout" method="post"><button className="link">Sign out</button></form>
         </div>
       </aside>
-      <main className="content"><Freshness at={fetchedAt} /><FailedSaves items={failed} />{children}</main>
+      <main className="content"><Freshness at={fetchedAt} /><DeliveryProblems items={undelivered} /><FailedSaves items={failed} />{children}</main>
       {panel}
       <InboxPanel emailReady={emailReady} />
       <ChatBubble />
