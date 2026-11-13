@@ -1,6 +1,7 @@
 import { dbConfigured, tabStats, getKvs, opStats } from '@/lib/db';
 import { read, dataSource } from '@/lib/sheet';
 import DatabaseControls from '@/components/DatabaseControls';
+import { googleConfigured, checkGoogleAccess, SERVICE_ACCOUNT, type AccessResult } from '@/lib/google';
 import { notFound } from 'next/navigation';
 import { requireUser, isDbAdmin } from '@/lib/auth';
 
@@ -24,6 +25,10 @@ export default async function Database() {
   let sheet: Record<string, number> = {};
   try { sheet = await read<Record<string, number>>('dbCounts', {}); } catch { /* older Code.gs */ }
   const source = await dataSource();
+  // stage 3: can the CRM reach the Google files itself (service account)?
+  let access: AccessResult[] = [];
+  let accessErr = '';
+  if (googleConfigured()) { try { access = await checkGoogleAccess(); } catch (e) { accessErr = e instanceof Error ? e.message : 'Could not check'; } }
   const byTab = new Map(stats.map((x) => [x.tab, x]));
   const tabs = [...new Set([...Object.keys(sheet), ...stats.map((x) => x.tab)])];
   const mismatch = tabs.filter((t) => sheet[t] !== undefined && (byTab.get(t)?.rows ?? 0) !== sheet[t]);
@@ -58,6 +63,24 @@ export default async function Database() {
           </tbody>
         </table>
         {Object.keys(sheet).length === 0 && <p className="hint">Paste the new Code.gs to see the sheet&apos;s counts here.</p>}
+      </section>
+      <section className="panel">
+        <h2 style={{ marginTop: 0 }}>Google access (for stage 3)</h2>
+        <p className="hint" style={{ marginTop: 0 }}>The CRM&apos;s own Google account: <code>{SERVICE_ACCOUNT}</code>. Each file must be shared with it.</p>
+        {!googleConfigured() ? <p>Not set up: add <code>GOOGLE_SERVICE_ACCOUNT_JSON</code> in Vercel, then redeploy.</p>
+          : accessErr ? <p className="error">{accessErr}</p>
+          : (
+            <table className="table">
+              <thead><tr><th>File</th><th>Needs</th><th>Result</th><th>Details</th></tr></thead>
+              <tbody>
+                {access.map((a) => (
+                  <tr key={a.name}><td>{a.name}</td><td>{a.need}</td>
+                    <td>{a.result === 'ok' ? <span className="badge green">OK</span> : a.result === 'read-only' ? <span className="badge amber">Viewer only: make it Editor</span> : <span className="badge red">No access</span>}</td>
+                    <td className="small">{a.detail}</td></tr>
+                ))}
+              </tbody>
+            </table>
+          )}
       </section>
     </>
   );
