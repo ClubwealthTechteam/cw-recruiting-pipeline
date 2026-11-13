@@ -72,9 +72,8 @@ export async function runChecks(): Promise<{ at: string; summary: Record<Level, 
   const settingsBad = [
     st.EMAIL_SENDING !== 'ON' ? `EMAIL_SENDING is ${st.EMAIL_SENDING || 'empty'} (no email goes out)` : '',
     st.MODE !== 'LIVE' ? `MODE is ${st.MODE || 'empty'} (test mode)` : '',
-    st.AUTO_INVITES === 'OFF' ? 'AUTO_INVITES is OFF (no automatic invites)' : '',
   ].filter(Boolean);
-  checks.push(check('settings', 'Sending switches', settingsBad, 'warn', 'Email sending ON, mode LIVE.', () => 'A switch is off'));
+  checks.push(check('settings', 'Sending switches', settingsBad, 'warn', `Email sending ON, mode LIVE. Automatic invites ${st.AUTO_INVITES === 'OFF' ? 'OFF (Am invites by hand)' : 'ON'}.`, () => 'A switch is off'));
 
   // ---- emails ----
   const undelivered = deliveryProblems(out, apps, kv.zapConfirmSince as string | undefined, now);
