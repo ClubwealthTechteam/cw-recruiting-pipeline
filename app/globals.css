@@ -648,3 +648,5 @@ input:focus, select:focus, textarea:focus { outline: 3px solid #dbe7fb; border-c
 .email-preview-row td { background: #f8fafc; }
 .email-preview-row .mail-frame { width: 100%; min-height: 420px; border: 1px solid #e4e7ec; border-radius: 6px; background: #fff; }
 tr.row-open td { background: #eef4ff; }
+/* email preview window: background blurred (Miguel, 2026-11-13) */
+.modal-wrap.blur { backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); }

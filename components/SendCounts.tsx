@@ -1,6 +1,6 @@
 'use client';
 import Link from 'next/link';
-import { Fragment, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 
 export type SendStats = { emailWaiting: number; oljWaiting: number; queued: number; sent: number; oljSent: number; failed: number };
 /** One email or OLJ message in the lists under the tiles. */
@@ -18,6 +18,12 @@ export default function SendCounts({ today, week, todayLists, weekLists }: { tod
   // click a row: the email as it was sent, under the row (Miguel, 2026-11-12)
   const [shownEmail, setShownEmail] = useState('');
   const [mail, setMail] = useState<Record<string, { subject: string; body: string } | { error: string }>>({});
+  useEffect(() => {
+    if (!shownEmail) return;
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') setShownEmail(''); };
+    window.addEventListener('keydown', esc);
+    return () => window.removeEventListener('keydown', esc);
+  }, [shownEmail]);
   async function toggleEmail(emailId: string) {
     if (shownEmail === emailId) { setShownEmail(''); return; }
     setShownEmail(emailId);
@@ -68,18 +74,8 @@ export default function SendCounts({ today, week, todayLists, weekLists }: { tod
                       <td className="small">{e.what}</td>
                       <td className="small">{e.by || 'System'}</td>
                       {open === 'waiting' && <td className="small">{e.status}</td>}
-                      <td>{e.emailId && !e.to.startsWith('OnlineJobs') && <button type="button" className="btn small-btn" onClick={() => toggleEmail(e.emailId)}>{shownEmail === e.emailId ? 'Hide' : 'View email'}</button>}</td>
+                      <td>{e.emailId && !e.to.startsWith('OnlineJobs') && <button type="button" className="btn small-btn" onClick={() => toggleEmail(e.emailId)}>View email</button>}</td>
                     </tr>
-                    {shownEmail === e.emailId && (
-                      <tr className="email-preview-row"><td colSpan={open === 'waiting' ? 7 : 6}>
-                        {!mail[e.emailId] ? <p className="muted">Loading the email…</p>
-                          : 'error' in mail[e.emailId] ? <p className="error">{(mail[e.emailId] as { error: string }).error}</p>
-                          : <>
-                              <div className="small" style={{ margin: '0 0 6px' }}><b>Subject:</b> {(mail[e.emailId] as { subject: string }).subject} · <b>To:</b> {e.to}</div>
-                              <iframe className="mail-frame" sandbox="allow-popups allow-popups-to-escape-sandbox" title="Email as sent" srcDoc={`<!doctype html><meta charset="utf-8"><base target="_blank"><body style="font:14px/1.5 Arial,sans-serif;color:#222;margin:16px">${(mail[e.emailId] as { body: string }).body}</body>`} />
-                            </>}
-                      </td></tr>
-                    )}
                     </Fragment>
                   ))}
                 </tbody>
@@ -88,6 +84,28 @@ export default function SendCounts({ today, week, todayLists, weekLists }: { tod
           )}
         </div>
       )}
+      {shownEmail && (() => {
+        const row = Object.values(lists).flat().find((x) => x.emailId === shownEmail);
+        const m = mail[shownEmail];
+        return (
+          <div className="modal-wrap blur" onClick={() => setShownEmail('')}>
+            <div className="modal" role="dialog" aria-label="Email as sent" onClick={(e) => e.stopPropagation()}>
+              <div className="modal-head" style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                <div style={{ flex: 1 }}>
+                  <b>{m && 'subject' in m ? m.subject : 'Email'}</b>
+                  <div className="muted small">To {row?.to}{row?.name ? ` (${row.name})` : ''} · {row?.at.slice(0, 16)} PT{row?.by ? ` · by ${row.by}` : ''}</div>
+                </div>
+                <button type="button" className="btn small-btn" onClick={() => setShownEmail('')} aria-label="Close">✕</button>
+              </div>
+              <div className="modal-body">
+                {!m ? <p className="muted">Loading the email…</p>
+                  : 'error' in m ? <p className="error">{m.error}</p>
+                  : <iframe className="mail-frame" sandbox="allow-popups allow-popups-to-escape-sandbox" title="Email as sent" srcDoc={`<!doctype html><meta charset="utf-8"><base target="_blank"><body style="font:14px/1.5 Arial,sans-serif;color:#222;margin:16px">${m.body}</body>`} />}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </section>
   );
 }
