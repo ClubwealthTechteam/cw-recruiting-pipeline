@@ -14,8 +14,8 @@ import { PIPELINE_TAG } from '@/lib/sheet';
  */
 export async function POST(req: Request) {
   const body = (await req.json().catch(() => ({}))) as { key?: string; email_id?: string; status?: string; error?: string };
-  const expected = Buffer.from(process.env.ZAPIER_CONFIRM_SECRET || '');
-  const got = Buffer.from(String(body.key || new URL(req.url).searchParams.get('key') || ''));
+  const expected = Buffer.from((process.env.ZAPIER_CONFIRM_SECRET || '').trim());
+  const got = Buffer.from(String(body.key || new URL(req.url).searchParams.get('key') || '').trim());
   if (!expected.length || expected.length !== got.length || !timingSafeEqual(expected, got)) {
     return NextResponse.json({ ok: false }, { status: 403 });
   }
