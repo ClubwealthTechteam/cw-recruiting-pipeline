@@ -1,5 +1,6 @@
 import 'server-only';
 import { googleToken } from '@/lib/google';
+import { upsertRows } from '@/lib/db';
 
 /**
  * The Recruitment Pipeline sheet through the Sheets API (stage 3): the CRM writes its results there itself, so the
@@ -74,6 +75,8 @@ export async function appendRow(tab: string, fields: Record<string, string | num
 export async function setSheetSetting(key: string, value: string) {
   const r = await api<{ values?: string[][] }>(`${PIPELINE_SHEET_ID}/values/${encodeURIComponent("'Settings'!A:A")}`);
   const i = (r.values || []).findIndex((x) => String(x[0] ?? '').trim() === key);
-  if (i > 0) await writeCells('Settings', i + 1, { Value: value });
-  else await appendRow('Settings', { Key: key, Value: value });
+  const row = i > 0 ? i + 1 : await appendRow('Settings', { Key: key, Value: value });
+  if (i > 0) await writeCells('Settings', row, { Value: value });
+  // the database copy too, so the Database page's counts match at once
+  if (row > 1) await upsertRows('Settings', [{ row, data: { Key: key, Value: value } }]);
 }
