@@ -22,6 +22,7 @@ var STAGES = [
   'Benched',
   'Hired',
   'Onboarding',
+  'No Show | Onboarding',
   'Offboarded',
   'Not Fit',
   'Banned'
