@@ -1,7 +1,7 @@
 'use client';
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
-import { REASON_REQUIRED, HIRED_COLUMNS, parseStageChoice, type ZoomLive } from '@/lib/pipeline';
+import { REASON_REQUIRED, HIRED_COLUMNS, ON_HOLD_COLUMN, ON_HOLD_TAG, ON_HOLD_STAGES, parseStageChoice, type ZoomLive } from '@/lib/pipeline';
 import ZoomBadge from './ZoomBadge';
 import { useAction } from './useAction';
 import { InlineStage } from './InlineActions';
@@ -9,7 +9,8 @@ import { useSince, isNew } from './useSince';
 import { hireFields, notFitFields } from './hirePrompt';
 import { initials, avatarColor } from './CandidatesTable';
 
-export type BoardCard = { id: string; name: string; email?: string; phone?: string; stage: string; position: string; source: string; fit: string; session: string; score: string; arrival: string; changed?: string[]; company?: string; test?: boolean; zoom?: ZoomLive };
+/** stage = the board column; actual = the applicant's real stage (they differ for Hired and Position on hold). */
+export type BoardCard = { id: string; name: string; email?: string; phone?: string; stage: string; actual?: string; tags?: string; position: string; source: string; fit: string; session: string; score: string; arrival: string; changed?: string[]; company?: string; test?: boolean; zoom?: ZoomLive };
 const PER_COLUMN = 60;
 const FIT_TONE: Record<string, string> = { Great: 'green', Good: 'blue', 'Not Fit': 'grey' };
 
@@ -71,7 +72,21 @@ export default function Board({ stages, cards }: { stages: string[]; cards: Boar
     const c = dragging;
     setDragging(null); setOver('');
     if (!c || stageOf(c) === column) return;
-    if (column === 'Hired | company not set') { alert('Drop on Hired | Homexa or Hired | Clubwealth to pick the company.'); return; }
+    const tagList = (c.tags || '').split(',').map((x) => x.trim()).filter(Boolean);
+    const actual = c.actual || parseStageChoice(c.stage).stage;
+    // Position on hold (Miguel, 2026-11-13): dropping there adds the tag (only before the interview); dragging out removes it
+    if (column === ON_HOLD_COLUMN) {
+      if (!ON_HOLD_STAGES.includes(actual)) { alert(`Only Applied, Invited or Confirmed applicants can be put on hold. ${c.name} is ${actual}.`); return; }
+      setMoved((m) => ({ ...m, [c.id]: column }));
+      const ok = await run({ action: 'setTags', id: c.id, tags: [...tagList.filter((x) => x !== ON_HOLD_TAG), ON_HOLD_TAG] }, { success: `${c.name} put on hold ✓ No invites or reminders while held` });
+      if (!ok) setMoved((m) => { const n = { ...m }; delete n[c.id]; return n; });
+      return;
+    }
+    if (stageOf(c) === ON_HOLD_COLUMN) {
+      const ok = await run({ action: 'setTags', id: c.id, tags: tagList.filter((x) => x !== ON_HOLD_TAG) }, { success: `${c.name}: hold removed ✓` });
+      if (!ok) return;
+      if (column === actual) { setMoved((m) => ({ ...m, [c.id]: column })); return; }
+    }
     // the split Hired columns: "Hired | Homexa" → stage Hired for Homexa (asks the start date)
     if (HIRED_COLUMNS.includes(column)) {
       const hire = hireFields(column, c.name);
@@ -133,10 +148,12 @@ export default function Board({ stages, cards }: { stages: string[]; cards: Boar
                   {isNew(since, ...(c.changed || [])) && <span className="new-dot" title="New or changed since your last visit" style={{ marginLeft: 'auto' }} />}
                 </div>
                 <div className="muted small">{c.position} · {c.source}{c.session ? ` · ${c.session}` : ''}</div>
-                <div className="card-move" onMouseDown={(e) => e.stopPropagation()}><InlineStage id={c.id} stage={parseStageChoice(stageOf(c)).stage} /></div>
+                <div className="card-move" onMouseDown={(e) => e.stopPropagation()}><InlineStage id={c.id} stage={stageOf(c) === ON_HOLD_COLUMN || stageOf(c) === c.stage ? (c.actual || parseStageChoice(stageOf(c)).stage) : parseStageChoice(stageOf(c)).stage} /></div>
                 <div className="card-badges">
                   <ZoomBadge z={c.zoom} />
                   {c.test && <span className="badge grey">Test</span>}
+                  {stageOf(c) === ON_HOLD_COLUMN && c.actual && <span className="mini-tag" title="Their stage while on hold">{c.actual}</span>}
+                  {stageOf(c).startsWith('Hired |') && !c.company && <span className="badge amber" title="No company picked: move them to Hired | Homexa or Hired | Clubwealth from the stage menu">Company?</span>}
                   {c.fit && <span className={`badge ${FIT_TONE[c.fit] || 'grey'}`}>{c.fit}</span>}
                   {c.company && !stageOf(c).startsWith('Hired') && <span className="mini-tag">{c.company === 'Club Wealth' ? 'Clubwealth' : c.company}</span>}
                   {c.score && <span className="badge blue" title="Scorecard average">{c.score}/5</span>}
@@ -144,7 +161,7 @@ export default function Board({ stages, cards }: { stages: string[]; cards: Boar
                 </div>
               </article>
             ))}
-            {col.length > PER_COLUMN && <Link className="small" href={`/candidates?stage=${encodeURIComponent(parseStageChoice(st).stage.replace(/ \| company not set$/, ""))}`}>+{col.length - PER_COLUMN} more in Candidates</Link>}
+            {col.length > PER_COLUMN && <Link className="small" href={`/candidates?stage=${encodeURIComponent(st === ON_HOLD_COLUMN ? 'Applied' : parseStageChoice(st).stage)}`}>+{col.length - PER_COLUMN} more in Candidates</Link>}
             {col.length === 0 && <p className="empty small">Drop here</p>}
           </section>
         );

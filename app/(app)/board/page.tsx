@@ -24,7 +24,7 @@ export default async function BoardPage({ searchParams }: { searchParams: Promis
     .map((a) => {
       const sc = scoreSummary(cards.get(s(a['Applicant ID'])) || []);
       return {
-        id: s(a['Applicant ID']), name: fullName(a) || '(no name)', email: s(a.Email), phone: s(a.Phone), stage: boardColumnOf(s(a.Stage), a.Tags), company: hiredCompany(a.Tags), position: s(a.Position), source: s(a.Source),
+        id: s(a['Applicant ID']), name: fullName(a) || '(no name)', email: s(a.Email), phone: s(a.Phone), stage: boardColumnOf(s(a.Stage), a.Tags), actual: s(a.Stage), tags: s(a.Tags), company: hiredCompany(a.Tags), position: s(a.Position), source: s(a.Source),
         fit: s(a['Screen Tag']), session: a['Interview Date'] ? formatDate(ymd(a['Interview Date'])).replace(/, \d{4}$/, '') : '',
         changed: [s(a['Applied At (PT)']), s(a['Stage Updated At']), s(a['Confirmed At'])],
         score: sc.count ? sc.average.toFixed(1) : '', arrival: s(a.Arrival), test: isTest(a), zoom: live.get(s(a['Applicant ID']))
@@ -36,7 +36,7 @@ export default async function BoardPage({ searchParams }: { searchParams: Promis
     <>
       <header className="page-head">
         <h1>Pipeline Board</h1>
-        <p className="sub">Drag a card to another column to move the applicant. Stages that need a reason ask for one. Applicants from before the system are not shown. Scroll sideways for the other outcomes (re-invite, did not complete, no show, not fit).</p>
+        <p className="sub">Drag a card to another column to move the applicant. Stages that need a reason ask for one. Applicants from before the system are not shown. Scroll sideways for the other outcomes (position on hold, re-invite, did not complete, no show, not fit). Drop an applicant on Position on hold to hold them; drag them out to take the hold off.</p>
       </header>
       <form className="filters" action="/board">
         <select name="position" defaultValue={p.position || ''}><option value="">All positions</option>{positions.map((x) => <option key={x}>{x}</option>)}</select>

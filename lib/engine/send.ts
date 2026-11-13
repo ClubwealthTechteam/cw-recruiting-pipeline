@@ -29,6 +29,11 @@ export function planSends(outbox: { row: number; data: Row }[], applicants: Row[
       return { row, email: e, action: 'fail' as const, error: 'Not the approved template (Club Wealth sign-off and banner). Update Logic.gs and re-queue.' };
     }
     const a = byId.get(s(e['Applicant ID']));
+    // Miguel, 2026-11-13 (board Position on hold column): a hold added after the email was queued still stops it
+    const tags = s(a?.Tags).split(',').map((x) => x.trim());
+    if (a && ['Invite', 'Re-invite', 'Reminder', 'Confirmation'].includes(s(e.Type)) && (tags.includes('Position on hold') || tags.includes('Invites paused'))) {
+      return { row, email: e, action: 'cancel' as const, error: tags.includes('Position on hold') ? 'Position on hold' : 'Invites paused for this applicant' };
+    }
     const em = s(a?.Email).trim().toLowerCase();
     if (a && (s(e.Type) === 'Invite' || s(e.Type) === 'Re-invite') && em && rejected.has(em)) {
       return { row, email: e, action: 'cancel' as const, error: 'Do not invite: Email is on the Rejected tab of the form sheet' };

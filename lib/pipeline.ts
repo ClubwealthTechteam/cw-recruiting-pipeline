@@ -2,13 +2,23 @@ import type { Row } from './sheet';
 
 export const STAGES = [
   'Applied', 'Invited', 'Confirmed', 'Open for re-invite', 'Interview Completed',
-  'Did Not Complete', 'Uninterested | Left Zoom', 'No Show', 'No Confirmation', 'Passed Pre-Interview', 'Passed Interview', 'Benched', 'Hired', 'Onboarding', 'Offboarded', 'Not Fit', 'Banned'
+  'Did Not Complete', 'Uninterested | Left Zoom', 'No Show', 'No Confirmation', 'Passed Pre-Interview', 'Passed Interview', 'Benched', 'Hired', 'Onboarding', 'No Show | Onboarding', 'Offboarded', 'Not Fit', 'Banned'
 ] as const;
 
-/** Board column order: the main flow first, then the side outcomes. */
+/**
+ * Board column order: the main flow first, then the side outcomes. Miguel, 2026-11-13: no Onboarding column (the
+ * stage is retired; old Onboarding cards show under Hired), a No Show | Onboarding column, and a Position on hold
+ * column for applicants tagged "Position on hold" who have not been interviewed yet.
+ */
+export const ON_HOLD_TAG = 'Position on hold';
+export const ON_HOLD_COLUMN = 'Position on hold';
+/** Same as Code.gs ON_HOLD_STAGES: only these stages are held (someone hired later keeps their stage column). */
+export const ON_HOLD_STAGES = ['Applied', 'Invited', 'Confirmed'];
+/** Stages no longer offered in pickers or on the board (kept in STAGES so old rows still read). */
+export const RETIRED_STAGES = ['Onboarding'];
 export const BOARD_STAGES = [
-  'Applied', 'Invited', 'Confirmed', 'Interview Completed', 'Passed Pre-Interview', 'Passed Interview', 'Benched', 'Hired', 'Onboarding', 'Offboarded',
-  'Open for re-invite', 'Did Not Complete', 'Uninterested | Left Zoom', 'No Show', 'No Confirmation', 'Not Fit', 'Banned'
+  'Applied', 'Invited', 'Confirmed', 'Interview Completed', 'Passed Pre-Interview', 'Passed Interview', 'Benched', 'Hired', 'No Show | Onboarding', 'Offboarded',
+  ON_HOLD_COLUMN, 'Open for re-invite', 'Did Not Complete', 'Uninterested | Left Zoom', 'No Show', 'No Confirmation', 'Not Fit', 'Banned'
 ];
 
 /** Hired or further along (Onboarding counts as hired everywhere). */
@@ -29,7 +39,7 @@ export type Stage = (typeof STAGES)[number];
 export const STAGE_TONE: Record<string, string> = {
   Applied: 'grey', Invited: 'blue', Confirmed: 'blue', 'Open for re-invite': 'amber',
   'Interview Completed': 'amber', 'Did Not Complete': 'red', 'Uninterested | Left Zoom': 'grey', 'No Show': 'red', 'No Confirmation': 'grey',
-  'Passed Pre-Interview': 'green', 'Passed Interview': 'green', Benched: 'blue', Hired: 'green', Onboarding: 'green', Offboarded: 'grey', 'Not Fit': 'grey', Banned: 'red'
+  'Passed Pre-Interview': 'green', 'Passed Interview': 'green', Benched: 'blue', Hired: 'green', Onboarding: 'green', 'No Show | Onboarding': 'red', Offboarded: 'grey', 'Not Fit': 'grey', Banned: 'red'
 };
 
 /** Screening tags (Claude): Great = clearly meets the rule (1+ year or highly relevant), Good = meets 6 months, Not Fit = does not or not enough info. */
@@ -377,7 +387,7 @@ export const nowStampPT = (now = new Date()) => ptStamp(now.toISOString());
 export const HIRE_COMPANIES = [{ company: 'Homexa', label: 'Homexa' }, { company: 'Club Wealth', label: 'Clubwealth' }] as const;
 const HIRING = ['Hired', 'Onboarding'];
 /** The stage list for pickers: Hired and Onboarding appear once per company ("Hired | Homexa", "Hired | Clubwealth"). */
-export const STAGE_CHOICES: string[] = STAGES.flatMap((st) => (HIRING.includes(st) ? HIRE_COMPANIES.map((c) => `${st} | ${c.label}`) : [st]));
+export const STAGE_CHOICES: string[] = STAGES.filter((st) => !RETIRED_STAGES.includes(st)).flatMap((st) => (HIRING.includes(st) ? HIRE_COMPANIES.map((c) => `${st} | ${c.label}`) : [st]));
 /** "Hired | Homexa" → { stage: 'Hired', company: 'Homexa' }; any other stage → { stage, company: '' }. */
 export function parseStageChoice(choice: string): { stage: string; company: string } {
   const m = /^(Hired|Onboarding) \| (.+)$/.exec(choice);
@@ -398,13 +408,17 @@ export function hiredCompany(tags: unknown): string {
   const t = s(tags);
   return t.includes('Hired | Homexa') ? 'Homexa' : t.includes('Hired | Clubwealth') ? 'Club Wealth' : '';
 }
-/** Board: the Hired column split by company, with one for people hired before the company was asked. */
-export const HIRED_COLUMNS = ['Hired | Homexa', 'Hired | Clubwealth', 'Hired | company not set'];
+/**
+ * Board: the Hired column split by company. Miguel, 2026-11-13: no "company not set" column; a hire without a company
+ * shows under Hired | Homexa with a "Company?" badge. Old Onboarding cards show under Hired too.
+ */
+export const HIRED_COLUMNS = ['Hired | Homexa', 'Hired | Clubwealth'];
 export const BOARD_COLUMNS = BOARD_STAGES.flatMap((st) => (st === 'Hired' ? HIRED_COLUMNS : [st]));
+export const hasTag = (tags: unknown, tag: string) => s(tags).split(',').some((x) => x.trim() === tag);
 export function boardColumnOf(stage: string, tags: unknown): string {
-  if (stage !== 'Hired') return stage;
-  const c = hiredCompany(tags);
-  return c === 'Homexa' ? 'Hired | Homexa' : c === 'Club Wealth' ? 'Hired | Clubwealth' : 'Hired | company not set';
+  if (ON_HOLD_STAGES.includes(stage) && hasTag(tags, ON_HOLD_TAG)) return ON_HOLD_COLUMN;
+  if (stage !== 'Hired' && stage !== 'Onboarding') return stage;
+  return hiredCompany(tags) === 'Club Wealth' ? 'Hired | Clubwealth' : 'Hired | Homexa';
 }
 
 /**
