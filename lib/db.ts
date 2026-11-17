@@ -12,8 +12,23 @@ import { createClient, type Client, type InStatement, type Row as LibRow } from 
  *  ops:        the stage-2 save queue
  * Times are epoch milliseconds. Settings come from Vercel: TURSO_DATABASE_URL and TURSO_AUTH_TOKEN.
  */
-const URL_ = () => process.env.TURSO_DATABASE_URL || process.env.LIBSQL_URL || '';
-const TOKEN = () => process.env.TURSO_AUTH_TOKEN || process.env.LIBSQL_AUTH_TOKEN || '';
+/**
+ * Where the database is. The Vercel Turso integration names its variables after the prefix chosen when connecting
+ * (Miguel picked TURSO): TURSO_DATABASE_URL / TURSO_URL and TURSO_AUTH_TOKEN / TURSO_DATABASE_AUTH_TOKEN. Any variable
+ * whose value is a libsql:// address is accepted, with the auth token named after the same prefix.
+ */
+function settings(): { url: string; token: string } {
+  const env = process.env;
+  const named = env.TURSO_DATABASE_URL || env.TURSO_URL || env.LIBSQL_URL || '';
+  const key = named ? '' : Object.keys(env).find((k) => /URL$/.test(k) && /^libsql:\/\//.test(env[k] || '')) || '';
+  const url = named || (key ? env[key]! : '');
+  const prefix = key.replace(/_?(DATABASE_)?URL$/, '');
+  const token = env.TURSO_AUTH_TOKEN || env.TURSO_DATABASE_AUTH_TOKEN || env.LIBSQL_AUTH_TOKEN ||
+    (prefix ? env[`${prefix}_AUTH_TOKEN`] || env[`${prefix}_DATABASE_AUTH_TOKEN`] || env[`${prefix}_TOKEN`] : '') || '';
+  return { url, token };
+}
+const URL_ = () => settings().url;
+const TOKEN = () => settings().token;
 export const dbConfigured = () => !!URL_();
 
 let client: Client | null = null;
