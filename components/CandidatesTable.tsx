@@ -4,6 +4,7 @@ import { useState } from 'react';
 import StageBadge from './StageBadge';
 import StageForm from './StageForm';
 import SessionForm from './SessionForm';
+import BulkInvite from './BulkInvite';
 import FitBadge from './FitBadge';
 import { InlineStage, QuickNote } from './InlineActions';
 import UndoButton from './UndoButton';
@@ -37,7 +38,7 @@ export default function CandidatesTable({ rows, filters = {} }: { rows: Candidat
     <>
       <div className="bulk-bar">
         <span>{sel.length ? `${sel.length} selected` : 'Select applicants to move them in bulk'}</span>
-        <div className="bulk-right"><UndoButton /><StageForm ids={sel} onDone={() => setSel([])} />{sel.length > 0 && <SessionForm ids={sel} compact onDone={() => setSel([])} />}</div>
+        <div className="bulk-right"><UndoButton /><StageForm ids={sel} onDone={() => setSel([])} />{sel.length > 0 && <SessionForm ids={sel} compact onDone={() => setSel([])} />}{sel.length > 0 && <BulkInvite rows={rows.filter((r) => sel.includes(r.id))} onDone={() => setSel([])} />}</div>
       </div>
       <table className="table candidates">
         <thead>
