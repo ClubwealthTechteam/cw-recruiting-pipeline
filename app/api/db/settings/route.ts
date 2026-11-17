@@ -5,12 +5,12 @@ import { dbConfigured, setKv } from '@/lib/db';
 import { setSheetSetting } from '@/lib/sheets';
 import { PIPELINE_TAG } from '@/lib/sheet';
 
-/** The Database page's switches: read the CRM from Neon (readFromDb), and fast saves (fastSaves, stage 2). */
+/** The Database page's switches: read the CRM from the database (readFromDb), and fast saves (fastSaves, stage 2). */
 export async function POST(req: Request) {
   const user = await currentUser();
   if (!user) return NextResponse.json({ ok: false, error: 'Please sign in again.' }, { status: 401 });
   if (!isDbAdmin(user)) return NextResponse.json({ ok: false, error: 'Only Miguel can change the database settings.' }, { status: 403 });
-  if (!dbConfigured()) return NextResponse.json({ ok: false, error: 'The database is not connected (DATABASE_URL).' }, { status: 503 });
+  if (!dbConfigured()) return NextResponse.json({ ok: false, error: 'The database is not connected (TURSO_DATABASE_URL in Vercel).' }, { status: 503 });
   const body = await req.json().catch(() => null) as { readFromDb?: boolean; fastSaves?: boolean; engineSend?: boolean } | null;
   if (typeof body?.readFromDb === 'boolean') {
     await setKv('readFromDb', body.readFromDb);

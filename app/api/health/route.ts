@@ -16,7 +16,7 @@ export async function GET(req: Request) {
   const got = Buffer.from((req.headers.get('x-health-key') || '').trim());
   const keyOk = expected.length > 0 && expected.length === got.length && timingSafeEqual(expected, got);
   const full = keyOk || isDbAdmin(await currentUser());
-  if (!dbConfigured()) return NextResponse.json({ ok: false, error: 'DATABASE_URL is not set' }, { status: 503 });
+  if (!dbConfigured()) return NextResponse.json({ ok: false, error: 'The database is not connected (TURSO_DATABASE_URL in Vercel)' }, { status: 503 });
   try {
     const r = await runChecks();
     // Without the key or Miguel's sign-in: levels and counts only, never names or email addresses (the watchdog

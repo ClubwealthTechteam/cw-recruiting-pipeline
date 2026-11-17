@@ -1,4 +1,4 @@
-import { dbConfigured, tabStats, getKvs, opStats } from '@/lib/db';
+import { dbConfigured, tabStats, getKvs, opStats, readTabs } from '@/lib/db';
 import { read, dataSource } from '@/lib/sheet';
 import DatabaseControls from '@/components/DatabaseControls';
 import { googleConfigured, checkGoogleAccess, SERVICE_ACCOUNT, type AccessResult } from '@/lib/google';
@@ -8,20 +8,25 @@ import { requireUser, isDbAdmin } from '@/lib/auth';
 export const dynamic = 'force-dynamic';
 
 /**
- * Database (Miguel, 2026-11-12): the copy of the Google Sheet in Neon, tab by tab against the sheet, the last full
+ * Database (Miguel, 2026-11-12): the copy of the Google Sheet in the database (Turso since 2026-11-17), tab by tab against the sheet, the last full
  * copy, and the switch that makes the CRM read from it. The sheet stays in charge of saving in this stage.
  */
 export default async function Database() {
   if (!isDbAdmin(await requireUser())) notFound(); // Miguel only
   if (!dbConfigured()) {
     return (<><header className="page-head"><h1>Database</h1></header>
-      <section className="panel"><p>The database is not connected yet. In Vercel: cw-recruiting-pipeline → Storage → Neon → Connect (prefix DATABASE), then redeploy.</p></section></>);
+      <section className="panel"><p>The database is not connected yet. In Vercel: cw-recruiting-pipeline → Settings → Environment Variables → TURSO_DATABASE_URL and TURSO_AUTH_TOKEN, then redeploy.</p></section></>);
   }
   let stats: { tab: string; rows: number; updated: string }[] = [];
   let kv: Record<string, unknown> = {};
   let err = '';
   let ops = { pending: 0, failed: 0 };
-  try { [stats, kv, ops] = await Promise.all([tabStats(), getKvs(['readFromDb', 'readFromDbBy', 'lastFullCopy', 'fastSaves', 'engineSend', 'lastClock']), opStats()]); } catch (e) { err = e instanceof Error ? e.message : 'Could not reach the database'; }
+  try {
+    let settings: Record<string, unknown>[] = [];
+    [stats, kv, ops, settings] = await Promise.all([tabStats(), getKvs(['readFromDb', 'readFromDbBy', 'lastFullCopy', 'fastSaves', 'lastClock']), opStats(), readTabs(['Settings']).then((t) => t.Settings)]);
+    // who sends follows the sheet's Settings ENGINE_SEND (lib/engine/send.ts)
+    kv.engineSend = String(settings.find((r) => String(r.Key) === 'ENGINE_SEND')?.Value ?? '') === 'CRM';
+  } catch (e) { err = e instanceof Error ? e.message : 'Could not reach the database'; }
   let sheet: Record<string, number> = {};
   try { sheet = await read<Record<string, number>>('dbCounts', {}); } catch { /* older Code.gs */ }
   const source = await dataSource();
@@ -37,7 +42,7 @@ export default async function Database() {
     <>
       <header className="page-head">
         <h1>Database</h1>
-        <p className="sub">A copy of the Google Sheet in the CRM&apos;s own database (Neon). The sheet still does all the saving; every change is copied here within seconds, and each tab is fully re-copied about once an hour.</p>
+        <p className="sub">A copy of the Google Sheet in the CRM&apos;s own database (Turso). The sheet still does all the saving; every change is copied here within seconds, and each tab is fully re-copied about once an hour.</p>
       </header>
       {err && <section className="panel warn"><strong>Database error:</strong> {err}</section>}
       <section className="panel">

@@ -8,7 +8,7 @@
     "test": "node --test tests/*.test.js"
   },
   "dependencies": {
-    "@neondatabase/serverless": "1.0.2",
+    "@libsql/client": "0.18.0",
     "next": "15.5.28",
     "react": "19.3.1",
     "react-dom": "19.3.1",
