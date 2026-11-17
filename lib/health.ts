@@ -52,7 +52,7 @@ export async function runChecks(): Promise<{ at: string; summary: Record<Level, 
   // ---- the machinery ----
   const clock = kv.lastClock as { at?: string; sending?: { error?: string; skipped?: string } } | undefined;
   const clockMin = clock?.at ? (Date.now() - Date.parse(clock.at)) / 60000 : Infinity;
-  const crmSends = kv.engineSend === true;
+  const crmSends = st.ENGINE_SEND === 'CRM'; // the sheet's switch decides who sends (lib/engine/send.ts)
   checks.push(clockMin > 5
     ? { id: 'clock', level: crmSends ? 'bad' : 'warn', title: 'CRM clock (every-minute ping from the Apps Script)', detail: `Last ping ${clock?.at ? ago(clockMin) + ' ago' : 'never'}.${crmSends ? ' Emails are sent by the CRM, so NOTHING is being sent until it runs again (Apps Script trigger crmClock).' : ''}` }
     : clock?.sending?.error

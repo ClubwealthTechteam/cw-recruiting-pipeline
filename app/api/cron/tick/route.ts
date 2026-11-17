@@ -25,7 +25,9 @@ export async function POST(req: Request) {
     try { await drainOps(15_000); } catch { /* next minute */ }
     try { sending = await sendDue(); } catch (e) { sending = { error: e instanceof Error ? e.message : String(e) }; }
     try { await setKv('lastClock', { at, sending }); } catch { /* not critical */ }
-    revalidateTag(PIPELINE_TAG);
+    // Only when something was sent: clearing the page cache every minute made every page reload all the data
+    // from the database (that used up Neon's free plan in Nov 2026). Saves clear it themselves (drainOps).
+    if ((sending as { sent?: number } | null)?.sent) revalidateTag(PIPELINE_TAG);
   });
   return NextResponse.json({ ok: true });
 }

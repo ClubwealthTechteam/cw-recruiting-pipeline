@@ -72,7 +72,7 @@ export const PIPELINE_TAG = 'pipeline';
  * Applicants from before the system come with a few fields only (enough for counts) and without their history.
  */
 /**
- * Where the page data comes from (Miguel, 2026-11-12): the Neon copy once "Read from the database" is switched on
+ * Where the page data comes from (Miguel, 2026-11-12): the database copy once "Read from the database" is switched on
  * (Database page) and a full copy exists; otherwise, or if the database fails, the sheet through Apps Script as before.
  */
 export async function dataSource(): Promise<'database' | 'sheet'> {

@@ -1,102 +1,145 @@
 import 'server-only';
-import { neon } from '@neondatabase/serverless';
+import { createClient, type Client, type InStatement, type Row as LibRow } from '@libsql/client/web';
 
 /**
- * The CRM's own database (Neon Postgres, Miguel, 2026-11-12). Stage 1 of moving off the Google Sheet: the sheet
- * stays in charge, and the Apps Script sends every row it writes here (see dbFlush_ / dbPushTab_ in Code.gs), so
- * pages can read from Postgres instead of reading the whole sheet.
+ * The CRM's own database. Miguel, 2026-11-17: moved from Neon (its free plan ran out of quota on Nov 17) to Turso
+ * (libSQL / SQLite over HTTP), whose free plan counts rows read instead of data transferred. Same tables and the same
+ * functions as before, so nothing else changed. The sheet stays in charge: the Apps Script sends every row it writes
+ * here (dbFlush_ / dbPushTab_ in Code.gs), so pages can read from the database instead of reading the whole sheet.
  *
- *  sheet_rows: one row per sheet row, by tab and sheet row number, with the row's values as JSON
+ *  sheet_rows: one row per sheet row, by tab and sheet row number, with the row's values as JSON text
  *  kv:         values the site cannot work out from those rows (team list, job ads) and switches (readFromDb)
+ *  ops:        the stage-2 save queue
+ * Times are epoch milliseconds. Settings come from Vercel: TURSO_DATABASE_URL and TURSO_AUTH_TOKEN.
  */
-export const dbConfigured = () => !!process.env.DATABASE_URL;
-const sql = () => neon(process.env.DATABASE_URL!);
+/**
+ * Where the database is. The Vercel Turso integration names its variables after the prefix chosen when connecting
+ * (Miguel picked TURSO): TURSO_DATABASE_URL / TURSO_URL and TURSO_AUTH_TOKEN / TURSO_DATABASE_AUTH_TOKEN. Any variable
+ * whose value is a libsql:// address is accepted, with the auth token named after the same prefix.
+ */
+function settings(): { url: string; token: string } {
+  const env = process.env;
+  const named = env.TURSO_DATABASE_URL || env.TURSO_URL || env.LIBSQL_URL || '';
+  const key = named ? '' : Object.keys(env).find((k) => /URL$/.test(k) && /^libsql:\/\//.test(env[k] || '')) || '';
+  const url = named || (key ? env[key]! : '');
+  const prefix = key.replace(/_?(DATABASE_)?URL$/, '');
+  const token = env.TURSO_AUTH_TOKEN || env.TURSO_DATABASE_AUTH_TOKEN || env.LIBSQL_AUTH_TOKEN ||
+    (prefix ? env[`${prefix}_AUTH_TOKEN`] || env[`${prefix}_DATABASE_AUTH_TOKEN`] || env[`${prefix}_TOKEN`] : '') || '';
+  return { url, token };
+}
+const URL_ = () => settings().url;
+const TOKEN = () => settings().token;
+export const dbConfigured = () => !!URL_();
+
+let client: Client | null = null;
+function db(): Client {
+  if (!client) client = createClient({ url: URL_().replace(/^libsql:\/\//, 'https://'), authToken: TOKEN() || undefined });
+  return client;
+}
+const now = () => Date.now();
+const parse = (v: unknown) => { if (v === null || v === undefined) return undefined; try { return JSON.parse(String(v)); } catch { return v; } };
+/** A JSON path for a column name such as "Email ID": $."Email ID" (column names are letters and spaces only). */
+const jpathLit = (key: string) => { if (!/^[A-Za-z][A-Za-z ]*$/.test(key)) throw new Error('bad column name: ' + key); return '$."' + key + '"'; };
+/** The ID columns rows are looked up by; each has an index. */
+const KEY_FIELDS = ['Email ID', 'Applicant ID', 'Flag ID'];
 
 let schemaReady: Promise<void> | null = null;
 export function ensureSchema() {
   if (!schemaReady) {
-    const q = sql();
-    schemaReady = q.transaction([
-      q`create table if not exists sheet_rows (
-          tab text not null, row_no integer not null, data jsonb not null,
-          updated_at timestamptz not null default now(), primary key (tab, row_no))`,
-      q`create table if not exists kv (key text primary key, value jsonb, updated_at timestamptz not null default now())`,
+    schemaReady = db().batch([
+      `create table if not exists sheet_rows (
+         tab text not null, row_no integer not null, data text not null,
+         updated_at integer not null, primary key (tab, row_no))`,
+      'create table if not exists kv (key text primary key, value text, updated_at integer not null)',
       // stage 2: saves shown at once in the CRM, then done on the sheet by the Apps Script in order
-      q`create table if not exists ops (
-          id bigserial primary key, created_at timestamptz not null default now(), by_user text not null,
-          body jsonb not null, revert jsonb not null default '[]', label text not null default '',
-          status text not null default 'pending', started_at timestamptz, finished_at timestamptz,
-          error text, dismissed boolean not null default false)`
-    ]).then(() => undefined).catch((e) => { schemaReady = null; throw e; });
+      `create table if not exists ops (
+         id integer primary key autoincrement, created_at integer not null, by_user text not null,
+         body text not null, revert text not null default '[]', label text not null default '',
+         status text not null default 'pending', started_at integer, finished_at integer,
+         error text, dismissed integer not null default 0)`,
+      'create index if not exists ops_status on ops (status, id)',
+      // the every-minute sender asks only for queued emails, and saves look rows up by their ID
+      `create index if not exists sheet_rows_status on sheet_rows (tab, json_extract(data, '$."Status"'))`,
+      ...KEY_FIELDS.map((k, i) => `create index if not exists sheet_rows_key${i} on sheet_rows (tab, json_extract(data, '${jpathLit(k)}'))`),
+    ], 'write').then(() => undefined).catch((e) => { schemaReady = null; throw e; });
   }
   return schemaReady;
 }
 
 export type SheetRow = { row: number; data: Record<string, unknown> };
 
-/** Writes (or overwrites) rows of one tab by sheet row number: one query for the whole batch. */
+/**
+ * Writes (or overwrites) rows of one tab by sheet row number, in one statement. Rows whose data did not change are
+ * left alone, so the regular full re-copies from the Apps Script do not count as writes.
+ */
 export async function upsertRows(tab: string, rows: SheetRow[]) {
   if (!rows.length) return 0;
   await ensureSchema();
-  await sql().query(
-    `insert into sheet_rows (tab, row_no, data, updated_at)
-     select $1, (x->>'row')::int, x->'data', now() from jsonb_array_elements($2::jsonb) as x
-     on conflict (tab, row_no) do update set data = excluded.data, updated_at = now()`,
-    [tab, JSON.stringify(rows)]
-  );
+  for (let i = 0; i < rows.length; i += 400) {
+    const part = rows.slice(i, i + 400).map((r) => ({ row: r.row, data: JSON.stringify(r.data) }));
+    await db().execute({
+      sql: `insert into sheet_rows (tab, row_no, data, updated_at)
+            select ?, json_extract(value, '$.row'), json_extract(value, '$.data'), ? from json_each(?) where true
+            on conflict (tab, row_no) do update set data = excluded.data, updated_at = excluded.updated_at
+            where sheet_rows.data <> excluded.data`,
+      args: [tab, now(), JSON.stringify(part)],
+    });
+  }
   return rows.length;
 }
 
 /** After a full copy of a tab: rows past the sheet's last row are gone from the sheet, so they go here too. */
 export async function trimTab(tab: string, lastRow: number) {
   await ensureSchema();
-  await sql().query('delete from sheet_rows where tab = $1 and row_no > $2', [tab, lastRow]);
+  await db().execute({ sql: 'delete from sheet_rows where tab = ? and row_no > ?', args: [tab, lastRow] });
 }
 
 /** One tab's rows, in sheet order. */
 export async function readTab(tab: string): Promise<Record<string, unknown>[]> {
-  await ensureSchema();
-  const rows = await sql().query('select data from sheet_rows where tab = $1 order by row_no', [tab]);
-  return (rows as { data: Record<string, unknown> }[]).map((r) => r.data);
+  return (await readTabs([tab]))[tab];
 }
 
 /** Several tabs in one round trip. */
 export async function readTabs(tabs: string[]): Promise<Record<string, Record<string, unknown>[]>> {
   await ensureSchema();
-  const rows = (await sql().query('select tab, data from sheet_rows where tab = any($1) order by tab, row_no', [tabs])) as { tab: string; data: Record<string, unknown> }[];
   const out: Record<string, Record<string, unknown>[]> = Object.fromEntries(tabs.map((t) => [t, []]));
-  for (const r of rows) out[r.tab].push(r.data);
+  if (!tabs.length) return out;
+  const r = await db().execute({ sql: `select tab, data from sheet_rows where tab in (${tabs.map(() => '?').join(',')}) order by tab, row_no`, args: tabs });
+  for (const row of r.rows) out[String(row.tab)].push(JSON.parse(String(row.data)));
   return out;
 }
 
 export async function setKv(key: string, value: unknown) {
   await ensureSchema();
-  await sql().query(
-    `insert into kv (key, value, updated_at) values ($1, $2::jsonb, now())
-     on conflict (key) do update set value = excluded.value, updated_at = now()`,
-    [key, JSON.stringify(value ?? null)]
-  );
+  await db().execute({
+    sql: 'insert into kv (key, value, updated_at) values (?, ?, ?) on conflict (key) do update set value = excluded.value, updated_at = excluded.updated_at',
+    args: [key, JSON.stringify(value ?? null), now()],
+  });
 }
 
 export async function getKv<T = unknown>(key: string): Promise<T | undefined> {
-  await ensureSchema();
-  const rows = (await sql().query('select value from kv where key = $1', [key])) as { value: T }[];
-  return rows[0]?.value;
+  return (await getKvs([key]))[key] as T | undefined;
 }
 
 export async function getKvs(keys: string[]): Promise<Record<string, unknown>> {
   await ensureSchema();
-  const rows = (await sql().query('select key, value from kv where key = any($1)', [keys])) as { key: string; value: unknown }[];
-  return Object.fromEntries(rows.map((r) => [r.key, r.value]));
+  if (!keys.length) return {};
+  const r = await db().execute({ sql: `select key, value from kv where key in (${keys.map(() => '?').join(',')})`, args: keys });
+  return Object.fromEntries(r.rows.map((x) => [String(x.key), parse(x.value)]));
 }
+
+const pt = (ms: number) => {
+  const p = Object.fromEntries(new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Los_Angeles', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23'
+  }).formatToParts(new Date(ms)).map((x) => [x.type, x.value]));
+  return `${p.year}-${p.month}-${p.day} ${p.hour}:${p.minute}:${p.second}`;
+};
 
 /** Row counts and the newest change per tab, for the Database page. */
 export async function tabStats(): Promise<{ tab: string; rows: number; updated: string }[]> {
   await ensureSchema();
-  const rows = (await sql().query(
-    "select tab, count(*)::int as rows, to_char(max(updated_at) at time zone 'America/Los_Angeles', 'YYYY-MM-DD HH24:MI:SS') as updated from sheet_rows group by tab order by tab"
-  )) as { tab: string; rows: number; updated: string }[];
-  return rows;
+  const r = await db().execute('select tab, count(*) as n, max(updated_at) as at from sheet_rows group by tab order by tab');
+  return r.rows.map((x) => ({ tab: String(x.tab), rows: Number(x.n), updated: x.at ? pt(Number(x.at)) : '' }));
 }
 
 // ---------- rows by their ID column (stage 2) ----------
@@ -105,74 +148,111 @@ export async function tabStats(): Promise<{ tab: string; rows: number; updated: 
 export async function rowsByKey(tab: string, keyField: string, ids: string[]): Promise<{ row: number; data: Record<string, unknown> }[]> {
   if (!ids.length) return [];
   await ensureSchema();
-  const rows = (await sql().query('select row_no, data from sheet_rows where tab = $1 and data->>$2 = any($3)', [tab, keyField, ids])) as { row_no: number; data: Record<string, unknown> }[];
-  return rows.map((r) => ({ row: r.row_no, data: r.data }));
+  const r = await db().execute({
+    // the path is written into the SQL (not passed as a value) so the index on it is used
+    sql: `select row_no, data from sheet_rows where tab = ? and json_extract(data, '${jpathLit(keyField)}') in (${ids.map(() => '?').join(',')})`,
+    args: [tab, ...ids],
+  });
+  return r.rows.map((x) => ({ row: Number(x.row_no), data: JSON.parse(String(x.data)) }));
+}
+
+/** Rows of one tab with this Status (indexed), in sheet order, with their sheet row number. */
+export async function rowsByStatus(tab: string, status: string): Promise<{ row: number; data: Record<string, unknown> }[]> {
+  await ensureSchema();
+  const r = await db().execute({
+    sql: `select row_no, data from sheet_rows where tab = ? and json_extract(data, '$."Status"') = ? order by row_no`,
+    args: [tab, status],
+  });
+  return r.rows.map((x) => ({ row: Number(x.row_no), data: JSON.parse(String(x.data)) }));
 }
 
 export type Patch = { tab: string; row: number; set: Record<string, unknown> };
 
-/** Merges fields into rows (one query per row, sent together). */
+/** Merges fields into rows (one statement per row, sent together). */
 export async function applyPatches(patches: Patch[]) {
   if (!patches.length) return;
   await ensureSchema();
-  const q = sql();
-  await q.transaction(patches.map((p) => q.query(
-    'update sheet_rows set data = data || $3::jsonb, updated_at = now() where tab = $1 and row_no = $2',
-    [p.tab, p.row, JSON.stringify(p.set)]
-  )));
+  const t = now();
+  // json_patch drops keys set to null, so null becomes '' (what an empty sheet cell holds)
+  const clean = (o: Record<string, unknown>) => Object.fromEntries(Object.entries(o).map(([k, v]) => [k, v ?? '']));
+  await db().batch(patches.map((p) => ({
+    sql: 'update sheet_rows set data = json_patch(data, ?), updated_at = ? where tab = ? and row_no = ?',
+    args: [JSON.stringify(clean(p.set)), t, p.tab, p.row],
+  })), 'write');
 }
 
 // ---------- the save queue (stage 2) ----------
 
-export type Op = { id: number; by_user: string; body: Record<string, unknown>; revert: Patch[]; label: string; status: string; error: string | null; created_at: string };
+export type Op = { id: number; by_user: string; body: Record<string, unknown>; revert: Patch[]; label: string; status: string; error: string | null; created_at: number };
+const toOp = (x: LibRow): Op => ({
+  id: Number(x.id), by_user: String(x.by_user), body: parse(x.body) as Record<string, unknown>, revert: (parse(x.revert) as Patch[]) || [],
+  label: String(x.label ?? ''), status: String(x.status), error: x.error === null || x.error === undefined ? null : String(x.error), created_at: Number(x.created_at),
+});
+const OP_COLS = 'id, by_user, body, revert, label, status, error, created_at';
 
 export async function enqueueOp(by: string, body: Record<string, unknown>, revert: Patch[], label: string) {
   await ensureSchema();
-  const rows = (await sql().query('insert into ops (by_user, body, revert, label) values ($1, $2::jsonb, $3::jsonb, $4) returning id',
-    [by, JSON.stringify(body), JSON.stringify(revert), label])) as { id: number }[];
-  return rows[0].id;
+  const r = await db().execute({
+    sql: 'insert into ops (created_at, by_user, body, revert, label) values (?, ?, ?, ?, ?) returning id',
+    args: [now(), by, JSON.stringify(body), JSON.stringify(revert), label],
+  });
+  return Number(r.rows[0].id);
 }
 
 /**
  * The oldest waiting save, marked running. Saves go one at a time and in order: nothing is taken while another is
- * running (a running save older than 3 minutes counts as stuck and is retried).
+ * running (a running save older than 3 minutes counts as stuck and is retried). One write transaction, so two
+ * callers never take the same save.
  */
 export async function claimNextOp(): Promise<Op | null> {
   await ensureSchema();
-  const q = sql();
-  await q.query("update ops set status = 'pending', started_at = null where status = 'running' and started_at < now() - interval '3 minutes'");
-  const rows = (await q.query(
-    `update ops set status = 'running', started_at = now()
-     where id = (select id from ops where status = 'pending' order by id limit 1 for update skip locked)
-       and not exists (select 1 from ops where status = 'running')
-     returning id, by_user, body, revert, label, status, error, created_at`
-  )) as Op[];
-  return rows[0] || null;
+  const t = now();
+  const stmts: InStatement[] = [
+    { sql: "update ops set status = 'pending', started_at = null where status = 'running' and started_at < ?", args: [t - 180_000] },
+    {
+      sql: `update ops set status = 'running', started_at = ?
+            where id = (select id from ops where status = 'pending' order by id limit 1)
+              and not exists (select 1 from ops where status = 'running')
+            returning ${OP_COLS}`,
+      args: [t],
+    },
+  ];
+  const res = await db().batch(stmts, 'write');
+  const row = res[1].rows[0];
+  return row ? toOp(row) : null;
 }
 
 export async function finishOp(id: number, ok: boolean, error?: string) {
-  await sql().query('update ops set status = $2, finished_at = now(), error = $3 where id = $1', [id, ok ? 'done' : 'failed', error || null]);
+  await db().execute({ sql: 'update ops set status = ?, finished_at = ?, error = ? where id = ?', args: [ok ? 'done' : 'failed', now(), error || null, id] });
+}
+
+/** Puts a save back in the queue (the save queue's retry). */
+export async function retryOp(id: number) {
+  await db().execute({ sql: "update ops set status = 'pending', started_at = null, finished_at = null, error = null where id = ?", args: [id] });
 }
 
 export async function opStats(): Promise<{ pending: number; failed: number }> {
   await ensureSchema();
-  const rows = (await sql().query(
-    "select count(*) filter (where status in ('pending','running'))::int as pending, count(*) filter (where status = 'failed' and created_at > now() - interval '7 days')::int as failed from ops"
-  )) as { pending: number; failed: number }[];
-  return rows[0] || { pending: 0, failed: 0 };
+  const r = await db().execute({
+    sql: "select sum(status in ('pending','running')) as pending, sum(status = 'failed' and created_at > ?) as failed from ops where status <> 'done'",
+    args: [now() - 7 * 86_400_000],
+  });
+  const x = r.rows[0];
+  return { pending: Number(x?.pending ?? 0), failed: Number(x?.failed ?? 0) };
 }
 
 /** Saves of this person that did not go through and that they have not closed yet. */
 export async function failedOpsFor(by: string): Promise<Op[]> {
   await ensureSchema();
-  return (await sql().query(
-    "select id, by_user, body, revert, label, status, error, created_at from ops where by_user = $1 and status = 'failed' and not dismissed and created_at > now() - interval '3 days' order by id",
-    [by]
-  )) as Op[];
+  const r = await db().execute({
+    sql: `select ${OP_COLS} from ops where by_user = ? and status = 'failed' and dismissed = 0 and created_at > ? order by id`,
+    args: [by, now() - 3 * 86_400_000],
+  });
+  return r.rows.map(toOp);
 }
 
 export async function dismissOp(id: number, by: string) {
-  await sql().query('update ops set dismissed = true where id = $1 and by_user = $2', [id, by]);
+  await db().execute({ sql: 'update ops set dismissed = 1 where id = ? and by_user = ?', args: [id, by] });
 }
 
 /**
@@ -181,17 +261,17 @@ export async function dismissOp(id: number, by: string) {
  */
 export async function tryLease(key: string, ms: number): Promise<boolean> {
   await ensureSchema();
-  const now = Date.now();
-  const rows = (await sql().query(
-    `insert into kv (key, value, updated_at) values ($1, to_jsonb($2::bigint), now())
-     on conflict (key) do update set value = excluded.value, updated_at = now()
-     where coalesce((kv.value #>> '{}')::bigint, 0) < $3
-     returning key`,
-    [key, now + ms, now]
-  )) as { key: string }[];
-  return rows.length > 0;
+  const t = now();
+  const r = await db().execute({
+    sql: `insert into kv (key, value, updated_at) values (?, ?, ?)
+          on conflict (key) do update set value = excluded.value, updated_at = excluded.updated_at
+          where coalesce(cast(kv.value as integer), 0) < ?
+          returning key`,
+    args: [key, String(t + ms), t, t],
+  });
+  return r.rows.length > 0;
 }
 
 export async function releaseLease(key: string) {
-  await sql().query("update kv set value = to_jsonb(0::bigint), updated_at = now() where key = $1", [key]);
+  await db().execute({ sql: "update kv set value = '0', updated_at = ? where key = ?", args: [now(), key] });
 }

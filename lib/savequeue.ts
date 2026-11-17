@@ -1,6 +1,6 @@
 import 'server-only';
 import { revalidateTag } from 'next/cache';
-import { claimNextOp, finishOp, applyPatches, getKvs, dbConfigured } from '@/lib/db';
+import { claimNextOp, finishOp, applyPatches, getKvs, dbConfigured, retryOp } from '@/lib/db';
 import { call, PIPELINE_TAG } from '@/lib/sheet';
 
 /** Fast saves are on when the Database page says so and the CRM already reads from the database. */
@@ -43,6 +43,5 @@ export async function drainOps(budgetMs = 45000) {
 }
 
 async function requeue(id: number) {
-  const { neon } = await import('@neondatabase/serverless');
-  await neon(process.env.DATABASE_URL!).query("update ops set status = 'pending', started_at = null, finished_at = null, error = null where id = $1", [id]);
+  await retryOp(id);
 }

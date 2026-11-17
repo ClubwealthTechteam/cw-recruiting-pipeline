@@ -1,5 +1,5 @@
 import 'server-only';
-import { readTabs, applyPatches, getKvs, tryLease, releaseLease, rowsByKey } from '@/lib/db';
+import { readTabs, applyPatches, tryLease, releaseLease, rowsByKey, rowsByStatus } from '@/lib/db';
 import { readRow, writeCells, readColumnA } from '@/lib/sheets';
 import { ptNow } from '@/lib/fastsave';
 
@@ -49,22 +49,25 @@ async function result(row: number, set: Record<string, string>) {
 
 /** One clock ping's worth of sending. Returns how many were sent. */
 export async function sendDue(max = 2): Promise<{ sent: number; skipped?: string }> {
-  const kv = await getKvs(['engineSend']);
-  if (kv.engineSend !== true) return { sent: 0, skipped: 'sending is still done by the Apps Script' };
+  // Cheap first (Turso counts rows read; this runs every minute): only the queued emails, through the Status index.
+  const queuedRows = (await rowsByStatus('Outbox', 'Queued')).filter((e) => EMAIL_TYPES.includes(s(e.data.Type)));
+  if (!queuedRows.length) return { sent: 0 };
+  // Who sends follows the sheet's Settings ENGINE_SEND (the same value the Apps Script reads), so the two never
+  // both send and never both wait (Miguel, 2026-11-17, after the database move left them disagreeing).
+  const settings = (await readTabs(['Settings'])).Settings;
+  const setting = (k: string) => s(settings.find((r) => s(r.Key) === k)?.Value);
+  if (setting('ENGINE_SEND') !== 'CRM') return { sent: 0, skipped: 'sending is done by the Apps Script (Settings ENGINE_SEND)' };
+  if (setting('EMAIL_SENDING') !== 'ON') return { sent: 0, skipped: 'EMAIL_SENDING is not ON' };
   const hook = process.env.ZAPIER_SEND_HOOK;
   if (!hook) return { sent: 0, skipped: 'ZAPIER_SEND_HOOK is not set in Vercel' };
   if (!(await tryLease('sendLease', 55_000))) return { sent: 0, skipped: 'another ping is sending' };
   try {
-    const t = await readTabs(['Settings', 'Outbox', 'Applicants']);
-    const setting = (k: string) => s(t.Settings.find((r) => s(r.Key) === k)?.Value);
-    if (setting('EMAIL_SENDING') !== 'ON') return { sent: 0, skipped: 'EMAIL_SENDING is not ON' };
-    // oldest first (sheet order), then their sheet row numbers from the copy
-    const queued = t.Outbox.filter((e) => s(e.Status) === 'Queued' && EMAIL_TYPES.includes(s(e.Type)));
-    if (!queued.length) return { sent: 0 };
-    const withRows = await rowsByKey('Outbox', 'Email ID', queued.slice(0, max).map((e) => s(e['Email ID'])));
+    // oldest first (sheet order)
+    const withRows = queuedRows.slice(0, max);
+    const applicants = (await rowsByKey('Applicants', 'Applicant ID', [...new Set(withRows.map((e) => s(e.data['Applicant ID'])).filter(Boolean))])).map((r) => r.data);
     const sourceId = setting('SOURCE_SHEET_ID');
     const rejected = new Set((sourceId ? await readColumnA(sourceId, 'Rejected').catch(() => []) : []).map((x) => x.trim().toLowerCase()).filter((x) => x.includes('@')));
-    const plan = planSends(withRows.sort((a, b) => a.row - b.row), t.Applicants, rejected, max);
+    const plan = planSends(withRows, applicants, rejected, max);
     let sent = 0, first = true;
     for (const p of plan) {
       if (p.action !== 'send') { await result(p.row, { Status: p.action === 'fail' ? 'Failed' : 'Cancelled', Error: p.error || '' }); continue; }

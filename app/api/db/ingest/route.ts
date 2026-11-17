@@ -21,7 +21,7 @@ export async function POST(req: Request) {
   if (!body || !expected.length || expected.length !== got.length || !timingSafeEqual(expected, got)) {
     return NextResponse.json({ ok: false }, { status: 403 });
   }
-  if (!dbConfigured()) return NextResponse.json({ ok: false, error: 'DATABASE_URL is not set' }, { status: 503 });
+  if (!dbConfigured()) return NextResponse.json({ ok: false, error: 'The database is not connected (TURSO_DATABASE_URL in Vercel)' }, { status: 503 });
   try {
     if (body.op === 'upsert' && body.tab && TABS.includes(body.tab) && Array.isArray(body.rows)) {
       const rows = body.rows.filter((r) => Number.isInteger(r?.row) && r.row > 1 && r.data && typeof r.data === 'object');

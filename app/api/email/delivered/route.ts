@@ -21,7 +21,7 @@ export async function POST(req: Request) {
   }
   const id = String(body.email_id || '').trim();
   if (!id) return NextResponse.json({ ok: false, error: 'email_id is missing' }, { status: 400 });
-  if (!dbConfigured()) return NextResponse.json({ ok: false, error: 'DATABASE_URL is not set' }, { status: 503 });
+  if (!dbConfigured()) return NextResponse.json({ ok: false, error: 'The database is not connected (TURSO_DATABASE_URL in Vercel)' }, { status: 503 });
   try {
     const [r] = await rowsByKey('Outbox', 'Email ID', [id]);
     if (!r) return NextResponse.json({ ok: false, error: 'Email not found: ' + id }, { status: 404 });
