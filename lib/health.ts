@@ -116,7 +116,8 @@ export async function runChecks(): Promise<{ at: string; summary: Record<Level, 
   }
 
   // ---- applicants ----
-  const overdue = live.filter((a) => ['Invited', 'Confirmed'].includes(s(a.Stage)) && s(a['Interview Date']) && s(a['Interview Date']).slice(0, 10) < today)
+  // on-hold applicants keep their stage on purpose (board: Position on hold column), so they are not "left behind"
+  const overdue = live.filter((a) => ['Invited', 'Confirmed'].includes(s(a.Stage)) && !hasTag(a, 'Position on hold') && s(a['Interview Date']) && s(a['Interview Date']).slice(0, 10) < today)
     .map((a) => `${name(a)} · ${s(a.Stage)} · session ${s(a['Interview Date']).slice(0, 10)}`);
   checks.push(check('overdue', 'Applicants left behind after their session', overdue, 'warn', 'Everyone invited to a past session has an outcome.', (n) => `${n} applicant(s) still Invited/Confirmed for a session that already happened.`));
 
