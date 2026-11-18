@@ -80,7 +80,17 @@ export async function upsertRows(tab: string, rows: SheetRow[]) {
     await db().execute({
       sql: `insert into sheet_rows (tab, row_no, data, updated_at)
             select ?, json_extract(value, '$.row'), json_extract(value, '$.data'), ? from json_each(?) where true
-            on conflict (tab, row_no) do update set data = excluded.data, updated_at = excluded.updated_at
+            on conflict (tab, row_no) do update set data = case
+                -- Zapier's "sent" confirmation lands in the database while the Apps Script is still sending the
+                -- batch; the Apps Script then copies its older picture of the row without it. Keep the confirmation.
+                when excluded.tab = 'Outbox'
+                 and coalesce(json_extract(excluded.data, '$."Delivered At"'), '') = ''
+                 and coalesce(json_extract(sheet_rows.data, '$."Delivered At"'), '') <> ''
+                 and json_extract(excluded.data, '$."Email ID"') = json_extract(sheet_rows.data, '$."Email ID"')
+                 and coalesce(json_extract(excluded.data, '$."Status"'), '') = 'Sent'
+                then json_set(excluded.data, '$."Delivered At"', json_extract(sheet_rows.data, '$."Delivered At"'))
+                else excluded.data end,
+              updated_at = excluded.updated_at
             where sheet_rows.data <> excluded.data`,
       args: [tab, now(), JSON.stringify(part)],
     });
