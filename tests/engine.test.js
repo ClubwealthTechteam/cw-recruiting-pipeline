@@ -1159,7 +1159,8 @@ test('Zoom tracking from the site: starts once in the window, polls Zoom, writes
   // ticks during the session keep the rows current; matching is done by the engine
   env.setNow(pdt('2026-10-28T14:30:00')); env.ctx.tick();
   const z = () => env.rows('Zoom Attendance').filter((r) => r['Interview Date'] === '2026-10-28');
-  assert.equal(z().length, 2, 'only Name_Position participants');
+  assert.equal(z().length, 3, 'every participant, also without Name_Position (Nov 18: link them on the session page)');
+  assert.equal(z().find((r) => r['Parsed Name'] === 'Staff Person')['Matched Applicant ID'], '');
   assert.equal(z().find((r) => /Maria/.test(r['Parsed Name']))['Matched Applicant ID'], 'F-2');
   assert.equal(z().find((r) => /Maria/.test(r['Parsed Name']))['Total Minutes'], 40);
   // after 3:30 PM: final poll, then stages
