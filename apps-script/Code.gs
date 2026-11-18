@@ -626,7 +626,9 @@ function applySentEmails_(st) {
         'Interview Date': ymdOf_(e['Interview Date']), 'Invite Count': (Number(a['Invite Count']) || 0) + 1,
         'Last Invite At': e['Sent At'] || nowStr_()
       });
-      if (a.Stage === 'Applied' || a.Stage === 'Open for re-invite') {
+      // Miguel, 2026-11-18: No Show / No Confirmation applicants invited again become Invited too, so their "full
+      // name" reply confirms them (replies only match Invited, Confirmed and Open for re-invite applicants).
+      if (INVITED_FROM.indexOf(a.Stage) !== -1) {
         setStage_(apps, a, 'Invited', String(e['Queued By'] || 'System'), e.Type + ' sent for ' + ymdOf_(e['Interview Date']));
       }
     } else if (e.Type === 'Reminder') {
@@ -765,6 +767,61 @@ function relinkUnmatched_(st) {
     n++;
   });
   st.set('UNMATCHED_RELINKED', 'DONE');
+  return n;
+}
+
+/** Stages that turn Invited when an invite is sent to them. */
+var INVITED_FROM = ['Applied', 'Open for re-invite', 'No Show', 'No Confirmation'];
+
+/**
+ * One time (Miguel, 2026-11-18): No Show / No Confirmation applicants invited on Nov 17 for an upcoming Wednesday
+ * stayed in their old stage, so their "full name" replies did not confirm them. They become Invited, and anyone whose
+ * reply since the invite confirms (the same rule as processReplies_) becomes Confirmed; the "unmatched" or "needs
+ * reading" items those replies made in Needs Attention are marked resolved. Settings REINVITED_FIX = DONE after.
+ */
+function reinvitedFix_(st) {
+  if (st.get('REINVITED_FIX') === 'DONE') return 0;
+  var today = todayPT();
+  var out = table_(SH.OUTBOX), apps = table_(SH.APPLICANTS), reps = table_(SH.REPLIES), flags = table_(SH.FLAGS);
+  var byId = indexBy_(apps.rows, 'Applicant ID');
+  var n = 0;
+  out.rows.forEach(function (e) {
+    if (['Invite', 'Re-invite', 'OLJ Invite'].indexOf(e.Type) === -1 || e.Status !== 'Sent') return;
+    var day = ymdOf_(e['Interview Date']);
+    var a = byId[e['Applicant ID']];
+    if (!a || day < today || ['No Show', 'No Confirmation'].indexOf(a.Stage) === -1 || ymdOf_(a['Interview Date']) !== day) return;
+    setStage_(apps, a, 'Invited', 'System', e.Type + ' sent for ' + day + ' (fixed: was ' + a.Stage + ')');
+    n++;
+    var email = String(a.Email || '').trim().toLowerCase();
+    var since = String(e['Sent At'] || e['Queued At'] || '');
+    var confirmed = null;
+    reps.rows.forEach(function (r) {
+      if (!email || String(r['From Email'] || '').trim().toLowerCase() !== email || ptStamp_(r['Received At']) < since) return;
+      if (r.Category === 'Confirmed' || confirmsFor(r['Reply Text'], a['First Name'], a['Last Name'], true)) confirmed = r;
+    });
+    if (!confirmed) return;
+    setStage_(apps, a, 'Confirmed', 'System', 'Replied with full name (fixed after the re-invite)');
+    update_(apps, a, { 'Confirmed At': ptStamp_(confirmed['Received At']) || nowStr_() });
+    update_(reps, confirmed, { Category: 'Confirmed', 'Matched Applicant ID': a['Applicant ID'], 'Action Taken': 'Confirmed (fixed after the re-invite)' });
+    // today's 6 AM reminders already went out without them: send theirs now
+    if (day === today && st.get('REMINDERS_QUEUED_FOR') === today && a.Source !== 'OLJ' && !onHold(a) && !a['Reminder Sent At']) {
+      queueEmail_(st, a, 'Reminder', reminderEmail(today), today);
+    }
+    flags.rows.forEach(function (f) {
+      if (f.Status !== 'Open' || String(f['Created At'] || '') < since) return;
+      var mine = f['Applicant ID'] === a['Applicant ID'] || (!f['Applicant ID'] && f.Type === 'Unmatched reply' && String(f.Detail || '').toLowerCase().indexOf(email) !== -1);
+      if (mine && ['Unmatched reply', 'Reply needs reading', 'Applicant question'].indexOf(f.Type) !== -1) {
+        var fix = {};
+        if (flags.headers.indexOf('Resolved By') !== -1) fix['Resolved By'] = 'System';
+        if (flags.headers.indexOf('Resolved At') !== -1) fix['Resolved At'] = nowStr_();
+        if (flags.headers.indexOf('Resolution Note') !== -1) fix['Resolution Note'] = 'Confirmed for ' + day + ' (re-invite fix)';
+        fix.Status = 'Resolved';
+        update_(flags, f, fix);
+      }
+    });
+  });
+  st.set('REINVITED_FIX', 'DONE');
+  log_('reinvitedFix', 'No Show / No Confirmation re-invites', { fixed: n }, '');
   return n;
 }
 
@@ -1289,6 +1346,7 @@ function tick() {
     ['rename', function () { renameStageOnce_(st, 'Onboarded', 'Onboarding', 'STAGE_RENAMED_ONBOARDING'); return 0; }],
     ['onHold', function () { return onHoldBackfill_(st); }],
     ['relinked', function () { return relinkUnmatched_(st); }],
+    ['reinvitedFix', function () { return reinvitedFix_(st); }],
     ['intake', function () { return importNewFormRows_(st); }],
     ['manualInvites', function () { return syncManualInvites_(st); }],
     ['screenTracks', function () { return backfillScreenTracks_(); }],
