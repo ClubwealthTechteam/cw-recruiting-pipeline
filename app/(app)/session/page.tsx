@@ -10,6 +10,7 @@ import { todayPT, sessionTimes, cancelledSessions } from '@/lib/pipeline';
 import QuickDecide from '@/components/QuickDecide';
 import OpenSessionButton from '@/components/OpenSessionButton';
 import HeaderFilter, { type FilterOption } from '@/components/HeaderFilter';
+import ZoomLink from '@/components/ZoomLink';
 
 type Q = { date?: string; pos?: string; stage?: string; conf?: string; rem?: string; arr?: string; zoom?: string };
 
@@ -48,6 +49,10 @@ export default async function Session({ searchParams }: { searchParams: Promise<
   const filtered = rows.length !== roster.length || !!(p.pos || p.stage || p.conf || p.rem || p.arr || p.zoom);
   const clear = `/session?date=${date}`;
   const unmatchedZoom = d.zoom.filter((z) => ymd(z['Interview Date']) === date && !z['Matched Applicant ID']);
+  // invitees not matched to a Zoom name yet, for "Link to applicant"
+  const matchedIds = new Set(d.zoom.filter((z) => ymd(z['Interview Date']) === date).map((z) => s(z['Matched Applicant ID'])).filter(Boolean));
+  const linkable = roster.filter((a) => !matchedIds.has(s(a['Applicant ID'])))
+    .map((a) => ({ id: s(a['Applicant ID']), label: `${fullName(a)} (${s(a.Stage)})` })).sort((x, y) => x.label.localeCompare(y.label));
 
   return (
     <>
@@ -106,8 +111,12 @@ export default async function Session({ searchParams }: { searchParams: Promise<
       {unmatchedZoom.length > 0 && (
         <section className="panel">
           <h2>Zoom names not matched to an invitee</h2>
-          <p className="sub">These people used the Name_Position format but were not invited to this session, or their name matches more than one applicant.</p>
-          <ul>{unmatchedZoom.map((z, i) => <li key={i}>{s(z['Zoom Display Name'])} · {s(z['Total Minutes'])} min · {s(z.Result)}</li>)}</ul>
+          <p className="sub">Zoom names the CRM could not match to an invitee: a different or shortened name, no _Position, or a name that fits more than one applicant. If it is one of your invitees, link it and their Zoom minutes count for them.</p>
+          <ul>{unmatchedZoom.map((z, i) => (
+            <li key={i} style={{ marginBottom: 6 }}>{s(z['Zoom Display Name'])} · {s(z['Total Minutes'])} min{s(z.Result) ? ` · ${s(z.Result)}` : ''}
+              <ZoomLink day={date} name={s(z['Parsed Name'])} options={linkable} />
+            </li>
+          ))}</ul>
         </section>
       )}
     </>

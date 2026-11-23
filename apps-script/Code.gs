@@ -1128,7 +1128,7 @@ function processZoom_(st) {
     // Live during the session: matched rows are rewritten every few minutes, so keep the applicant's minutes so far current.
     if (r['Matched Applicant ID'] && !r.Result) {
       var ma = byId[r['Matched Applicant ID']];
-      if (liveRow && ma && !nameMatches(r['Parsed Name'], ma['First Name'], ma['Last Name'])) {
+      if (liveRow && ma && !r['Linked By'] && !nameMatches(r['Parsed Name'], ma['First Name'], ma['Last Name'])) {
         // matched by the older, looser rule: undo and match again
         update_(z, r, { 'Matched Applicant ID': '' });
         if (IN_SESSION.indexOf(ma.Stage) !== -1) update_(apps, ma, { 'Zoom Minutes': '', Arrival: '', 'Minutes Early': '' });
@@ -2482,6 +2482,22 @@ function api_(req) {
       var cid = id_('C');
       appendTo_(SH.CHAT, { 'Chat ID': cid, 'Asked At': nowStr_(), 'Asked By': req.by, Question: String(req.question || '').slice(0, 1000), Status: 'Pending' });
       return { id: cid };
+    }
+    if (req.action === 'linkZoom') {
+      // This Week's Session (Miguel, 2026-11-18): link a Zoom name the CRM could not match to the applicant it is.
+      ensureCols_(SH.ZOOM, ['Linked By']);
+      var zt = table_(SH.ZOOM);
+      var zr = zt.rows.filter(function (r) {
+        return ymdOf_(r['Interview Date']) === String(req.day || '') && String(r['Parsed Name'] || '').replace(/\s+/g, ' ').trim().toLowerCase() === String(req.name || '').replace(/\s+/g, ' ').trim().toLowerCase();
+      })[0];
+      if (!zr) throw new Error('That Zoom name is not in the attendance for ' + req.day + '.');
+      var za = byId[req.id];
+      if (!za) throw new Error('Applicant not found.');
+      if (ymdOf_(za['Interview Date']) !== String(req.day)) throw new Error((za['First Name'] + ' ' + za['Last Name']).trim() + ' is not invited to ' + req.day + '.');
+      update_(zt, zr, { 'Matched Applicant ID': za['Applicant ID'], Result: '', 'Linked By': req.by || '' });
+      liveZoom_(apps, za, zr);
+      update_(apps, za, { Notes: (za.Notes ? za.Notes + '\n' : '') + nowStr_() + ' ' + req.by + ': Zoom name "' + zr['Zoom Display Name'] + '" linked to this applicant' });
+      return { linked: true };
     }
     if (req.action === 'resolveFlag') {
       var fl = table_(SH.FLAGS);
