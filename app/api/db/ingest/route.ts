@@ -33,6 +33,9 @@ export async function POST(req: Request) {
     } else {
       return NextResponse.json({ ok: false, error: 'bad request' }, { status: 400 });
     }
+    // Heartbeat for the watchdog (Miguel, 2026-11-23): unchanged rows are not rewritten, so "last row changed" goes
+    // quiet at night; this says when the Apps Script last reached the database at all.
+    if (body.op === 'upsert' || body.op === 'trim') await setKv('lastSync', new Date().toISOString());
   } catch (e) {
     return NextResponse.json({ ok: false, error: e instanceof Error ? e.message : 'error' }, { status: 500 });
   }
