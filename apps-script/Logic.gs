@@ -770,6 +770,17 @@ function zoomRowsFromParticipants(participants, day, nowMs, opts) {
     var pid = p.participant_uuid || p.participant_user_id || p.id || p.user_name;
     var display = parseZoomName(p.user_name) ? String(p.user_name).trim() : parsedById[pid];
     var parsed = parseZoomName(display);
+    // Miguel, 2026-11-18: someone who joined without the Name_Position format (and a rename during the meeting is not
+    // seen by Zoom's live list) is still recorded under the name they joined with, so they can be matched or linked
+    // to their applicant on This Week's Session instead of leaving and rejoining. _Training stays out.
+    if (!parsed && !display) {
+      var raw = String(p.user_name || '').replace(/\s+/g, ' ').trim();
+      var bits = raw.split('_').map(function (x) { return x.trim(); }).filter(String);
+      if (raw && !/(^|_)\s*training\b/i.test(raw) && bits.length) {
+        display = raw;
+        parsed = bits.length > 1 ? { name: bits.slice(0, -1).join(' '), position: bits[bits.length - 1] } : { name: bits[0], position: '' };
+      }
+    }
     var j = Date.parse(p.join_time || '');
     if (!parsed || isNaN(j)) return;
     var l = p.leave_time ? Date.parse(p.leave_time) : end;

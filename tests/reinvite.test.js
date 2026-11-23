@@ -42,3 +42,25 @@ test('invite sent to a No Show applicant makes them Invited', () => {
   assert.equal(apps.A1.Stage, 'Invited');
   assert.equal(apps.A2.Stage, 'Invited');
 });
+
+test('Zoom: a name without _Position is recorded; a manual link sticks and counts the minutes', () => {
+  const env = load({ mode: 'LIVE', now: pst('2026-11-18T14:30:00'), settings: { ZOOM_TRACKING_FOR: '2026-11-18' } });
+  const rows = env.ctx.zoomRowsFromParticipants([
+    { id: 'p1', user_name: 'Romeo O', join_time: '2026-11-18T21:50:00Z' },
+    { id: 'p2', user_name: 'Ana Reyes_ISA', join_time: '2026-11-18T21:55:00Z' },
+    { id: 'p3', user_name: 'Trainee_Training', join_time: '2026-11-18T21:55:00Z' },
+  ], '2026-11-18', pst('2026-11-18T14:30:00').getTime(), {});
+  const names = rows.map((r) => r['Parsed Name']).sort();
+  assert.equal(JSON.stringify(names), JSON.stringify(['Ana Reyes', 'Romeo O']));
+  assert.equal(rows.find((r) => r['Parsed Name'] === 'Romeo O')['Parsed Position'], '');
+  // link "Romeo O" to the invitee Romeo Opolentisima
+  env.sheets.Applicants.appendRow(row('Applicants', { 'Applicant ID': 'F-1', Source: 'Form', 'First Name': 'Romeo', 'Last Name': 'Opolentisima', Email: 'r@example.com', Position: 'Inside Sales Agent (ISA)', Stage: 'Confirmed', 'Interview Date': '2026-11-18' }));
+  env.ctx.writeZoomRows_('2026-11-18', rows);
+  const res = env.ctx.api_({ action: 'linkZoom', day: '2026-11-18', name: 'Romeo O', id: 'F-1', by: 'Miguel' });
+  assert.equal(res.linked, true);
+  env.ctx.processZoom_(env.ctx.settings_()); // the next check must not undo the link
+  const z = env.rows('Zoom Attendance').find((r) => r['Parsed Name'] === 'Romeo O');
+  assert.equal(z['Matched Applicant ID'], 'F-1');
+  assert.equal(z['Linked By'], 'Miguel');
+  assert.ok(Number(env.rows('Applicants')[0]['Zoom Minutes']) > 0);
+});
