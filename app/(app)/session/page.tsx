@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { getData } from '@/lib/sheet';
-import { s, fullName, ymd, formatDate, upcomingWednesday, isTest, zoomLive } from '@/lib/pipeline';
+import { s, fullName, ymd, formatDate, upcomingWednesday, isTest, zoomLive, remindedFor } from '@/lib/pipeline';
 import ZoomBadge from '@/components/ZoomBadge';
 import StageBadge from '@/components/StageBadge';
 import DataError from '@/components/DataError';
@@ -24,7 +24,7 @@ export default async function Session({ searchParams }: { searchParams: Promise<
     .sort((x, y) => fullName(x).localeCompare(fullName(y)));
   const counted = roster.filter((a) => !isTest(a)); // test applicants show in the list but not in the numbers
   const confirmed = counted.filter((a) => a['Confirmed At'] || s(a.Stage) === 'Confirmed').length;
-  const reminded = counted.filter((a) => a['Reminder Sent At']).length;
+  const reminded = counted.filter((a) => remindedFor(a)).length;
   const prev = new Date(`${date}T12:00:00Z`); prev.setUTCDate(prev.getUTCDate() - 7);
   const next = new Date(`${date}T12:00:00Z`); next.setUTCDate(next.getUTCDate() + 7);
   const live = zoomLive(d.zoom);
@@ -44,7 +44,7 @@ export default async function Session({ searchParams }: { searchParams: Promise<
   const joined = (a: Record<string, unknown>) => (Number(s(a['Zoom Minutes'])) > 0 || live.get(s(a['Applicant ID'])) ? 'Joined Zoom' : 'No Zoom minutes');
   const rows = roster.filter((a) =>
     (!p.pos || s(a.Position) === p.pos) && (!p.stage || s(a.Stage) === p.stage) &&
-    (!p.conf || (a['Confirmed At'] ? 'Yes' : 'No') === p.conf) && (!p.rem || (a['Reminder Sent At'] ? 'Sent' : 'Not sent') === p.rem) &&
+    (!p.conf || (a['Confirmed At'] ? 'Yes' : 'No') === p.conf) && (!p.rem || (remindedFor(a) ? 'Sent' : 'Not sent') === p.rem) &&
     (!p.arr || arrival(a) === p.arr) && (!p.zoom || joined(a) === p.zoom));
   const filtered = rows.length !== roster.length || !!(p.pos || p.stage || p.conf || p.rem || p.arr || p.zoom);
   const clear = `/session?date=${date}`;
@@ -100,7 +100,7 @@ export default async function Session({ searchParams }: { searchParams: Promise<
               <tr key={s(a['Applicant ID'])}>
                 <td><Link href={`/candidates/${encodeURIComponent(s(a['Applicant ID']))}`}>{fullName(a)}</Link></td>
                 <td>{s(a.Position)}</td><td><StageBadge stage={s(a.Stage)} /><ZoomBadge z={live.get(s(a['Applicant ID']))} />{isTest(a) && <span className="tag">Test · not counted</span>}</td>
-                <td>{a['Confirmed At'] ? 'Yes' : 'No'}</td><td>{a['Reminder Sent At'] ? 'Sent' : '—'}</td><td><Arrival a={a} /></td><td>{s(a['Zoom Minutes']) || '—'}</td>{isToday && <td><QuickDecide id={s(a['Applicant ID'])} name={fullName(a)} stage={s(a.Stage)} /></td>}
+                <td>{a['Confirmed At'] ? 'Yes' : 'No'}</td><td>{remindedFor(a) ? 'Sent' : '—'}</td><td><Arrival a={a} /></td><td>{s(a['Zoom Minutes']) || '—'}</td>{isToday && <td><QuickDecide id={s(a['Applicant ID'])} name={fullName(a)} stage={s(a.Stage)} /></td>}
               </tr>
             ))}
           </tbody>

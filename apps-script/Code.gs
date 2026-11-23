@@ -347,6 +347,16 @@ function ptStamp_(v) {
   return isNaN(d.getTime()) ? t : Utilities.formatDate(d, TZ, 'yyyy-MM-dd HH:mm:ss');
 }
 
+/**
+ * True when the applicant already got the reminder for their current session (Miguel, 2026-11-18: a reminder time
+ * left over from an earlier session, e.g. Jella re-invited after Nov 11, used to block the next week's reminder).
+ * Reminders go out on the session day or the day before, so one sent in the 6 days before the session counts.
+ */
+function reminderSentFor_(a) {
+  var r = ymdOf_(a['Reminder Sent At']), day = ymdOf_(a['Interview Date']);
+  return !!r && !!day && r <= day && r > addDays(day, -7);
+}
+
 function ymdOf_(v) {
   if (v instanceof Date) return Utilities.formatDate(v, TZ, 'yyyy-MM-dd');
   return String(v || '').slice(0, 10);
@@ -622,10 +632,15 @@ function applySentEmails_(st) {
     }
     if (status !== 'Sent' || !a) return;
     if (e.Type === 'Invite' || e.Type === 'Re-invite' || e.Type === 'OLJ Invite') {
-      update_(apps, a, {
+      var invitedOn = ymdOf_(e['Queued At'] || e['Sent At']) || todayPT();
+      var fresh = {
         'Interview Date': ymdOf_(e['Interview Date']), 'Invite Count': (Number(a['Invite Count']) || 0) + 1,
         'Last Invite At': e['Sent At'] || nowStr_()
-      });
+      };
+      // a new invite starts a new session: a reminder or confirmation from before it belongs to the old one
+      if (a['Reminder Sent At'] && ymdOf_(a['Reminder Sent At']) < invitedOn) fresh['Reminder Sent At'] = '';
+      if (a['Confirmed At'] && ymdOf_(a['Confirmed At']) < invitedOn && a.Stage !== 'Confirmed') fresh['Confirmed At'] = '';
+      update_(apps, a, fresh);
       // Miguel, 2026-11-18: No Show / No Confirmation applicants invited again become Invited too, so their "full
       // name" reply confirms them (replies only match Invited, Confirmed and Open for re-invite applicants).
       if (INVITED_FROM.indexOf(a.Stage) !== -1) {
@@ -804,7 +819,7 @@ function reinvitedFix_(st) {
     update_(apps, a, { 'Confirmed At': ptStamp_(confirmed['Received At']) || nowStr_() });
     update_(reps, confirmed, { Category: 'Confirmed', 'Matched Applicant ID': a['Applicant ID'], 'Action Taken': 'Confirmed (fixed after the re-invite)' });
     // today's 6 AM reminders already went out without them: send theirs now
-    if (day === today && st.get('REMINDERS_QUEUED_FOR') === today && a.Source !== 'OLJ' && !onHold(a) && !a['Reminder Sent At']) {
+    if (day === today && st.get('REMINDERS_QUEUED_FOR') === today && a.Source !== 'OLJ' && !onHold(a) && !reminderSentFor_(a)) {
       queueEmail_(st, a, 'Reminder', reminderEmail(today), today);
     }
     flags.rows.forEach(function (f) {
@@ -1217,7 +1232,7 @@ function queueReminders_(st) {
   var n = 0;
   apps.rows.forEach(function (a) {
     // OLJ applicants get their reminder as an OLJ message (routines/olj_confirm.js), never by email.
-    if (a.Stage === 'Confirmed' && a.Source !== 'OLJ' && ymdOf_(a['Interview Date']) === today && !a['Reminder Sent At'] && !onHold(a)) {
+    if (a.Stage === 'Confirmed' && a.Source !== 'OLJ' && ymdOf_(a['Interview Date']) === today && !reminderSentFor_(a) && !onHold(a)) {
       queueEmail_(st, a, 'Reminder', reminderEmail(today), today);
       n++;
     }

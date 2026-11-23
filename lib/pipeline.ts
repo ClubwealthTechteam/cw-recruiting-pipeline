@@ -112,6 +112,13 @@ export function linkApplications(applicants: Row[], team: Record<string, string>
   return applicants;
 }
 export const ymd = (v: unknown) => s(v).slice(0, 10);
+/** Same as Code.gs reminderSentFor_: the reminder counts for the current session only if sent in the 6 days before it. */
+export function remindedFor(a: Record<string, unknown>): boolean {
+  const r = ymd(a['Reminder Sent At']), day = ymd(a['Interview Date']);
+  if (!r || !day) return false;
+  const weekBefore = new Date(Date.parse(day + 'T12:00:00Z') - 7 * 86_400_000).toISOString().slice(0, 10);
+  return r <= day && r > weekBefore;
+}
 
 /**
  * A timestamp as Pacific "YYYY-MM-DD HH:mm:ss", so times sort newest-first as text. OLJ rows can carry UTC ISO

@@ -43,6 +43,28 @@ test('invite sent to a No Show applicant makes them Invited', () => {
   assert.equal(apps.A2.Stage, 'Invited');
 });
 
+test('reminder left over from an earlier session does not block the new session reminder', () => {
+  const env = load({ mode: 'LIVE', now: pst('2026-11-18T06:05:00'), settings: { EMAIL_SENDING: 'ON', MODE: 'LIVE' } });
+  env.sheets.Applicants.appendRow(row('Applicants', { 'Applicant ID': 'F-9', Source: 'Form', 'First Name': 'Jella', 'Last Name': 'Alcano', Email: 'j@example.com', Position: 'Inside Sales Agent (ISA)', Stage: 'Confirmed', 'Interview Date': '2026-11-18', 'Reminder Sent At': '2026-11-11 6:27:22', 'Confirmed At': '2026-11-10 14:17:23' }));
+  assert.equal(env.ctx.reminderSentFor_(env.rows('Applicants')[0]), false, 'last week\'s reminder');
+  env.ctx.queueReminders_(env.ctx.settings_());
+  const rem = env.rows('Outbox').filter((e) => e.Type === 'Reminder');
+  assert.equal(rem.length, 1);
+  assert.equal(rem[0]['Applicant ID'], 'F-9');
+});
+
+test('a new invite clears the old session reminder and (unless Confirmed) the old confirmation', () => {
+  const env = load({ mode: 'LIVE', now: pst('2026-11-17T16:00:00'), settings: { REINVITED_FIX: 'DONE' } });
+  env.sheets.Applicants.appendRow(row('Applicants', { 'Applicant ID': 'F-8', Source: 'Form', 'First Name': 'Bo', 'Last Name': 'Li', Email: 'b@example.com', Position: 'Inside Sales Agent (ISA)', Stage: 'No Show', 'Interview Date': '2026-11-11', 'Reminder Sent At': '2026-11-11 6:27:22', 'Confirmed At': '2026-11-10 14:17:23' }));
+  env.sheets.Outbox.appendRow(row('Outbox', { 'Email ID': 'E-8', 'Applicant ID': 'F-8', Type: 'Invite', To: 'b@example.com', Subject: 'ClubWealth | Pre-Interview invite', 'Interview Date': '2026-11-18', 'Queued At': '2026-11-17 15:45:00', Status: 'Sent', 'Sent At': '2026-11-17 15:50:00' }));
+  env.ctx.applySentEmails_(env.ctx.settings_());
+  const a = env.rows('Applicants')[0];
+  assert.equal(a['Interview Date'], '2026-11-18');
+  assert.equal(a['Reminder Sent At'], '');
+  assert.equal(a['Confirmed At'], '');
+  assert.equal(a.Stage, 'Invited');
+});
+
 test('Zoom: a name without _Position is recorded; a manual link sticks and counts the minutes', () => {
   const env = load({ mode: 'LIVE', now: pst('2026-11-18T14:30:00'), settings: { ZOOM_TRACKING_FOR: '2026-11-18' } });
   const rows = env.ctx.zoomRowsFromParticipants([
