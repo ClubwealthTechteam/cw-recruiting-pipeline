@@ -37,7 +37,7 @@ export async function runChecks(): Promise<{ at: string; summary: Record<Level, 
   const isWed = new Date(today + 'T12:00:00Z').getUTCDay() === 3;
   const [t, kv, ops, stats] = await Promise.all([
     readTabs(['Settings', 'Outbox', 'Applicants', 'Needs Attention', 'Zoom Attendance']),
-    getKvs(['lastClock', 'lastFullCopy', 'engineSend', 'zapConfirmSince', 'readFromDb']),
+    getKvs(['lastClock', 'lastFullCopy', 'engineSend', 'zapConfirmSince', 'readFromDb', 'lastSync']),
     opStats(),
     tabStats(),
   ]);
@@ -60,10 +60,13 @@ export async function runChecks(): Promise<{ at: string; summary: Record<Level, 
       : { id: 'clock', level: 'ok', title: 'CRM clock (every-minute ping from the Apps Script)', detail: `Last ping ${Math.round(clockMin)} min ago. Sending by ${crmSends ? 'the CRM' : 'the Apps Script'}.` });
 
   const newest = stats.map((x) => x.updated).sort().pop() || '';
-  const copyMin = newest ? minutes(newest, now) : Infinity;
+  const changeMin = newest ? minutes(newest, now) : Infinity;
+  // The Apps Script reaches the database at least every 5 minutes (tick re-copies one tab), even when nothing changed.
+  const syncAt = typeof kv.lastSync === 'string' ? Date.parse(kv.lastSync) : NaN;
+  const copyMin = Number.isFinite(syncAt) ? (Date.now() - syncAt) / 60000 : changeMin;
   checks.push(copyMin > 30
-    ? { id: 'db-sync', level: 'bad', title: 'Database copy of the sheet', detail: `No row copied from the sheet for ${ago(copyMin)}. The CRM may be showing old data (Apps Script dbFlush_ / tick).` }
-    : { id: 'db-sync', level: 'ok', title: 'Database copy of the sheet', detail: `Last change copied ${Math.round(copyMin)} min ago. Full copy: ${(typeof kv.lastFullCopy === 'string' ? kv.lastFullCopy : s((kv.lastFullCopy as { at?: string } | undefined)?.at)).slice(0, 16) || 'never'}.` });
+    ? { id: 'db-sync', level: 'bad', title: 'Database copy of the sheet', detail: `The Apps Script has not reached the database for ${ago(copyMin)}. The CRM may be showing old data (check the Apps Script tick trigger and the Run Log).` }
+    : { id: 'db-sync', level: 'ok', title: 'Database copy of the sheet', detail: `In sync (last copy ${Math.round(copyMin)} min ago; last real change ${Number.isFinite(changeMin) ? ago(changeMin) + ' ago' : 'never'}). Full copy: ${(typeof kv.lastFullCopy === 'string' ? kv.lastFullCopy : s((kv.lastFullCopy as { at?: string } | undefined)?.at)).slice(0, 16) || 'never'}.` });
 
   checks.push(ops.failed || ops.pending > 5
     ? { id: 'saves', level: ops.failed ? 'warn' : 'bad', title: 'Saves from the CRM to the sheet', detail: `${ops.pending} waiting, ${ops.failed} refused in the last 7 days.` }
