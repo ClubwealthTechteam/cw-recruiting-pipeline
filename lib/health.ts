@@ -2,6 +2,7 @@ import 'server-only';
 import { readTabs, getKvs, opStats, tabStats } from '@/lib/db';
 import { ptNow } from '@/lib/fastsave';
 import { deliveryProblems } from '@/lib/delivery';
+import { remindedFor } from '@/lib/pipeline';
 
 /**
  * The CRM watchdog (Miguel, 2026-11-13: "check EVERYTHING and report it to me"). Every check reads the database copy
@@ -108,7 +109,7 @@ export async function runChecks(): Promise<{ at: string; summary: Record<Level, 
 
   // ---- sessions (Wednesdays, 2 PM PT) ----
   if (isWed && hour >= 8) {
-    const noReminder = live.filter((a) => s(a.Stage) === 'Confirmed' && s(a['Interview Date']).slice(0, 10) === today && !s(a['Reminder Sent At']) && !hasTag(a, 'Position on hold') && s(a.Source) !== 'OLJ')
+    const noReminder = live.filter((a) => s(a.Stage) === 'Confirmed' && s(a['Interview Date']).slice(0, 10) === today && !remindedFor(a) && !hasTag(a, 'Position on hold') && s(a.Source) !== 'OLJ')
       .map((a) => `${name(a)} · ${s(a.Position)}`);
     checks.push(check('reminders', "Today's session reminders", noReminder, 'bad', 'Every confirmed applicant got the reminder.', (n) => `${n} confirmed applicant(s) for today have no reminder sent.`));
   }
