@@ -432,7 +432,7 @@ function applicantFromForm_(prefix, rowNum, r, overrides) {
     'Applied At (PT)': r[FORM.TS] instanceof Date ? Utilities.formatDate(r[FORM.TS], TZ, 'yyyy-MM-dd HH:mm:ss') : r[FORM.TS],
     'First Name': String(r[FORM.FIRST]).trim(), 'Last Name': String(r[FORM.LAST]).trim(),
     Email: String(r[FORM.EMAIL]).trim().toLowerCase(), Phone: r[FORM.PHONE], Country: r[FORM.COUNTRY],
-    'Position (as typed)': r[FORM.POSITION], Position: standardPosition(r[FORM.POSITION], overrides),
+    'Position (as typed)': r[FORM.POSITION], Position: positionFor(r[FORM.POSITION], overrides, postTitles_()),
     'Has Experience': r[FORM.HAS_EXP], 'Years Experience': r[FORM.YEARS], 'Recent Client': r[FORM.RECENT],
     'US Clients VA': r[FORM.US_CLIENTS], 'US Realtor VA': r[FORM.US_REALTOR], 'Experience Overview': r[FORM.OVERVIEW],
     'Internet Speed': r[FORM.SPEED], 'Speedtest Link': r[FORM.SPEED_LINK], 'Voice Recording Link': r[FORM.VOICE],
@@ -954,7 +954,7 @@ function processEmailApps_(st) {
       'Applicant ID': 'E-' + r._row, Source: 'Email', 'Source Ref': r['Message ID'],
       'Applied At (PT)': ptStamp_(r['Received At']) || nowStr_(),
       'First Name': parts.length > 1 ? parts.slice(0, -1).join(' ') : (parts[0] || ''), 'Last Name': parts.length > 1 ? parts[parts.length - 1] : '',
-      Email: email, 'Position (as typed)': r['Position (as typed)'], Position: standardPosition(r['Position (as typed)'], overrides),
+      Email: email, 'Position (as typed)': r['Position (as typed)'], Position: positionFor(r['Position (as typed)'], overrides, postTitles_()),
       'Experience Overview': r.Summary, 'Screen Track': screenTrack(r['Position (as typed)']) || 'Not screened',
       'Resume Link': r['Resume Link'] || '', 'Resume Experience': String(r['Resume Summary'] || '').slice(0, 3000),
       Tags: r.Referral ? 'Referral' : '', Notes: r.Referral ? nowStr_() + ' System: Referred by ' + String(r.Referral).slice(0, 100) : '',
@@ -1379,6 +1379,7 @@ function tick() {
     ['rename', function () { renameStageOnce_(st, 'Onboarded', 'Onboarding', 'STAGE_RENAMED_ONBOARDING'); return 0; }],
     ['onHold', function () { return onHoldBackfill_(st); }],
     ['oljTitles', function () { return oljTitleBackfill_(st); }],
+    ['postTitles', function () { return postTitleBackfill_(st); }],
     ['relinked', function () { return relinkUnmatched_(st); }],
     ['reinvitedFix', function () { return reinvitedFix_(st); }],
     ['intake', function () { return importNewFormRows_(st); }],
@@ -2163,7 +2164,7 @@ function api_(req) {
         'Applicant ID': newId, Source: 'Referral', 'Source Ref': refBy ? 'Referred by ' + refBy : 'Referral',
         'Applied At (PT)': nowStr_(), 'First Name': first, 'Last Name': last, Email: mail,
         Phone: String(req.phone || '').trim().slice(0, 40), 'Position (as typed)': typed,
-        Position: standardPosition(typed, positionOverrides_()), 'Screen Track': screenTrack(typed) || 'Not screened',
+        Position: positionFor(typed, positionOverrides_(), postTitles_()), 'Screen Track': screenTrack(typed) || 'Not screened',
         Stage: 'Applied', 'Stage Updated At': nowStr_(), 'Stage Updated By': req.by, 'Invite Count': 0,
         Tags: 'Referral', Notes: noteLine, 'Resume Link': resumeLink, 'Created At': nowStr_()
       });
@@ -2197,7 +2198,7 @@ function api_(req) {
       }
       if (!said.length) return { updated: 0 };
       if (f2['Position (as typed)'] !== undefined) {
-        f2.Position = standardPosition(f2['Position (as typed)'], positionOverrides_());
+        f2.Position = positionFor(f2['Position (as typed)'], positionOverrides_(), postTitles_());
         f2['Screen Track'] = screenTrack(f2['Position (as typed)']) || 'Not screened';
       }
       f2.Notes = (ap.Notes ? ap.Notes + '\n' : '') + nowStr_() + ' ' + req.by + ': Profile edited (' + said.join('; ').slice(0, 900) + ')';
@@ -2853,6 +2854,37 @@ function oljTitleBackfill_(st) {
   });
   st.set('OLJ_TITLES_BACKFILL', 'DONE');
   if (n) log_('oljTitles', 'OLJ applicants filed under their job post title', { moved: n }, '');
+  return n;
+}
+
+/** Our OnlineJobs.ph job post titles that are not one of the known positions (e.g. "AI & Tech Virtual Assistant"). */
+var POST_TITLES_ = null;
+function postTitles_() {
+  if (POST_TITLES_) return POST_TITLES_;
+  var seen = {}, overrides = positionOverrides_(), oljT = optionalTable_(SH.OLJ);
+  (oljT ? oljT.rows : []).forEach(function (r) {
+    var t = String(r['Job Post'] || '').replace(/&amp;/g, '&').replace(/\s+/g, ' ').trim();
+    if (t && oljPosition(t, overrides) === t) seen[t] = true;
+  });
+  POST_TITLES_ = Object.keys(seen);
+  return POST_TITLES_;
+}
+
+/**
+ * One time (Miguel, 2026-11-24): form and email applicants who typed one of our job post titles in their own words
+ * ("AI & Tech VA") were filed under General VA / Other; they move to the post's title. POST_TITLES_BACKFILL = DONE.
+ */
+function postTitleBackfill_(st) {
+  if (st.get('POST_TITLES_BACKFILL') === 'DONE') return 0;
+  var apps = table_(SH.APPLICANTS), overrides = positionOverrides_(), titles = postTitles_(), n = 0;
+  if (!titles.length) return 0; // the OLJ tab is not read yet: try again next tick
+  apps.rows.forEach(function (a) {
+    if (a.Position !== 'General VA' && a.Position !== 'Other') return;
+    var pos = positionFor(a['Position (as typed)'], overrides, titles);
+    if (pos !== a.Position) { update_(apps, a, { Position: pos }); n++; }
+  });
+  st.set('POST_TITLES_BACKFILL', 'DONE');
+  if (n) log_('postTitles', 'applicants filed under the job post they typed', { moved: n }, '');
   return n;
 }
 

@@ -373,6 +373,33 @@ function oljPosition(post, overrides) {
   return std === 'General VA' || std === 'Other' ? title : std;
 }
 
+/**
+ * The position for anything typed on the form or in an email (Miguel, 2026-11-24): when it is not one of the known
+ * positions (General VA / Other), but it names one of our OnlineJobs.ph job posts ("AI & Tech VA", "AI and Tech
+ * Virtual Assistant"), it gets that post's exact title, like the OLJ applicants of the same post.
+ */
+function positionFor(typed, overrides, postTitles) {
+  var std = standardPosition(typed, overrides);
+  if (std !== 'General VA' && std !== 'Other') return std;
+  return matchPostTitle(typed, postTitles) || std;
+}
+
+/** The job post title whose words all appear in what was typed ("VA" counts as "virtual assistant", "&" as "and"). */
+function matchPostTitle(typed, postTitles) {
+  var words = function (s) {
+    return String(s || '').toLowerCase().replace(/&amp;|&/g, ' and ').replace(/\bva\b/g, ' virtual assistant ')
+      .replace(/[^a-z0-9]+/g, ' ').trim().split(' ').filter(function (w) { return w && ['and', 'the', 'a', 'for', 'of'].indexOf(w) === -1; });
+  };
+  var have = words(typed);
+  if (!have.length) return '';
+  var best = '', bestLen = 0;
+  (postTitles || []).forEach(function (t) {
+    var need = words(t);
+    if (need.length >= 2 && need.length > bestLen && need.every(function (w) { return have.indexOf(w) !== -1; })) { best = t; bestLen = need.length; }
+  });
+  return best;
+}
+
 /** Drops the quoted original email that replies carry underneath. */
 function stripQuoted(text) {
   var lines = String(text || '').replace(/\r/g, '').split('\n');
@@ -720,7 +747,7 @@ if (typeof module !== 'undefined') {
     reinviteDateFor: reinviteDateFor, sessionDateProblem: sessionDateProblem, isDaylight: isDaylight, longDate: longDate,
     inviteEmail: inviteEmail, reminderEmail: reminderEmail, oljReminderText: oljReminderText, confirmationEmail: confirmationEmail,
     normName: normName, nameMatches: nameMatches, parseZoomName: parseZoomName,
-    standardPosition: standardPosition, oljPosition: oljPosition, zoomResult: zoomResult, STAGES: STAGES,
+    standardPosition: standardPosition, oljPosition: oljPosition, positionFor: positionFor, matchPostTitle: matchPostTitle, zoomResult: zoomResult, STAGES: STAGES,
     stripQuoted: stripQuoted, typedFullName: typedFullName, classifyReply: classifyReply, confirmsFor: confirmsFor, screenTrack: screenTrack,
     inviteHoldReason: inviteHoldReason, approvedEmailBody: approvedEmailBody, OPEN_POSITIONS: OPEN_POSITIONS,
     replyEmail: replyEmail, scoreSummary: scoreSummary, SCORE_CRITERIA: SCORE_CRITERIA,
