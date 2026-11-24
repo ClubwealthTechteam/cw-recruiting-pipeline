@@ -892,7 +892,7 @@ function processOLJ_(st) {
         'Applicant ID': 'O-' + o['Conversation Key'], Source: 'OLJ', 'Source Ref': o['Conversation Key'],
         'Applied At (PT)': ptStamp_(o['Last Message At']) || nowStr_(), 'First Name': parts.slice(0, -1).join(' ') || parts[0] || '',
         'Last Name': parts.length > 1 ? parts[parts.length - 1] : '', Email: email,
-        'Position (as typed)': o['Job Post'], Position: standardPosition(o['Job Post'], overrides),
+        'Position (as typed)': o['Job Post'], Position: oljPosition(o['Job Post'], overrides),
         'OLJ Job Post': o['Job Post'], 'OLJ Summary': o.Summary, 'OLJ Email Requested At': o['Email Requested At'] || '',
         'Screen Track': screenTrack(o['Job Post']) || 'Not screened',
         Stage: 'Applied', 'Stage Updated At': nowStr_(), 'Stage Updated By': 'System',
@@ -1360,6 +1360,7 @@ function tick() {
   var steps = [
     ['rename', function () { renameStageOnce_(st, 'Onboarded', 'Onboarding', 'STAGE_RENAMED_ONBOARDING'); return 0; }],
     ['onHold', function () { return onHoldBackfill_(st); }],
+    ['oljTitles', function () { return oljTitleBackfill_(st); }],
     ['relinked', function () { return relinkUnmatched_(st); }],
     ['reinvitedFix', function () { return reinvitedFix_(st); }],
     ['intake', function () { return importNewFormRows_(st); }],
@@ -2804,7 +2805,7 @@ function jobAds_() {
     var at = r['Last Message At'] instanceof Date ? r['Last Message At'].getTime() : Date.parse(String(r['Last Message At'] || ''));
     if (!at || at < since) return;
     var post = String(r['Job Post'] || '').replace(/&amp;/g, '&').trim();
-    var pos = standardPosition(post, overrides);
+    var pos = oljPosition(post, overrides);
     if (!pos) return;
     var o = olj[pos] || (olj[pos] = { posts: {}, last: 0 });
     o.posts[post] = true;
@@ -2818,6 +2819,23 @@ function jobAds_() {
       oljPosts: o ? Object.keys(o.posts) : [], oljLast: o ? Utilities.formatDate(new Date(o.last), TZ, 'yyyy-MM-dd') : ''
     };
   });
+}
+
+/**
+ * One time (Miguel, 2026-11-24): OnlineJobs.ph applicants filed under General VA or Other move to their job post's
+ * own title (oljPosition), e.g. "AI & Tech Virtual Assistant". Settings OLJ_TITLES_BACKFILL = DONE after.
+ */
+function oljTitleBackfill_(st) {
+  if (st.get('OLJ_TITLES_BACKFILL') === 'DONE') return 0;
+  var apps = table_(SH.APPLICANTS), overrides = positionOverrides_(), n = 0;
+  apps.rows.forEach(function (a) {
+    if (a.Source !== 'OLJ' || (a.Position !== 'General VA' && a.Position !== 'Other')) return;
+    var pos = oljPosition(a['Position (as typed)'], overrides);
+    if (pos && pos !== a.Position) { update_(apps, a, { Position: pos }); n++; }
+  });
+  st.set('OLJ_TITLES_BACKFILL', 'DONE');
+  if (n) log_('oljTitles', 'OLJ applicants filed under their job post title', { moved: n }, '');
+  return n;
 }
 
 /** The tab may not exist yet on older sheets. */
