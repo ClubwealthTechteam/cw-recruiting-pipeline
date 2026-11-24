@@ -362,6 +362,17 @@ function standardPosition(raw, overrides) {
   return key ? 'Other' : '';
 }
 
+/**
+ * The position for an OnlineJobs.ph job post (Miguel, 2026-11-24): a post that is one of the known positions maps to
+ * it (ISA, TC/LC, Collections, Marketing & Ads); any other post keeps its own title, e.g. "AI & Tech Virtual
+ * Assistant", instead of being filed under General VA or Other.
+ */
+function oljPosition(post, overrides) {
+  var title = String(post || '').replace(/&amp;/g, '&').replace(/\s+/g, ' ').trim();
+  var std = standardPosition(title, overrides);
+  return std === 'General VA' || std === 'Other' ? title : std;
+}
+
 /** Drops the quoted original email that replies carry underneath. */
 function stripQuoted(text) {
   var lines = String(text || '').replace(/\r/g, '').split('\n');
@@ -709,7 +720,7 @@ if (typeof module !== 'undefined') {
     reinviteDateFor: reinviteDateFor, sessionDateProblem: sessionDateProblem, isDaylight: isDaylight, longDate: longDate,
     inviteEmail: inviteEmail, reminderEmail: reminderEmail, oljReminderText: oljReminderText, confirmationEmail: confirmationEmail,
     normName: normName, nameMatches: nameMatches, parseZoomName: parseZoomName,
-    standardPosition: standardPosition, zoomResult: zoomResult, STAGES: STAGES,
+    standardPosition: standardPosition, oljPosition: oljPosition, zoomResult: zoomResult, STAGES: STAGES,
     stripQuoted: stripQuoted, typedFullName: typedFullName, classifyReply: classifyReply, confirmsFor: confirmsFor, screenTrack: screenTrack,
     inviteHoldReason: inviteHoldReason, approvedEmailBody: approvedEmailBody, OPEN_POSITIONS: OPEN_POSITIONS,
     replyEmail: replyEmail, scoreSummary: scoreSummary, SCORE_CRITERIA: SCORE_CRITERIA,
