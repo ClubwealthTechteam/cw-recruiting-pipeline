@@ -930,19 +930,23 @@ var EMAIL_INTAKE_HOLD = 'Email intake invites are off until Miguel approves the 
  */
 function processEmailApps_(st) {
   if (!ss_().getSheetByName(SH.EMAILAPPS)) return 0;
+  // Miguel, 2026-11-24: the CareersCW routine also gives the resume: a link to the email it is attached to (Outlook),
+  // and a short summary of the experience in it.
+  ensureCols_(SH.EMAILAPPS, EMAIL_RESUME_COLS);
   var ea = table_(SH.EMAILAPPS);
   var apps = table_(SH.APPLICANTS);
   var overrides = positionOverrides_();
   var on = st.get('EMAIL_INTAKE') === 'ON';
   var n = 0;
   ea.rows.forEach(function (r) {
-    if (r['Processed At']) return;
+    if (r['Processed At']) { resumeFromEmail_(apps, r); return; }
     var email = String(r['From Email'] || '').trim().toLowerCase();
     if (!/@/.test(email)) { update_(ea, r, { 'Processed At': nowStr_(), Note: 'No sender email' }); return; }
     var same = apps.rows.filter(function (a) { return String(a.Email || '').trim().toLowerCase() === email && a.Historical !== 'Y'; })[0];
     if (same) {
       if (r.Referral && apps.headers.indexOf('Tags') !== -1) update_(apps, same, { Tags: cleanTags_((same.Tags ? same.Tags + ', ' : '') + 'Referral') });
       update_(ea, r, { 'Applicant ID': same['Applicant ID'], 'Processed At': nowStr_(), Note: 'Already in the CRM' });
+      resumeFromEmail_(apps, r);
       return;
     }
     var parts = String(r['Applicant Name'] || '').trim().split(/\s+/).filter(Boolean);
@@ -952,6 +956,7 @@ function processEmailApps_(st) {
       'First Name': parts.length > 1 ? parts.slice(0, -1).join(' ') : (parts[0] || ''), 'Last Name': parts.length > 1 ? parts[parts.length - 1] : '',
       Email: email, 'Position (as typed)': r['Position (as typed)'], Position: standardPosition(r['Position (as typed)'], overrides),
       'Experience Overview': r.Summary, 'Screen Track': screenTrack(r['Position (as typed)']) || 'Not screened',
+      'Resume Link': r['Resume Link'] || '', 'Resume Experience': String(r['Resume Summary'] || '').slice(0, 3000),
       Tags: r.Referral ? 'Referral' : '', Notes: r.Referral ? nowStr_() + ' System: Referred by ' + String(r.Referral).slice(0, 100) : '',
       Stage: 'Applied', 'Stage Updated At': nowStr_(), 'Stage Updated By': 'System', 'Invite Count': 0, 'Created At': nowStr_()
     });
@@ -971,6 +976,19 @@ function processEmailApps_(st) {
     });
   }
   return n;
+}
+
+var EMAIL_RESUME_COLS = ['Resume Link', 'Resume Summary'];
+
+/** Puts the emailed resume (link and summary) on the applicant when they do not have one yet. */
+function resumeFromEmail_(apps, r) {
+  if (!r['Applicant ID'] || (!r['Resume Link'] && !r['Resume Summary'])) return;
+  var a = apps.rows.filter(function (x) { return x['Applicant ID'] === r['Applicant ID']; })[0];
+  if (!a) return;
+  var f = {};
+  if (r['Resume Link'] && !a['Resume Link']) f['Resume Link'] = r['Resume Link'];
+  if (r['Resume Summary'] && !a['Resume Experience'] && apps.headers.indexOf('Resume Experience') !== -1) f['Resume Experience'] = String(r['Resume Summary']).slice(0, 3000);
+  if (Object.keys(f).length) update_(apps, a, f);
 }
 
 var RESUME_FOLDER = 'Recruiting Pipeline - Resumes';
