@@ -293,6 +293,8 @@ var POSITION_RULES = [
   [/transaction|listing|admin|\btc\b|\blc\b/, 'Real Estate Admin VA (TC/LC)'],
   [/marketing|ads/, 'Marketing & Ads Specialist'],
   [/customer service|case manager/, 'Customer Service'],
+  // Miguel, 2026-11-24: the OnlineJobs.ph post "AI & Tech Virtual Assistant" is its own position, not General VA.
+  [/\bai\b.*\btech|\btech\b.*\bva\b|tech virtual assist/, 'AI & Tech VA'],
   [/general|virtual assist|\bva\b/, 'General VA']
 ];
 

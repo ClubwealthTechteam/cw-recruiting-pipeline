@@ -1360,6 +1360,7 @@ function tick() {
   var steps = [
     ['rename', function () { renameStageOnce_(st, 'Onboarded', 'Onboarding', 'STAGE_RENAMED_ONBOARDING'); return 0; }],
     ['onHold', function () { return onHoldBackfill_(st); }],
+    ['aiTechVa', function () { return aiTechBackfill_(st); }],
     ['relinked', function () { return relinkUnmatched_(st); }],
     ['reinvitedFix', function () { return reinvitedFix_(st); }],
     ['intake', function () { return importNewFormRows_(st); }],
@@ -2818,6 +2819,23 @@ function jobAds_() {
       oljPosts: o ? Object.keys(o.posts) : [], oljLast: o ? Utilities.formatDate(new Date(o.last), TZ, 'yyyy-MM-dd') : ''
     };
   });
+}
+
+/**
+ * One time (Miguel, 2026-11-24): applicants from the OnlineJobs.ph post "AI & Tech Virtual Assistant" were filed as
+ * General VA before that position existed. They move to AI & Tech VA. Settings AI_TECH_VA_BACKFILL = DONE after.
+ */
+function aiTechBackfill_(st) {
+  if (st.get('AI_TECH_VA_BACKFILL') === 'DONE') return 0;
+  var apps = table_(SH.APPLICANTS), overrides = positionOverrides_(), n = 0;
+  apps.rows.forEach(function (a) {
+    if (a.Position !== 'General VA' || standardPosition(a['Position (as typed)'], overrides) !== 'AI & Tech VA') return;
+    update_(apps, a, { Position: 'AI & Tech VA' });
+    n++;
+  });
+  st.set('AI_TECH_VA_BACKFILL', 'DONE');
+  if (n) log_('aiTechVa', 'filed under AI & Tech VA', { moved: n }, '');
+  return n;
 }
 
 /** The tab may not exist yet on older sheets. */
