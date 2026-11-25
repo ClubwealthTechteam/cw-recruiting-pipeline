@@ -136,6 +136,10 @@ test('screening track from the typed position', () => {
   assert.equal(L.screenTrack('Accounts Receivable or Collections Specialist'), 'Collections');
   assert.equal(L.screenTrack('Real Estate Appointment Setter'), '');
   assert.equal(L.screenTrack('AI-SAVVY MARKETING & ADS SPECIALIST'), '');
+  assert.equal(L.screenTrack('AI & Tech Virtual Assistant'), 'AI & Tech VA');
+  assert.equal(L.screenTrack('ai and tech va'), 'AI & Tech VA');
+  assert.equal(L.screenTrack('Tech VA'), 'AI & Tech VA');
+  assert.equal(L.screenTrack('General Virtual Assistant'), '');
 });
 
 test('invite and reminder emails are signed Club Wealth with the banner, no personal signature', () => {

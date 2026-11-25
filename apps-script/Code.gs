@@ -540,14 +540,21 @@ function syncManualInvites_(st) {
   return n;
 }
 
-/** Fills Screen Track for current applicants that do not have one yet (rows added before screening existed). */
+/**
+ * Fills Screen Track for current applicants that do not have one yet (rows added before screening existed), and
+ * re-checks "Not screened" ones when a new track is added (AI & Tech VA, Miguel 2026-11-25), so they get screened.
+ */
 function backfillScreenTracks_() {
   var apps = table_(SH.APPLICANTS);
   if (apps.headers.indexOf('Screen Track') === -1) return 0;
   var n = 0;
   apps.rows.forEach(function (a) {
-    if (a['Screen Track'] || a.Historical === 'Y') return;
-    update_(apps, a, { 'Screen Track': screenTrack(a['Position (as typed)'] || a['OLJ Job Post']) || 'Not screened' });
+    if (a.Historical === 'Y') return;
+    var cur = a['Screen Track'];
+    if (cur && cur !== 'Not screened') return;
+    var t = screenTrack(a['Position (as typed)'] || a['OLJ Job Post']) || screenTrack(a.Position) || 'Not screened';
+    if (t === cur) return;
+    update_(apps, a, { 'Screen Track': t });
     n++;
   });
   return n;

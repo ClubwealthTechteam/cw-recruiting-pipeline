@@ -478,6 +478,8 @@ function classifyReply(subject, text) {
  */
 function screenTrack(raw) {
   var k = String(raw || '').toLowerCase();
+  // Miguel, 2026-11-25: the AI & Tech Virtual Assistant post (OLJ, form and email applicants)
+  if (/\bai\s*(&|and|\/|-)?\s*tech\b|\btech(nical)?\s+(virtual assistant|va)\b/.test(k)) return 'AI & Tech VA';
   if (/collection|accounts? receivable/.test(k)) return 'Collections';
   if (/inside sales|\bisa\b/.test(k)) {
     if (/club ?wealth/.test(k)) return 'ISA CW';
