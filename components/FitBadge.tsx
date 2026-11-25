@@ -9,6 +9,6 @@ export default function FitBadge({ tag, track, hold, summary, old }: { tag: stri
   if (hold) return <span className="badge grey fit" title={hold}>Held back</span>;
   if (old) return <span className="muted small" title="Applied before the system started; not screened">—</span>;
   if ((summary || '').startsWith('Not rated yet')) return <span className="muted small" title={summary}>No experience details</span>;
-  if (!track || track === 'Not screened') return <span className="muted small" title="Only Collections, ISA and TC/LC applicants are rated">No rule for position</span>;
+  if (!track || track === 'Not screened') return <span className="muted small" title="Only Collections, ISA, TC/LC and AI &amp; Tech VA applicants are rated">No rule for position</span>;
   return <span className="muted small" title="The screening routine runs every 2 hours, 6 AM to 8 PM PT">Rating soon</span>;
 }

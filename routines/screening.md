@@ -10,6 +10,7 @@ Screening rules (approved by Miguel, 2026-10-28):
 | ISA Homexa | 6+ months as an ISA in the real estate industry with a known real estate agency |
 | ISA (unspecified) | judge against both ISA rules; say which one it fits |
 | Collections | any collections experience (any industry) |
+| AI & Tech VA | Great: 1+ year hands-on tech work (AI workflows/automations, coding/web dev, SaaS, QA, APIs/integrations) or clear projects built with Replit, Cursor, Claude or ChatGPT · Good: 6+ months in a tech/IT role (IT support, QA, dev, automation, CRM admin) or real, specific AI-tool use at work · Not Fit: no technical experience (general admin or CS only, or just "familiar with ChatGPT"). Real estate, CRM or startup experience is mentioned in the summary only and does not change the tag (Miguel, 2026-11-25) |
 
 **Cross-fit rule (Miguel, 2026-10-29):** judge against the applicant's own track first. If they do not meet it, check
 the other open tracks. An ISA applicant who meets ISA CW (6+ months BPO) is never Not Fit, even if they do not meet ISA
